@@ -14,7 +14,7 @@ interface DashboardData {
   pushed_to_hubspot: number
 }
 
-const card = { background: '#161b27', border: '1px solid #1f2d45', borderRadius: 12, padding: 20 }
+const card = { background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 12, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }
 
 const sourceColors = ['#3b82f6', '#6366f1', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899']
 
@@ -61,13 +61,13 @@ export default function Reporting() {
 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div>
-          <h1 style={{ fontSize: 20, fontWeight: 600, color: 'white', margin: 0 }}>Reporting</h1>
+          <h1 style={{ fontSize: 20, fontWeight: 600, color: '#0f172a', margin: 0 }}>Reporting</h1>
           <p style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>Live pipeline analytics from your databases</p>
         </div>
         <button
           onClick={load}
           disabled={loading}
-          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 8, border: '1px solid #253047', background: 'transparent', color: '#94a3b8', fontSize: 12, cursor: loading ? 'default' : 'pointer', opacity: loading ? 0.5 : 1 }}
+          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 8, border: '1px solid #e2e8f0', background: 'transparent', color: '#94a3b8', fontSize: 12, cursor: loading ? 'default' : 'pointer', opacity: loading ? 0.5 : 1 }}
         >
           <RefreshCw size={12} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} />
           {loading ? 'Loading...' : 'Refresh'}
@@ -95,7 +95,7 @@ export default function Reporting() {
               </div>
               <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 999, fontWeight: 500, background: 'rgba(16,185,129,0.1)', color: '#34d399' }}>live</span>
             </div>
-            <div style={{ fontSize: 26, fontWeight: 700, color: 'white', lineHeight: 1 }}>
+            <div style={{ fontSize: 26, fontWeight: 700, color: '#0f172a', lineHeight: 1 }}>
               {loading ? '—' : typeof k.value === 'number' ? k.value.toLocaleString() : k.value}
             </div>
             <div style={{ fontSize: 12, color: '#64748b', marginTop: 6 }}>{k.label}</div>
@@ -106,7 +106,7 @@ export default function Reporting() {
       {/* Scan run history chart */}
       <div style={card}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
-          <span style={{ fontSize: 14, fontWeight: 600, color: 'white' }}>Scan Run History</span>
+          <span style={{ fontSize: 14, fontWeight: 600, color: '#0f172a' }}>Scan Run History</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, fontSize: 12, color: '#475569' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <div style={{ width: 8, height: 8, borderRadius: 2, background: '#6366f1' }} /> Signals
@@ -145,7 +145,7 @@ export default function Reporting() {
 
         {/* Source breakdown */}
         <div style={card}>
-          <div style={{ fontSize: 14, fontWeight: 600, color: 'white', marginBottom: 16 }}>Top Data Sources</div>
+          <div style={{ fontSize: 14, fontWeight: 600, color: '#0f172a', marginBottom: 16 }}>Top Data Sources</div>
           {sources.length === 0 ? (
             <div style={{ color: '#374151', fontSize: 13, padding: '12px 0' }}>No data yet.</div>
           ) : (
@@ -156,7 +156,7 @@ export default function Reporting() {
                     <span style={{ color: '#94a3b8' }}>{s.label}</span>
                     <span style={{ color: '#64748b' }}>{s.pct}% ({s.count})</span>
                   </div>
-                  <div style={{ height: 5, borderRadius: 999, background: '#1f2d45', overflow: 'hidden' }}>
+                  <div style={{ height: 5, borderRadius: 999, background: '#e2e8f0', overflow: 'hidden' }}>
                     <div style={{ height: '100%', borderRadius: 999, background: sourceColors[i % sourceColors.length], width: `${s.pct}%`, transition: 'width 0.4s' }} />
                   </div>
                 </div>
@@ -167,7 +167,7 @@ export default function Reporting() {
 
         {/* Phase distribution */}
         <div style={card}>
-          <div style={{ fontSize: 14, fontWeight: 600, color: 'white', marginBottom: 16 }}>Phase Distribution</div>
+          <div style={{ fontSize: 14, fontWeight: 600, color: '#0f172a', marginBottom: 16 }}>Phase Distribution</div>
           {Object.keys(phases).length === 0 ? (
             <div style={{ color: '#374151', fontSize: 13, padding: '12px 0' }}>No data yet.</div>
           ) : (
@@ -183,7 +183,7 @@ export default function Reporting() {
                         <span style={{ color: '#94a3b8', textTransform: 'capitalize' }}>{phase}</span>
                         <span style={{ color: '#64748b' }}>{count} companies</span>
                       </div>
-                      <div style={{ height: 5, borderRadius: 999, background: '#1f2d45', overflow: 'hidden' }}>
+                      <div style={{ height: 5, borderRadius: 999, background: '#e2e8f0', overflow: 'hidden' }}>
                         <div style={{ height: '100%', borderRadius: 999, background: color, width: `${pct}%`, transition: 'width 0.4s' }} />
                       </div>
                     </div>
@@ -197,14 +197,14 @@ export default function Reporting() {
 
       {/* Scan run table */}
       {runs.length > 0 && (
-        <div style={{ background: '#161b27', border: '1px solid #1f2d45', borderRadius: 12, overflow: 'hidden' }}>
-          <div style={{ padding: '12px 20px', borderBottom: '1px solid #1f2d45', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: '#475569' }}>
+        <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+          <div style={{ padding: '12px 20px', borderBottom: '1px solid #f1f5f9', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: '#64748b' }}>
             SCAN RUN LOG
           </div>
           {runs.map((run, i) => (
-            <div key={run.id} style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '12px 20px', borderBottom: i < runs.length - 1 ? '1px solid #1a2438' : 'none', background: i % 2 === 0 ? '#0d1117' : '#111827', fontSize: 13 }}>
-              <span style={{ color: '#475569', minWidth: 32 }}>#{run.id}</span>
-              <span style={{ flex: 1, color: '#94a3b8' }}>{relativeDate(run.started_at)}</span>
+            <div key={run.id} style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '12px 20px', borderBottom: i < runs.length - 1 ? '1px solid #f1f5f9' : 'none', background: '#ffffff', fontSize: 13 }}>
+              <span style={{ color: '#94a3b8', minWidth: 32 }}>#{run.id}</span>
+              <span style={{ flex: 1, color: '#0f172a' }}>{relativeDate(run.started_at)}</span>
               <span style={{ color: '#64748b', minWidth: 100 }}>{run.total_signals ?? 0} signals</span>
               <span style={{ color: '#64748b', minWidth: 110 }}>{run.total_companies ?? 0} companies</span>
               <span style={{ fontSize: 12, padding: '2px 8px', borderRadius: 999, background: run.status === 'completed' ? 'rgba(16,185,129,0.12)' : run.status === 'running' ? 'rgba(59,130,246,0.12)' : 'rgba(107,114,128,0.12)', color: run.status === 'completed' ? '#34d399' : run.status === 'running' ? '#60a5fa' : '#9ca3af' }}>

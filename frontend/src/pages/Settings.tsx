@@ -46,17 +46,17 @@ function ApiCard({
 
   const borderColor = status === 'error'     ? 'rgba(239,68,68,0.4)'
                     : status === 'connected' ? 'rgba(16,185,129,0.4)'
-                    : '#253047'
+                    : '#d1d5db'
 
   return (
-    <div style={{ background: '#161b27', border: '1px solid #1f2d45', borderRadius: 12, padding: 20 }}>
+    <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 12, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <div style={{ width: 36, height: 36, borderRadius: 8, background: `${svc.color}18`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
             <Zap size={15} color={svc.color} />
           </div>
           <div>
-            <div style={{ fontSize: 14, fontWeight: 600, color: 'white' }}>{svc.label}</div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: '#0f172a' }}>{svc.label}</div>
             <div style={{ fontSize: 12, color: '#64748b', marginTop: 3 }}>{svc.desc}</div>
           </div>
         </div>
@@ -71,7 +71,7 @@ function ApiCard({
           value={key}
           onChange={e => setKey(e.target.value)}
           placeholder={key ? undefined : svc.placeholder}
-          style={{ width: '100%', padding: '9px 40px 9px 12px', borderRadius: 8, background: '#0d1117', border: `1px solid ${borderColor}`, color: '#e2e8f0', fontSize: 13, fontFamily: 'monospace', outline: 'none', boxSizing: 'border-box' }}
+          style={{ width: '100%', padding: '9px 40px 9px 12px', borderRadius: 8, background: '#ffffff', border: `1px solid ${borderColor}`, color: '#0f172a', fontSize: 13, fontFamily: 'monospace', outline: 'none', boxSizing: 'border-box' }}
         />
         <button onClick={() => setShow(s => !s)} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#475569', display: 'flex' }}>
           {show ? <EyeOff size={14} /> : <Eye size={14} />}
@@ -87,7 +87,7 @@ function ApiCard({
       <button
         onClick={handleTest}
         disabled={isTesting || !key.trim()}
-        style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 8, border: '1px solid #253047', background: 'transparent', color: status === 'connected' ? '#10b981' : status === 'error' ? '#ef4444' : '#94a3b8', fontSize: 12, cursor: (!key.trim() || isTesting) ? 'not-allowed' : 'pointer', opacity: (!key.trim() || isTesting) ? 0.5 : 1 }}
+        style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 8, border: '1px solid #e2e8f0', background: 'transparent', color: status === 'connected' ? '#10b981' : status === 'error' ? '#ef4444' : '#94a3b8', fontSize: 12, cursor: (!key.trim() || isTesting) ? 'not-allowed' : 'pointer', opacity: (!key.trim() || isTesting) ? 0.5 : 1 }}
       >
         {isTesting
           ? <><Loader size={11} style={{ animation: 'spin 1s linear infinite' }} /> Testing...</>

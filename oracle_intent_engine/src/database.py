@@ -473,6 +473,64 @@ _DDL = [
     "CREATE INDEX IF NOT EXISTS idx_companies_hubspot   ON companies(hubspot_id) WHERE hubspot_id != ''",
     "CREATE INDEX IF NOT EXISTS idx_contacts_status     ON company_contacts(status)",
     "CREATE INDEX IF NOT EXISTS idx_contacts_hubspot    ON company_contacts(hubspot_id) WHERE hubspot_id != ''",
+
+    # ── hubspot_config table ─────────────────────────────────────────────────
+    """
+CREATE TABLE IF NOT EXISTS hubspot_config (
+    id              BIGSERIAL PRIMARY KEY,
+    api_key         TEXT NOT NULL DEFAULT '',
+    portal_id       TEXT NOT NULL DEFAULT '',
+    sync_status     TEXT NOT NULL DEFAULT 'idle'
+                        CHECK (sync_status IN ('idle','running','error','success')),
+    last_sync_at    TIMESTAMPTZ,
+    companies_synced INT NOT NULL DEFAULT 0,
+    contacts_synced  INT NOT NULL DEFAULT 0,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+)
+""",
+    # engine_configs table
+    """
+CREATE TABLE IF NOT EXISTS engine_configs (
+    id                  BIGSERIAL PRIMARY KEY,
+    engine_type         TEXT NOT NULL UNIQUE
+                            CHECK (engine_type IN (
+                                'scraping','enrichment','skills_parsing',
+                                'fuzzy_matching','data_quality','hubspot_sync'
+                            )),
+    is_enabled          BOOLEAN NOT NULL DEFAULT TRUE,
+    schedule_expression TEXT NOT NULL DEFAULT '0 2 * * *',
+    last_run_status     TEXT,
+    last_run_at         TIMESTAMPTZ,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+)
+""",
+    # review_queue table (proper separate table per design doc)
+    """
+CREATE TABLE IF NOT EXISTS review_queue (
+    id           BIGSERIAL PRIMARY KEY,
+    entity_type  TEXT NOT NULL CHECK (entity_type IN ('company','contact')),
+    entity_id    BIGINT NOT NULL,
+    issue_type   TEXT NOT NULL CHECK (issue_type IN (
+                     'duplicate','data_quality','conflict',
+                     'enrichment_conflict','missing_mandatory_field','fuzzy_match'
+                 )),
+    severity     TEXT NOT NULL DEFAULT 'warning'
+                     CHECK (severity IN ('critical','warning','info')),
+    status       TEXT NOT NULL DEFAULT 'pending'
+                     CHECK (status IN ('pending','approved','rejected','auto_resolved')),
+    issue_detail JSONB,
+    notes        TEXT,
+    resolved_by  TEXT,
+    resolved_at  TIMESTAMPTZ,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+)
+""",
+    "CREATE INDEX IF NOT EXISTS idx_review_queue_status ON review_queue(status)",
+    "CREATE INDEX IF NOT EXISTS idx_review_queue_entity ON review_queue(entity_type, entity_id)",
+    "CREATE INDEX IF NOT EXISTS idx_engine_configs_type ON engine_configs(engine_type)",
 ]
 
 
@@ -1002,3 +1060,147 @@ def email_patterns_stats() -> dict:
         """)
         dist = [dict(r) for r in cur.fetchall()]
     return {"total_rows": row["total_rows"], "domains": row["domains"], "distribution": dist}
+
+
+# ── hubspot_config helpers ────────────────────────────────────────────────────
+
+def get_hubspot_config() -> dict:
+    with db_cursor(commit=False) as cur:
+        cur.execute("SELECT * FROM hubspot_config ORDER BY id LIMIT 1")
+        row = cur.fetchone()
+        return dict(row) if row else {}
+
+def upsert_hubspot_config(api_key: str, portal_id: str) -> dict:
+    with db_cursor() as cur:
+        cur.execute(
+            """INSERT INTO hubspot_config (api_key, portal_id)
+               VALUES (%s, %s)
+               ON CONFLICT DO NOTHING
+               RETURNING *""",
+            (api_key, portal_id),
+        )
+        row = cur.fetchone()
+        if row:
+            return dict(row)
+        cur.execute(
+            """UPDATE hubspot_config SET api_key=%s, portal_id=%s, updated_at=NOW()
+               WHERE id=(SELECT id FROM hubspot_config ORDER BY id LIMIT 1)
+               RETURNING *""",
+            (api_key, portal_id),
+        )
+        return dict(cur.fetchone())
+
+def update_hubspot_sync_status(status: str, companies: int = 0, contacts: int = 0):
+    with db_cursor() as cur:
+        cur.execute(
+            """UPDATE hubspot_config
+               SET sync_status=%s, last_sync_at=NOW(),
+                   companies_synced=%s, contacts_synced=%s, updated_at=NOW()
+               WHERE id=(SELECT id FROM hubspot_config ORDER BY id LIMIT 1)""",
+            (status, companies, contacts),
+        )
+
+
+# ── engine_configs helpers ────────────────────────────────────────────────────
+
+def seed_engine_configs():
+    """Seed default engine configs if not present."""
+    engines = ['scraping','enrichment','skills_parsing','fuzzy_matching','data_quality','hubspot_sync']
+    with db_cursor() as cur:
+        for eng in engines:
+            cur.execute(
+                """INSERT INTO engine_configs (engine_type) VALUES (%s)
+                   ON CONFLICT (engine_type) DO NOTHING""",
+                (eng,),
+            )
+
+def list_engine_configs() -> list:
+    with db_cursor(commit=False) as cur:
+        cur.execute("SELECT * FROM engine_configs ORDER BY engine_type")
+        return [dict(r) for r in cur.fetchall()]
+
+def update_engine_config(engine_type: str, is_enabled: bool = None,
+                          schedule_expression: str = None,
+                          last_run_status: str = None) -> dict:
+    with db_cursor() as cur:
+        if is_enabled is not None:
+            cur.execute(
+                "UPDATE engine_configs SET is_enabled=%s, updated_at=NOW() WHERE engine_type=%s",
+                (is_enabled, engine_type),
+            )
+        if schedule_expression is not None:
+            cur.execute(
+                "UPDATE engine_configs SET schedule_expression=%s, updated_at=NOW() WHERE engine_type=%s",
+                (schedule_expression, engine_type),
+            )
+        if last_run_status is not None:
+            cur.execute(
+                "UPDATE engine_configs SET last_run_status=%s, last_run_at=NOW(), updated_at=NOW() WHERE engine_type=%s",
+                (last_run_status, engine_type),
+            )
+        cur.execute("SELECT * FROM engine_configs WHERE engine_type=%s", (engine_type,))
+        return dict(cur.fetchone())
+
+
+# ── review_queue helpers ──────────────────────────────────────────────────────
+
+def add_to_review_queue(entity_type: str, entity_id: int, issue_type: str,
+                         severity: str = 'warning', issue_detail: dict = None) -> dict:
+    import json
+    with db_cursor() as cur:
+        cur.execute(
+            """INSERT INTO review_queue (entity_type, entity_id, issue_type, severity, issue_detail)
+               VALUES (%s, %s, %s, %s, %s)
+               ON CONFLICT DO NOTHING
+               RETURNING *""",
+            (entity_type, entity_id, issue_type, severity,
+             json.dumps(issue_detail) if issue_detail else None),
+        )
+        row = cur.fetchone()
+        return dict(row) if row else {}
+
+def list_review_queue(status: str = None, entity_type: str = None,
+                       limit: int = 100, offset: int = 0) -> list:
+    with db_cursor(commit=False) as cur:
+        wheres, params = [], []
+        if status:
+            wheres.append("rq.status=%s"); params.append(status)
+        if entity_type:
+            wheres.append("rq.entity_type=%s"); params.append(entity_type)
+        where_sql = ("WHERE " + " AND ".join(wheres)) if wheres else ""
+        cur.execute(
+            f"""SELECT rq.*,
+                       CASE rq.entity_type
+                           WHEN 'company' THEN c.name
+                           WHEN 'contact' THEN CONCAT(cc.first_name,' ',cc.last_name)
+                       END AS entity_name
+                FROM review_queue rq
+                LEFT JOIN companies c ON rq.entity_type='company' AND c.id=rq.entity_id
+                LEFT JOIN company_contacts cc ON rq.entity_type='contact' AND cc.id=rq.entity_id
+                {where_sql}
+                ORDER BY rq.created_at DESC
+                LIMIT %s OFFSET %s""",
+            params + [limit, offset],
+        )
+        return [dict(r) for r in cur.fetchall()]
+
+def resolve_review_queue_item(item_id: int, status: str,
+                               notes: str = None, resolved_by: str = None) -> dict:
+    with db_cursor() as cur:
+        cur.execute(
+            """UPDATE review_queue
+               SET status=%s, notes=%s, resolved_by=%s,
+                   resolved_at=NOW(), updated_at=NOW()
+               WHERE id=%s RETURNING *""",
+            (status, notes, resolved_by, item_id),
+        )
+        return dict(cur.fetchone())
+
+def bulk_resolve_review_queue(item_ids: list, status: str, resolved_by: str = None):
+    with db_cursor() as cur:
+        cur.execute(
+            """UPDATE review_queue
+               SET status=%s, resolved_by=%s, resolved_at=NOW(), updated_at=NOW()
+               WHERE id = ANY(%s)""",
+            (status, resolved_by, item_ids),
+        )

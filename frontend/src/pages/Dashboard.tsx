@@ -3,7 +3,7 @@ import { Building2, Users, Zap, CheckCircle2, Play, Square, RefreshCw, ChevronRi
 import { toast } from '../components/Toast'
 import { useNavigate } from 'react-router-dom'
 
-const card = { background: '#161b27', border: '1px solid #1f2d45', borderRadius: 12, padding: 20 }
+const card = { background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 12, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }
 
 const logColor = (level: string) => {
   if (level === 'SUCCESS') return '#10b981'
@@ -131,7 +131,7 @@ export default function Dashboard() {
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div>
-          <h1 style={{ fontSize: 20, fontWeight: 600, color: 'white', margin: 0 }}>Control Panel</h1>
+          <h1 style={{ fontSize: 20, fontWeight: 600, color: '#0f172a', margin: 0 }}>Control Panel</h1>
           <p style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>
             Live system overview — backend {backendOk === null ? 'connecting...' : backendOk ? <span style={{ color: '#10b981' }}>online</span> : <span style={{ color: '#ef4444' }}>offline</span>}
           </p>
@@ -164,36 +164,36 @@ export default function Dashboard() {
                 {backendOk ? 'live' : 'offline'}
               </span>
             </div>
-            <div style={{ fontSize: 26, fontWeight: 700, color: 'white', lineHeight: 1 }}>{k.value}</div>
+            <div style={{ fontSize: 26, fontWeight: 700, color: '#0f172a', lineHeight: 1 }}>{k.value}</div>
             <div style={{ fontSize: 12, color: '#64748b', marginTop: 6 }}>{k.label}</div>
           </div>
         ))}
       </div>
 
-      {/* Middle row */}
+      {/* Middle row — engine status / review queue / live stats */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, alignItems: 'start' }}>
 
         {/* Engine Status */}
         <div style={card}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-            <span style={{ fontSize: 13, fontWeight: 600, color: 'white' }}>Engine Status</span>
-            <span style={{ fontSize: 12, color: '#475569' }}>{engineRows.filter(e => e.live).length}/{engineRows.length} active</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: '#0f172a' }}>Engine Status</span>
+            <span style={{ fontSize: 12, color: '#64748b' }}>{engineRows.filter(e => e.live).length}/{engineRows.length} active</span>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
             {engineRows.map((engine, i) => (
-              <div key={engine.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderBottom: i < engineRows.length - 1 ? '1px solid #1f2d45' : 'none' }}>
-                <div style={{ width: 8, height: 8, borderRadius: '50%', flexShrink: 0, background: engine.live ? engine.color : '#374151', boxShadow: engine.live ? `0 0 6px ${engine.color}` : 'none' }} />
+              <div key={engine.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderBottom: i < engineRows.length - 1 ? '1px solid #f1f5f9' : 'none' }}>
+                <div style={{ width: 8, height: 8, borderRadius: '50%', flexShrink: 0, background: engine.live ? engine.color : '#cbd5e1', boxShadow: engine.live ? `0 0 6px ${engine.color}` : 'none' }} />
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 500, color: 'white', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{engine.label}</div>
-                  <div style={{ fontSize: 11, color: '#475569', marginTop: 2 }}>{engine.desc}</div>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{engine.label}</div>
+                  <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{engine.desc}</div>
                 </div>
-                <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 999, fontWeight: 500, flexShrink: 0, background: engine.live ? `${engine.color}18` : 'rgba(55,65,81,0.5)', color: engine.live ? engine.color : '#6b7280' }}>
+                <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 999, fontWeight: 500, flexShrink: 0, background: engine.live ? `${engine.color}18` : 'rgba(203,213,225,0.5)', color: engine.live ? engine.color : '#94a3b8' }}>
                   {engine.live ? 'Running' : 'Idle'}
                 </span>
                 {engine.id === 'oracle' && (
                   <button
                     onClick={toggleOracleScan}
-                    style={{ width: 28, height: 28, borderRadius: 7, border: '1px solid #253047', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: engine.live ? '#ef4444' : '#94a3b8', flexShrink: 0 }}
+                    style={{ width: 28, height: 28, borderRadius: 7, border: '1px solid #e2e8f0', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: engine.live ? '#ef4444' : '#94a3b8', flexShrink: 0 }}
                   >
                     {engine.live ? <Square size={11} /> : <Play size={11} />}
                   </button>
@@ -206,7 +206,7 @@ export default function Dashboard() {
         {/* Review Queue */}
         <div style={card}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-            <span style={{ fontSize: 13, fontWeight: 600, color: 'white' }}>Review Queue</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: '#0f172a' }}>Review Queue</span>
             <button onClick={() => navigate('/review')} style={{ fontSize: 12, fontWeight: 500, color: '#3b82f6', display: 'flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
               View all <ChevronRight size={12} />
             </button>
@@ -218,9 +218,9 @@ export default function Dashboard() {
                 { label: 'Evaluating', count: stats.evaluating, color: '#6366f1' },
                 { label: 'Researching', count: stats.researching, color: '#94a3b8' },
               ].map(row => (
-                <div key={row.label} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: '#0d1117', border: '1px solid #1f2d45', borderRadius: 8 }}>
+                <div key={row.label} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8 }}>
                   <div style={{ width: 8, height: 8, borderRadius: '50%', background: row.color, flexShrink: 0 }} />
-                  <div style={{ flex: 1, fontSize: 13, color: '#e2e8f0' }}>{row.label}</div>
+                  <div style={{ flex: 1, fontSize: 13, color: '#0f172a' }}>{row.label}</div>
                   <span style={{ fontSize: 13, fontWeight: 700, color: row.color }}>{row.count}</span>
                 </div>
               ))}
@@ -234,14 +234,14 @@ export default function Dashboard() {
               </div>
             </div>
           ) : (
-            <div style={{ color: '#475569', fontSize: 13, padding: '20px 0', textAlign: 'center' }}>Loading...</div>
+            <div style={{ color: '#94a3b8', fontSize: 13, padding: '20px 0', textAlign: 'center' }}>Loading...</div>
           )}
         </div>
 
         {/* Recent Activity */}
         <div style={card}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-            <span style={{ fontSize: 13, fontWeight: 600, color: 'white' }}>Live Stats</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: '#0f172a' }}>Live Stats</span>
             <div style={{ width: 8, height: 8, borderRadius: '50%', background: backendOk ? '#10b981' : '#374151' }} />
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -251,8 +251,8 @@ export default function Dashboard() {
                   <item.icon size={13} color={item.color} />
                 </div>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 12, color: '#e2e8f0', lineHeight: '1.5' }}>{item.msg}</div>
-                  {item.time && <div style={{ fontSize: 11, color: '#374151', marginTop: 2 }}>{item.time}</div>}
+                  <div style={{ fontSize: 12, color: '#0f172a', lineHeight: '1.5' }}>{item.msg}</div>
+                  {item.time && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>{item.time}</div>}
                 </div>
               </div>
             ))}
@@ -272,8 +272,8 @@ export default function Dashboard() {
             </span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <div style={{ width: 6, height: 6, borderRadius: '50%', background: scanRunning ? '#10b981' : '#374151' }} />
-            <span style={{ fontSize: 11, color: '#374151' }}>{scanRunning ? 'scanning' : 'idle'}</span>
+            <div style={{ width: 6, height: 6, borderRadius: '50%', background: scanRunning ? '#10b981' : '#cbd5e1' }} />
+            <span style={{ fontSize: 11, color: '#94a3b8' }}>{scanRunning ? 'scanning' : 'idle'}</span>
           </div>
         </div>
         <div ref={logRef} style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12, padding: 16, height: 160, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>

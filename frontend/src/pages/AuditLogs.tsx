@@ -91,21 +91,21 @@ export default function AuditLogs() {
   const loadMore = () => { load(offset, true) }
 
   const thStyle: React.CSSProperties = { padding: '11px 16px', textAlign: 'left', fontSize: 12, fontWeight: 600, color: '#475569', letterSpacing: '0.03em', whiteSpace: 'nowrap' }
-  const tdStyle: React.CSSProperties = { padding: '12px 16px', fontSize: 13, verticalAlign: 'middle', color: '#cbd5e1' }
+  const tdStyle: React.CSSProperties = { padding: '12px 16px', fontSize: 13, verticalAlign: 'middle', color: '#374151' }
 
-  const inp: React.CSSProperties = { padding: '7px 12px 7px 12px', borderRadius: 8, background: '#161b27', border: '1px solid #253047', color: '#e2e8f0', fontSize: 13, outline: 'none' }
+  const inp: React.CSSProperties = { padding: '7px 12px 7px 12px', borderRadius: 8, background: '#ffffff', border: '1px solid #d1d5db', color: '#0f172a', fontSize: 13, outline: 'none' }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20, width: '100%' }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div>
-          <h1 style={{ fontSize: 20, fontWeight: 600, color: 'white', margin: 0 }}>Audit Logs</h1>
+          <h1 style={{ fontSize: 20, fontWeight: 600, color: '#0f172a', margin: 0 }}>Audit Logs</h1>
           <p style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>
             {loading ? 'Loading...' : `${total.toLocaleString()} total entries`}
           </p>
         </div>
-        <button onClick={() => load(0, false)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 8, border: '1px solid #253047', background: 'transparent', color: '#94a3b8', fontSize: 13, cursor: 'pointer' }}>
+        <button onClick={() => load(0, false)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 8, border: '1px solid #e2e8f0', background: 'transparent', color: '#94a3b8', fontSize: 13, cursor: 'pointer' }}>
           <RefreshCw size={13} /> Refresh
         </button>
       </div>
@@ -139,11 +139,11 @@ export default function AuditLogs() {
       </div>
 
       {/* Table */}
-      <div style={{ border: '1px solid #1f2d45', borderRadius: 12, overflow: 'hidden' }}>
+      <div style={{ border: '1px solid #e2e8f0', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 860 }}>
             <thead>
-              <tr style={{ background: '#161b27', borderBottom: '1px solid #1f2d45' }}>
+              <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
                 <th style={thStyle}>Timestamp</th>
                 <th style={thStyle}>User</th>
                 <th style={thStyle}>Action</th>
@@ -160,13 +160,13 @@ export default function AuditLogs() {
               {!loading && logs.length === 0 && (
                 <tr><td colSpan={7} style={{ padding: '40px 0', textAlign: 'center', color: '#475569', fontSize: 13 }}>No audit log entries found.</td></tr>
               )}
-              {logs.map((log, i) => {
+              {logs.map((log) => {
                 const ab = actionBadge(log.action)
                 const ts = new Date(log.timestamp)
                 return (
-                  <tr key={log.id} style={{ background: i % 2 === 0 ? '#0d1117' : '#111827', borderBottom: '1px solid #1a2438' }}
-                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
-                    onMouseLeave={e => e.currentTarget.style.background = i % 2 === 0 ? '#0d1117' : '#111827'}>
+                  <tr key={log.id} style={{ background: '#ffffff', borderBottom: '1px solid #f1f5f9' }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(37,99,235,0.04)'}
+                    onMouseLeave={e => e.currentTarget.style.background = '#ffffff'}>
                     <td style={{ ...tdStyle, whiteSpace: 'nowrap' }}>
                       <div style={{ fontSize: 13, color: '#94a3b8' }}>{ts.toLocaleDateString()}</div>
                       <div style={{ fontSize: 11, color: '#475569', marginTop: 2 }}>{ts.toLocaleTimeString()}</div>
@@ -196,11 +196,11 @@ export default function AuditLogs() {
             </tbody>
           </table>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: '#161b27', borderTop: '1px solid #1f2d45', fontSize: 12, color: '#475569' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: '#f8fafc', borderTop: '1px solid #e2e8f0', fontSize: 12, color: '#64748b' }}>
           <span>Showing {logs.length} of {total.toLocaleString()} entries</span>
           {hasMore && (
             <button onClick={loadMore} disabled={loading}
-              style={{ padding: '6px 16px', borderRadius: 8, border: '1px solid #253047', background: 'transparent', color: '#94a3b8', fontSize: 13, cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.6 : 1 }}>
+              style={{ padding: '6px 16px', borderRadius: 8, border: '1px solid #e2e8f0', background: 'transparent', color: '#94a3b8', fontSize: 13, cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.6 : 1 }}>
               {loading ? 'Loading...' : `Load more (${total - logs.length} remaining)`}
             </button>
           )}

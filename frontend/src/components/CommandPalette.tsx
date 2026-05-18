@@ -46,11 +46,11 @@ export default function CommandPalette({ onClose }: { onClose: () => void }) {
     >
       <div
         className="w-full max-w-lg rounded-2xl overflow-hidden animate-fadeIn shadow-2xl"
-        style={{ background: '#1c2333', border: '1px solid #253047' }}
+        style={{ background: '#ffffff', border: '1px solid #e2e8f0', boxShadow: '0 16px 60px rgba(0,0,0,0.18)' }}
         onClick={e => e.stopPropagation()}
       >
         {/* Input */}
-        <div className="flex items-center gap-3 px-4 border-b" style={{ borderColor: '#253047' }}>
+        <div className="flex items-center gap-3 px-4 border-b" style={{ borderColor: '#e2e8f0' }}>
           <Search size={16} style={{ color: '#64748b' }} />
           <input
             ref={inputRef}
@@ -59,9 +59,9 @@ export default function CommandPalette({ onClose }: { onClose: () => void }) {
             onKeyDown={handleKey}
             placeholder="Search pages, actions..."
             className="flex-1 py-4 text-sm bg-transparent outline-none"
-            style={{ color: '#e2e8f0' }}
+            style={{ color: '#0f172a' }}
           />
-          <kbd className="text-xs px-1.5 py-0.5 rounded font-mono" style={{ background: '#0d1117', color: '#475569', border: '1px solid #253047' }}>Esc</kbd>
+          <kbd className="text-xs px-1.5 py-0.5 rounded font-mono" style={{ background: '#f1f5f9', color: '#64748b', border: '1px solid #e2e8f0' }}>Esc</kbd>
         </div>
 
         {/* Results */}
@@ -76,24 +76,24 @@ export default function CommandPalette({ onClose }: { onClose: () => void }) {
               onMouseEnter={() => setIdx(i)}
               className="w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors cursor-pointer"
               style={{
-                background: i === idx ? 'rgba(59,130,246,0.12)' : 'transparent',
-                color: i === idx ? '#93c5fd' : '#94a3b8'
+                background: i === idx ? 'rgba(37,99,235,0.06)' : 'transparent',
+                color: i === idx ? '#2563eb' : '#64748b'
               }}
             >
               <div
                 className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
-                style={{ background: i === idx ? 'rgba(59,130,246,0.2)' : 'rgba(255,255,255,0.05)' }}
+                style={{ background: i === idx ? 'rgba(37,99,235,0.12)' : '#f1f5f9' }}
               >
                 <cmd.icon size={14} />
               </div>
               <span className="flex-1 text-left font-medium">{cmd.label}</span>
-              <span className="text-xs" style={{ color: '#374151' }}>{cmd.category}</span>
+              <span className="text-xs" style={{ color: '#94a3b8' }}>{cmd.category}</span>
               {i === idx && <ArrowRight size={13} />}
             </button>
           ))}
         </div>
 
-        <div className="px-4 py-2.5 border-t flex items-center gap-4 text-xs" style={{ borderColor: '#253047', color: '#374151' }}>
+        <div className="px-4 py-2.5 border-t flex items-center gap-4 text-xs" style={{ borderColor: '#f1f5f9', color: '#94a3b8', background: '#f8fafc' }}>
           <span><kbd className="font-mono">↑↓</kbd> navigate</span>
           <span><kbd className="font-mono">↵</kbd> open</span>
           <span><kbd className="font-mono">Esc</kbd> close</span>

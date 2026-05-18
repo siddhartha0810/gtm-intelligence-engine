@@ -32,10 +32,10 @@ function CompanyMenu({ onClose, anchorRef }: { onClose: () => void; anchorRef: R
   }, [onClose, anchorRef])
   const rect = anchorRef.current?.getBoundingClientRect()
   return (
-    <div ref={menuRef} style={{ position: 'fixed', top: rect ? rect.bottom + 4 : 0, right: rect ? window.innerWidth - rect.right : 0, zIndex: 1000, background: '#1c2333', border: '1px solid #253047', borderRadius: 10, padding: '6px 0', minWidth: 190, boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }}>
+    <div ref={menuRef} style={{ position: 'fixed', top: rect ? rect.bottom + 4 : 0, right: rect ? window.innerWidth - rect.right : 0, zIndex: 1000, background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '6px 0', minWidth: 190, boxShadow: '0 8px 32px rgba(0,0,0,0.12)' }}>
       {CO_MENU.map((item, i) => (
         <button key={i} onClick={onClose} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', background: 'none', border: 'none', cursor: 'pointer', color: item.color, fontSize: 13, textAlign: 'left', borderTop: i === CO_MENU.length - 1 ? '1px solid #253047' : 'none', marginTop: i === CO_MENU.length - 1 ? 4 : 0 }}
-          onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.05)')}
+          onMouseEnter={e => (e.currentTarget.style.background = '#f8fafc')}
           onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
           <item.icon size={13} color={item.color} />{item.label}
         </button>
@@ -119,7 +119,7 @@ export default function Companies() {
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div>
-          <h1 style={{ fontSize: 20, fontWeight: 600, color: 'white', margin: 0 }}>Companies</h1>
+          <h1 style={{ fontSize: 20, fontWeight: 600, color: '#0f172a', margin: 0 }}>Companies</h1>
           <p style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>
             {loading ? 'Loading...' : `${companies.length} tracked · ${companies.filter(c => c.phase === 'Implementing').length} implementing Oracle`}
           </p>
@@ -146,14 +146,14 @@ export default function Companies() {
               <button onClick={() => setSelected([])} style={{ padding: '7px 14px', borderRadius: 8, border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.1)', color: '#f87171', fontSize: 13, cursor: 'pointer' }}>Clear</button>
             </div>
           )}
-          <button onClick={fetchCompanies} title="Refresh from database" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 8, border: '1px solid #253047', background: 'transparent', color: '#94a3b8', fontSize: 13, cursor: 'pointer' }}
+          <button onClick={fetchCompanies} title="Refresh from database" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 8, border: '1px solid #e2e8f0', background: 'transparent', color: '#94a3b8', fontSize: 13, cursor: 'pointer' }}
             onMouseEnter={e => e.currentTarget.style.borderColor = '#3b82f6'}
-            onMouseLeave={e => e.currentTarget.style.borderColor = '#253047'}>
+            onMouseLeave={e => e.currentTarget.style.borderColor = '#e2e8f0'}>
             <RefreshCw size={13} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} />
           </button>
-          <a href="/export/csv/all" download style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 8, border: '1px solid #253047', background: 'transparent', color: '#94a3b8', fontSize: 13, cursor: 'pointer', textDecoration: 'none' }}
+          <a href="/export/csv/all" download style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 8, border: '1px solid #e2e8f0', background: 'transparent', color: '#94a3b8', fontSize: 13, cursor: 'pointer', textDecoration: 'none' }}
             onMouseEnter={e => (e.currentTarget as HTMLElement).style.borderColor = '#3b82f6'}
-            onMouseLeave={e => (e.currentTarget as HTMLElement).style.borderColor = '#253047'}>
+            onMouseLeave={e => (e.currentTarget as HTMLElement).style.borderColor = '#e2e8f0'}>
             <Download size={13} /> Export
           </a>
         </div>
@@ -167,11 +167,11 @@ export default function Companies() {
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Search companies, industries..."
-            style={{ width: '100%', padding: '8px 12px 8px 36px', borderRadius: 8, background: '#161b27', border: '1px solid #253047', color: '#e2e8f0', fontSize: 13, outline: 'none' }}
+            style={{ width: '100%', padding: '8px 12px 8px 36px', borderRadius: 8, background: '#ffffff', border: '1px solid #d1d5db', color: '#0f172a', fontSize: 13, outline: 'none' }}
           />
         </div>
 
-        <div style={{ display: 'flex', padding: 4, borderRadius: 8, background: '#161b27', border: '1px solid #253047', gap: 2 }}>
+        <div style={{ display: 'flex', padding: 4, borderRadius: 8, background: '#f8fafc', border: '1px solid #e2e8f0', gap: 2 }}>
           {PHASES.map(p => (
             <button
               key={p}
@@ -185,18 +185,18 @@ export default function Companies() {
 
         <button
           onClick={() => toast.info('Advanced filters coming soon')}
-          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 8, border: '1px solid #253047', background: 'transparent', color: '#64748b', fontSize: 13, cursor: 'pointer' }}
-          onMouseEnter={e => { e.currentTarget.style.borderColor = '#3b82f6'; e.currentTarget.style.color = '#94a3b8' }}
-          onMouseLeave={e => { e.currentTarget.style.borderColor = '#253047'; e.currentTarget.style.color = '#64748b' }}>
+          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 8, border: '1px solid #e2e8f0', background: 'transparent', color: '#64748b', fontSize: 13, cursor: 'pointer' }}
+          onMouseEnter={e => { e.currentTarget.style.borderColor = '#3b82f6'; e.currentTarget.style.color = '#0f172a' }}
+          onMouseLeave={e => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.color = '#64748b' }}>
           <Filter size={13} /> More filters
         </button>
       </div>
 
       {/* Table */}
-      <div style={{ border: '1px solid #1f2d45', borderRadius: 12, overflow: 'hidden' }}>
+      <div style={{ border: '1px solid #e2e8f0', borderRadius: 12, overflow: 'hidden' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
-            <tr style={{ background: '#161b27', borderBottom: '1px solid #1f2d45' }}>
+            <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
               <th style={{ ...thStyle, width: 44, cursor: 'default' }}>
                 <input type="checkbox" checked={allSelected} onChange={() => setSelected(allSelected ? [] : filtered.map(c => c.id))} style={{ accentColor: '#3b82f6' }} />
               </th>
@@ -216,10 +216,12 @@ export default function Companies() {
             {!loading && filtered.length === 0 && (
               <tr><td colSpan={8} style={{ padding: '40px 0', textAlign: 'center', color: '#475569', fontSize: 13 }}>No companies found. Run the Oracle Intent Engine to populate data.</td></tr>
             )}
-            {!loading && filtered.map((c, i) => (
+            {!loading && filtered.map((c) => (
               <tr
                 key={c.id}
-                style={{ background: selected.includes(c.id) ? 'rgba(59,130,246,0.06)' : i % 2 === 0 ? '#0d1117' : '#111827', borderBottom: '1px solid #1a2438', cursor: 'pointer' }}
+                style={{ background: selected.includes(c.id) ? 'rgba(37,99,235,0.04)' : '#ffffff', borderBottom: '1px solid #f1f5f9', cursor: 'pointer' }}
+              onMouseEnter={e => { if (!selected.includes(c.id)) e.currentTarget.style.background = 'rgba(37,99,235,0.04)' }}
+              onMouseLeave={e => { e.currentTarget.style.background = selected.includes(c.id) ? 'rgba(37,99,235,0.04)' : '#ffffff' }}
               >
                 <td style={tdStyle}>
                   <input type="checkbox" checked={selected.includes(c.id)} onChange={() => toggleSelect(c.id)} onClick={e => e.stopPropagation()} style={{ accentColor: '#3b82f6' }} />
@@ -230,8 +232,8 @@ export default function Companies() {
                       {c.name[0]}
                     </div>
                     <div>
-                      <div style={{ fontWeight: 500, color: 'white' }}>{c.name}</div>
-                      <div style={{ fontSize: 11, color: '#475569', marginTop: 2 }}>{c.location} · {c.size}</div>
+                      <div style={{ fontWeight: 500, color: '#0f172a' }}>{c.name}</div>
+                      <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{c.location} · {c.size}</div>
                     </div>
                   </div>
                 </td>
@@ -244,7 +246,7 @@ export default function Companies() {
                 <td style={tdStyle}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{ fontSize: 12, fontWeight: 700, padding: '2px 8px', borderRadius: 6, background: `${scoreColor(c.score)}18`, color: scoreColor(c.score) }}>{c.score}</span>
-                    <div style={{ width: 60, height: 5, borderRadius: 999, background: '#1f2d45', overflow: 'hidden' }}>
+                    <div style={{ width: 60, height: 5, borderRadius: 999, background: '#e2e8f0', overflow: 'hidden' }}>
                       <div style={{ width: `${c.score}%`, height: '100%', borderRadius: 999, background: scoreColor(c.score) }} />
                     </div>
                   </div>
@@ -282,11 +284,11 @@ export default function Companies() {
             ))}
           </tbody>
         </table>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: '#161b27', borderTop: '1px solid #1f2d45', fontSize: 12, color: '#475569' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: '#f8fafc', borderTop: '1px solid #e2e8f0', fontSize: 12, color: '#64748b' }}>
           <span>Showing {filtered.length} of {companies.length} companies</span>
           <div style={{ display: 'flex', gap: 4 }}>
             {['← Prev', '1', 'Next →'].map((l, i) => (
-              <button key={l} style={{ padding: '4px 10px', borderRadius: 6, border: 'none', background: i === 1 ? '#3b82f6' : 'transparent', color: i === 1 ? 'white' : '#475569', cursor: 'pointer', fontSize: 12 }}>{l}</button>
+              <button key={l} style={{ padding: '4px 10px', borderRadius: 6, border: 'none', background: i === 1 ? '#3b82f6' : 'transparent', color: i === 1 ? 'white' : '#64748b', cursor: 'pointer', fontSize: 12 }}>{l}</button>
             ))}
           </div>
         </div>

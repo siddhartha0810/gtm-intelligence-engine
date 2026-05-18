@@ -72,11 +72,11 @@ function ActionMenu({ onClose, anchorRef, contact }: {
   }
 
   return (
-    <div ref={menuRef} style={{ position: 'fixed', top: rect ? rect.bottom + 4 : 0, right: rect ? window.innerWidth - rect.right : 0, zIndex: 1000, background: '#1c2333', border: '1px solid #253047', borderRadius: 10, padding: '6px 0', minWidth: 200, boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }}>
+    <div ref={menuRef} style={{ position: 'fixed', top: rect ? rect.bottom + 4 : 0, right: rect ? window.innerWidth - rect.right : 0, zIndex: 1000, background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '6px 0', minWidth: 200, boxShadow: '0 8px 32px rgba(0,0,0,0.12)' }}>
       {MENU_ITEMS.map((item, i) => (
         <button key={i} onClick={() => handleItem(item.label)}
           style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', background: 'none', border: 'none', cursor: 'pointer', color: item.color, fontSize: 13, textAlign: 'left', borderTop: i === MENU_ITEMS.length - 1 ? '1px solid #253047' : 'none', marginTop: i === MENU_ITEMS.length - 1 ? 4 : 0, paddingTop: i === MENU_ITEMS.length - 1 ? 10 : 8 }}
-          onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.05)')}
+          onMouseEnter={e => (e.currentTarget.style.background = '#f8fafc')}
           onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
           <item.icon size={14} color={item.color} />{item.label}
         </button>
@@ -162,7 +162,7 @@ export default function Contacts() {
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
         <div>
-          <h1 style={{ fontSize: 20, fontWeight: 600, color: 'white', margin: 0 }}>Contacts</h1>
+          <h1 style={{ fontSize: 20, fontWeight: 600, color: '#0f172a', margin: 0 }}>Contacts</h1>
           <p style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>
             {loading ? 'Loading...' : `${contacts.length} enriched contacts · ${validCount} valid emails`}
           </p>
@@ -179,12 +179,12 @@ export default function Contacts() {
               </button>
             </>
           )}
-          <button onClick={load} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 8, border: '1px solid #253047', background: 'transparent', color: '#94a3b8', fontSize: 13, cursor: 'pointer' }}>
+          <button onClick={load} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 8, border: '1px solid #e2e8f0', background: 'transparent', color: '#94a3b8', fontSize: 13, cursor: 'pointer' }}>
             <RefreshCw size={13} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} />
           </button>
-          <button onClick={exportCSV} disabled={filtered.length === 0} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 8, border: '1px solid #253047', background: 'transparent', color: '#94a3b8', fontSize: 13, cursor: 'pointer' }}
+          <button onClick={exportCSV} disabled={filtered.length === 0} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 8, border: '1px solid #e2e8f0', background: 'transparent', color: '#94a3b8', fontSize: 13, cursor: 'pointer' }}
             onMouseEnter={e => e.currentTarget.style.borderColor = '#3b82f6'}
-            onMouseLeave={e => e.currentTarget.style.borderColor = '#253047'}>
+            onMouseLeave={e => e.currentTarget.style.borderColor = '#e2e8f0'}>
             <Download size={13} /> Export
           </button>
         </div>
@@ -201,22 +201,22 @@ export default function Contacts() {
         <div style={{ position: 'relative', flex: '1 1 260px', maxWidth: 360 }}>
           <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#475569', pointerEvents: 'none' }} />
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search contacts, roles, companies..."
-            style={{ width: '100%', padding: '8px 12px 8px 36px', borderRadius: 8, background: '#161b27', border: '1px solid #253047', color: '#e2e8f0', fontSize: 13, outline: 'none', boxSizing: 'border-box' }} />
+            style={{ width: '100%', padding: '8px 12px 8px 36px', borderRadius: 8, background: '#ffffff', border: '1px solid #d1d5db', color: '#0f172a', fontSize: 13, outline: 'none', boxSizing: 'border-box' }} />
         </div>
         <button onClick={() => toast.info('Advanced filters coming soon')}
-          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 8, border: '1px solid #253047', background: 'transparent', color: '#64748b', fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}
-          onMouseEnter={e => { e.currentTarget.style.borderColor = '#3b82f6'; e.currentTarget.style.color = '#94a3b8' }}
-          onMouseLeave={e => { e.currentTarget.style.borderColor = '#253047'; e.currentTarget.style.color = '#64748b' }}>
+          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 8, border: '1px solid #e2e8f0', background: 'transparent', color: '#64748b', fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}
+          onMouseEnter={e => { e.currentTarget.style.borderColor = '#3b82f6'; e.currentTarget.style.color = '#0f172a' }}
+          onMouseLeave={e => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.color = '#64748b' }}>
           <Filter size={13} /> Filter
         </button>
       </div>
 
       {/* Table */}
-      <div style={{ border: '1px solid #1f2d45', borderRadius: 12, overflow: 'hidden' }}>
+      <div style={{ border: '1px solid #e2e8f0', borderRadius: 12, overflow: 'hidden' }}>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 700 }}>
             <thead>
-              <tr style={{ background: '#161b27', borderBottom: '1px solid #1f2d45' }}>
+              <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
                 <th style={{ padding: '12px 16px', width: 44, textAlign: 'left' }}>
                   <input type="checkbox" checked={allSelected} onChange={() => setSelected(allSelected ? [] : filtered.map(c => c.id))} style={{ accentColor: '#3b82f6', cursor: 'pointer' }} />
                 </th>
@@ -239,9 +239,9 @@ export default function Contacts() {
               )}
               {!loading && filtered.map((c, i) => (
                 <tr key={c.id}
-                  style={{ background: selected.includes(c.id) ? 'rgba(59,130,246,0.06)' : i % 2 === 0 ? '#0d1117' : '#111827', borderBottom: '1px solid #1a2438', transition: 'background 0.1s' }}
-                  onMouseEnter={e => { if (!selected.includes(c.id)) e.currentTarget.style.background = 'rgba(255,255,255,0.02)' }}
-                  onMouseLeave={e => { e.currentTarget.style.background = selected.includes(c.id) ? 'rgba(59,130,246,0.06)' : i % 2 === 0 ? '#0d1117' : '#111827' }}>
+                  style={{ background: selected.includes(c.id) ? 'rgba(37,99,235,0.04)' : '#ffffff', borderBottom: '1px solid #f1f5f9', transition: 'background 0.1s' }}
+                  onMouseEnter={e => { if (!selected.includes(c.id)) e.currentTarget.style.background = 'rgba(37,99,235,0.04)' }}
+                  onMouseLeave={e => { e.currentTarget.style.background = selected.includes(c.id) ? 'rgba(37,99,235,0.04)' : '#ffffff' }}>
                   <td style={{ padding: '12px 16px' }}>
                     <input type="checkbox" checked={selected.includes(c.id)} onChange={() => toggleSelect(c.id)} onClick={e => e.stopPropagation()} style={{ accentColor: '#3b82f6', cursor: 'pointer' }} />
                   </td>
@@ -251,8 +251,8 @@ export default function Contacts() {
                         {(c.first_name || '?')[0].toUpperCase()}
                       </div>
                       <div style={{ minWidth: 0 }}>
-                        <div style={{ fontSize: 13, fontWeight: 500, color: 'white', whiteSpace: 'nowrap' }}>{c.first_name} {c.last_name}</div>
-                        <div style={{ fontSize: 11, color: '#475569', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 180 }}>{c.email || '—'}</div>
+                        <div style={{ fontSize: 13, fontWeight: 500, color: '#0f172a', whiteSpace: 'nowrap' }}>{c.first_name} {c.last_name}</div>
+                        <div style={{ fontSize: 11, color: '#64748b', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 180 }}>{c.email || '—'}</div>
                       </div>
                     </div>
                   </td>
@@ -311,7 +311,7 @@ export default function Contacts() {
             </tbody>
           </table>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: '#161b27', borderTop: '1px solid #1f2d45', fontSize: 12, color: '#475569' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: '#f8fafc', borderTop: '1px solid #e2e8f0', fontSize: 12, color: '#64748b' }}>
           <span>Showing {filtered.length} of {contacts.length} contacts</span>
         </div>
       </div>

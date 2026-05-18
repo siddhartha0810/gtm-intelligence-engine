@@ -23,6 +23,9 @@ import Events from './pages/Events'
 import ManufacturerIntel from './pages/ManufacturerIntel'
 import AuditLogs from './pages/AuditLogs'
 import UserManagement from './pages/UserManagement'
+import HubSpotSync from './pages/HubSpotSync'
+import ProductIntelligence from './pages/ProductIntelligence'
+import Recruitment from './pages/Recruitment'
 
 export default function App() {
   const [cmdOpen, setCmdOpen]                   = useState(false)
@@ -70,19 +73,22 @@ export default function App() {
 
   return (
     <BrowserRouter>
-      <div style={{ display: 'flex', height: '100vh', width: '100vw', overflow: 'hidden', background: '#0d1117' }}>
+      <div style={{ display: 'flex', height: '100vh', width: '100vw', overflow: 'hidden', background: '#f1f5f9' }}>
         <Sidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed(v => !v)} user={user} isAdmin={isAdmin} />
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, overflow: 'hidden' }}>
           <Topbar onCmdK={() => setCmdOpen(true)} user={user} onLogout={handleLogout} />
-          <main style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: 24, background: '#0d1117' }}>
+          <main style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: 24, background: '#f1f5f9' }}>
             <Routes>
               <Route path="/"                       element={<Navigate to="/dashboard" replace />} />
               <Route path="/dashboard"              element={<Dashboard />} />
               <Route path="/companies"              element={<Companies />} />
               <Route path="/contacts"               element={<Contacts />} />
               <Route path="/engine"                 element={<EngineControl />} />
+              <Route path="/engine-control"         element={<EngineControl />} />
               <Route path="/review"                 element={<ReviewQueue />} />
+              <Route path="/review-queue"           element={<ReviewQueue />} />
               <Route path="/intent"                 element={<IntentData />} />
+              <Route path="/intent-data"            element={<IntentData />} />
               <Route path="/reporting"              element={<Reporting />} />
               <Route path="/settings"               element={<Settings />} />
               {/* New unified platform pages */}
@@ -92,6 +98,11 @@ export default function App() {
               <Route path="/manufacturer-intel"     element={<ManufacturerIntel />} />
               <Route path="/audit-logs"             element={<AuditLogs />} />
               {isAdmin && <Route path="/user-management" element={<UserManagement />} />}
+              <Route path="/hubspot-sync"           element={<HubSpotSync />} />
+              <Route path="/product-intelligence"   element={<ProductIntelligence />} />
+              {(user?.role === 'admin' || user?.role === 'owner' || user?.role === 'recruitment') && (
+                <Route path="/recruitment"          element={<Recruitment />} />
+              )}
             </Routes>
           </main>
         </div>

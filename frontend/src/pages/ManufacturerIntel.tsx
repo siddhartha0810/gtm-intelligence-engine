@@ -18,7 +18,7 @@ interface MfgContact {
 }
 
 const thStyle: React.CSSProperties = { padding: '11px 16px', textAlign: 'left', fontSize: 12, fontWeight: 600, color: '#475569', letterSpacing: '0.03em', whiteSpace: 'nowrap' }
-const tdStyle: React.CSSProperties = { padding: '13px 16px', fontSize: 13, verticalAlign: 'middle', color: '#cbd5e1' }
+const tdStyle: React.CSSProperties = { padding: '13px 16px', fontSize: 13, verticalAlign: 'middle', color: '#374151' }
 
 function SlideOver({ contact, onClose, onSave }: { contact: Partial<MfgContact> | null; onClose: () => void; onSave: () => void }) {
   const isEdit = !!(contact?.id)
@@ -49,16 +49,16 @@ function SlideOver({ contact, onClose, onSave }: { contact: Partial<MfgContact> 
     } catch { toast.error('Save failed') } finally { setSaving(false) }
   }
 
-  const inp: React.CSSProperties = { width: '100%', padding: '8px 12px', borderRadius: 8, background: '#0f172a', border: '1px solid #253047', color: '#e2e8f0', fontSize: 13, outline: 'none', boxSizing: 'border-box' }
+  const inp: React.CSSProperties = { width: '100%', padding: '8px 12px', borderRadius: 8, background: '#ffffff', border: '1px solid #d1d5db', color: '#0f172a', fontSize: 13, outline: 'none', boxSizing: 'border-box' }
   const lbl: React.CSSProperties = { fontSize: 12, color: '#64748b', fontWeight: 600, letterSpacing: '0.04em', display: 'block', marginBottom: 6 }
   const row2: React.CSSProperties = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 500, display: 'flex', justifyContent: 'flex-end' }}>
       <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)' }} />
-      <div style={{ position: 'relative', width: 500, background: '#1e293b', borderLeft: '1px solid #253047', display: 'flex', flexDirection: 'column', overflow: 'hidden', zIndex: 1 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px', borderBottom: '1px solid #253047' }}>
-          <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: 'white' }}>{isEdit ? 'Edit Manufacturer Contact' : 'New Manufacturer Contact'}</h2>
+      <div style={{ position: 'relative', width: 500, background: '#ffffff', borderLeft: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', overflow: 'hidden', zIndex: 1, boxShadow: '-4px 0 24px rgba(0,0,0,0.08)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px', borderBottom: '1px solid #e2e8f0' }}>
+          <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: '#0f172a' }}>{isEdit ? 'Edit Manufacturer Contact' : 'New Manufacturer Contact'}</h2>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', padding: 4 }}><X size={18} /></button>
         </div>
         <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -81,8 +81,8 @@ function SlideOver({ contact, onClose, onSave }: { contact: Partial<MfgContact> 
           <div><label style={lbl}>Oracle Team</label><input style={inp} value={form.oracle_team} onChange={e => set('oracle_team', e.target.value)} /></div>
           <div><label style={lbl}>LinkedIn URL</label><input style={inp} type="url" value={form.linkedin_url} onChange={e => set('linkedin_url', e.target.value)} placeholder="https://linkedin.com/in/..." /></div>
         </div>
-        <div style={{ padding: '16px 24px', borderTop: '1px solid #253047', display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-          <button onClick={onClose} style={{ padding: '8px 20px', borderRadius: 8, border: '1px solid #253047', background: 'transparent', color: '#94a3b8', fontSize: 13, cursor: 'pointer' }}>Cancel</button>
+        <div style={{ padding: '16px 24px', borderTop: '1px solid #e2e8f0', display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+          <button onClick={onClose} style={{ padding: '8px 20px', borderRadius: 8, border: '1px solid #e2e8f0', background: 'transparent', color: '#94a3b8', fontSize: 13, cursor: 'pointer' }}>Cancel</button>
           <button onClick={save} disabled={saving} style={{ padding: '8px 20px', borderRadius: 8, border: 'none', background: '#3b82f6', color: 'white', fontSize: 13, fontWeight: 500, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1 }}>{saving ? 'Saving...' : 'Save Contact'}</button>
         </div>
       </div>
@@ -108,9 +108,9 @@ function LinkCompanyRow({ contactId, onDone }: { contactId: number; onDone: () =
   return (
     <div style={{ display: 'flex', gap: 6, marginTop: 4 }} onClick={e => e.stopPropagation()}>
       <input value={companyId} onChange={e => setCompanyId(e.target.value)} placeholder="Company ID" type="number"
-        style={{ width: 120, padding: '5px 10px', borderRadius: 6, background: '#0f172a', border: '1px solid #253047', color: '#e2e8f0', fontSize: 12, outline: 'none' }} />
+        style={{ width: 120, padding: '5px 10px', borderRadius: 6, background: '#ffffff', border: '1px solid #d1d5db', color: '#0f172a', fontSize: 12, outline: 'none' }} />
       <button onClick={link} disabled={linking} style={{ padding: '5px 12px', borderRadius: 6, border: 'none', background: '#3b82f6', color: 'white', fontSize: 12, cursor: linking ? 'not-allowed' : 'pointer', opacity: linking ? 0.7 : 1 }}>Link</button>
-      <button onClick={onDone} style={{ padding: '5px 8px', borderRadius: 6, border: '1px solid #253047', background: 'transparent', color: '#64748b', fontSize: 12, cursor: 'pointer' }}><X size={12} /></button>
+      <button onClick={onDone} style={{ padding: '5px 8px', borderRadius: 6, border: '1px solid #e2e8f0', background: 'transparent', color: '#64748b', fontSize: 12, cursor: 'pointer' }}><X size={12} /></button>
     </div>
   )
 }
@@ -167,11 +167,11 @@ export default function ManufacturerIntel() {
 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div>
-          <h1 style={{ fontSize: 20, fontWeight: 600, color: 'white', margin: 0 }}>Manufacturer Intel</h1>
+          <h1 style={{ fontSize: 20, fontWeight: 600, color: '#0f172a', margin: 0 }}>Manufacturer Intel</h1>
           <p style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>{loading ? 'Loading...' : `${contacts.length} manufacturer contacts`}</p>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
-          <button onClick={load} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 8, border: '1px solid #253047', background: 'transparent', color: '#94a3b8', fontSize: 13, cursor: 'pointer' }}>
+          <button onClick={load} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 8, border: '1px solid #e2e8f0', background: 'transparent', color: '#94a3b8', fontSize: 13, cursor: 'pointer' }}>
             <RefreshCw size={13} />
           </button>
           <button onClick={() => setSlideOver({})} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, border: 'none', background: '#3b82f6', color: 'white', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
@@ -183,14 +183,14 @@ export default function ManufacturerIntel() {
       <div style={{ position: 'relative', maxWidth: 380 }}>
         <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#475569' }} />
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search contacts, companies..."
-          style={{ width: '100%', padding: '8px 12px 8px 36px', borderRadius: 8, background: '#161b27', border: '1px solid #253047', color: '#e2e8f0', fontSize: 13, outline: 'none', boxSizing: 'border-box' }} />
+          style={{ width: '100%', padding: '8px 12px 8px 36px', borderRadius: 8, background: '#ffffff', border: '1px solid #d1d5db', color: '#0f172a', fontSize: 13, outline: 'none', boxSizing: 'border-box' }} />
       </div>
 
-      <div style={{ border: '1px solid #1f2d45', borderRadius: 12, overflow: 'hidden' }}>
+      <div style={{ border: '1px solid #e2e8f0', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 820 }}>
             <thead>
-              <tr style={{ background: '#161b27', borderBottom: '1px solid #1f2d45' }}>
+              <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
                 <th style={thStyle}>Contact</th>
                 <th style={thStyle}>Company</th>
                 <th style={thStyle}>Title</th>
@@ -208,16 +208,16 @@ export default function ManufacturerIntel() {
                 const ab = alignBadge(c.oracle_alignment)
                 const avatarColor = AVATAR_COLORS[i % AVATAR_COLORS.length]
                 return (
-                  <tr key={c.id} style={{ background: i % 2 === 0 ? '#0d1117' : '#111827', borderBottom: '1px solid #1a2438' }}
-                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
-                    onMouseLeave={e => e.currentTarget.style.background = i % 2 === 0 ? '#0d1117' : '#111827'}>
+                  <tr key={c.id} style={{ background: '#ffffff', borderBottom: '1px solid #f1f5f9' }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(37,99,235,0.04)'}
+                    onMouseLeave={e => e.currentTarget.style.background = '#ffffff'}>
                     <td style={tdStyle}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                         <div style={{ width: 34, height: 34, borderRadius: '50%', background: avatarColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: 'white', flexShrink: 0 }}>
                           {(c.first_name || '?')[0].toUpperCase()}
                         </div>
                         <div>
-                          <div style={{ fontSize: 13, fontWeight: 500, color: 'white' }}>{c.first_name} {c.last_name}</div>
+                          <div style={{ fontSize: 13, fontWeight: 500, color: '#0f172a' }}>{c.first_name} {c.last_name}</div>
                           {c.linkedin_url && <a href={c.linkedin_url} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: '#3b82f6', textDecoration: 'none' }} onClick={e => e.stopPropagation()}>LinkedIn ↗</a>}
                         </div>
                       </div>
@@ -239,14 +239,14 @@ export default function ManufacturerIntel() {
                     <td style={tdStyle}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start' }}>
                         <div style={{ display: 'flex', gap: 4 }}>
-                          <button onClick={() => setSlideOver(c)} style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #253047', background: 'transparent', color: '#94a3b8', fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
+                          <button onClick={() => setSlideOver(c)} style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #e2e8f0', background: 'transparent', color: '#94a3b8', fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
                             onMouseEnter={e => { e.currentTarget.style.borderColor = '#3b82f6'; e.currentTarget.style.color = '#60a5fa' }}
-                            onMouseLeave={e => { e.currentTarget.style.borderColor = '#253047'; e.currentTarget.style.color = '#94a3b8' }}>
+                            onMouseLeave={e => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.color = '#94a3b8' }}>
                             <Edit2 size={11} />Edit
                           </button>
-                          <button onClick={() => setLinkingId(linkingId === c.id ? null : c.id)} style={{ padding: '4px 8px', borderRadius: 6, border: '1px solid #253047', background: 'transparent', color: '#94a3b8', fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                          <button onClick={() => setLinkingId(linkingId === c.id ? null : c.id)} style={{ padding: '4px 8px', borderRadius: 6, border: '1px solid #e2e8f0', background: 'transparent', color: '#94a3b8', fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center' }}
                             onMouseEnter={e => { e.currentTarget.style.borderColor = '#10b981'; e.currentTarget.style.color = '#34d399' }}
-                            onMouseLeave={e => { e.currentTarget.style.borderColor = '#253047'; e.currentTarget.style.color = '#94a3b8' }}>
+                            onMouseLeave={e => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.color = '#94a3b8' }}>
                             <Link size={11} />
                           </button>
                           <button onClick={() => deleteContact(c)} style={{ padding: '4px 8px', borderRadius: 6, border: '1px solid rgba(239,68,68,0.2)', background: 'transparent', color: '#f87171', fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center' }}
@@ -264,7 +264,7 @@ export default function ManufacturerIntel() {
             </tbody>
           </table>
         </div>
-        <div style={{ padding: '12px 16px', background: '#161b27', borderTop: '1px solid #1f2d45', fontSize: 12, color: '#475569' }}>
+        <div style={{ padding: '12px 16px', background: '#f8fafc', borderTop: '1px solid #e2e8f0', fontSize: 12, color: '#64748b' }}>
           {filtered.length} of {contacts.length} contacts
         </div>
       </div>

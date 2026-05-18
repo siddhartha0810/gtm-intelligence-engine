@@ -70,15 +70,15 @@ function EventFormModal({ event, onClose, onSave }: { event: Partial<Event> | nu
     } catch { toast.error('Save failed') } finally { setSaving(false) }
   }
 
-  const inp: React.CSSProperties = { width: '100%', padding: '8px 12px', borderRadius: 8, background: '#0f172a', border: '1px solid #253047', color: '#e2e8f0', fontSize: 13, outline: 'none', boxSizing: 'border-box' }
+  const inp: React.CSSProperties = { width: '100%', padding: '8px 12px', borderRadius: 8, background: '#ffffff', border: '1px solid #d1d5db', color: '#0f172a', fontSize: 13, outline: 'none', boxSizing: 'border-box' }
   const lbl: React.CSSProperties = { fontSize: 12, color: '#64748b', fontWeight: 600, letterSpacing: '0.04em', display: 'block', marginBottom: 6 }
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 500, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.6)' }} />
-      <div style={{ position: 'relative', width: 480, background: '#1e293b', borderRadius: 14, border: '1px solid #253047', zIndex: 1, maxHeight: '90vh', overflowY: 'auto' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px', borderBottom: '1px solid #253047' }}>
-          <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: 'white' }}>{isEdit ? 'Edit Event' : 'New Event'}</h2>
+      <div style={{ position: 'relative', width: 480, background: '#ffffff', borderRadius: 14, border: '1px solid #e2e8f0', zIndex: 1, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 8px 40px rgba(0,0,0,0.12)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px', borderBottom: '1px solid #e2e8f0' }}>
+          <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: '#0f172a' }}>{isEdit ? 'Edit Event' : 'New Event'}</h2>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', padding: 4 }}><X size={18} /></button>
         </div>
         <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -93,8 +93,8 @@ function EventFormModal({ event, onClose, onSave }: { event: Partial<Event> | nu
           <div><label style={lbl}>Expected Attendees</label><input style={inp} type="number" value={form.attendee_count} onChange={e => set('attendee_count', e.target.value)} /></div>
           <div><label style={lbl}>Description</label><textarea style={{ ...inp, minHeight: 80, resize: 'vertical' }} value={form.description} onChange={e => set('description', e.target.value)} /></div>
         </div>
-        <div style={{ padding: '16px 24px', borderTop: '1px solid #253047', display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-          <button onClick={onClose} style={{ padding: '8px 20px', borderRadius: 8, border: '1px solid #253047', background: 'transparent', color: '#94a3b8', fontSize: 13, cursor: 'pointer' }}>Cancel</button>
+        <div style={{ padding: '16px 24px', borderTop: '1px solid #e2e8f0', display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+          <button onClick={onClose} style={{ padding: '8px 20px', borderRadius: 8, border: '1px solid #e2e8f0', background: 'transparent', color: '#94a3b8', fontSize: 13, cursor: 'pointer' }}>Cancel</button>
           <button onClick={save} disabled={saving} style={{ padding: '8px 20px', borderRadius: 8, border: 'none', background: '#3b82f6', color: 'white', fontSize: 13, fontWeight: 500, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1 }}>{saving ? 'Saving...' : 'Save Event'}</button>
         </div>
       </div>
@@ -141,38 +141,38 @@ function EventSlideOver({ event, onClose, onUpdated }: { event: Event; onClose: 
   }
 
   const tc = typeColor(event.event_type)
-  const inp: React.CSSProperties = { padding: '7px 12px', borderRadius: 8, background: '#0f172a', border: '1px solid #253047', color: '#e2e8f0', fontSize: 13, outline: 'none' }
+  const inp: React.CSSProperties = { padding: '7px 12px', borderRadius: 8, background: '#ffffff', border: '1px solid #d1d5db', color: '#0f172a', fontSize: 13, outline: 'none' }
 
   return (
     <>
       {editing && <EventFormModal event={event} onClose={() => setEditing(false)} onSave={() => { setEditing(false); onUpdated() }} />}
       <div style={{ position: 'fixed', inset: 0, zIndex: 400, display: 'flex', justifyContent: 'flex-end' }}>
         <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)' }} />
-        <div style={{ position: 'relative', width: 520, background: '#1e293b', borderLeft: '1px solid #253047', display: 'flex', flexDirection: 'column', overflow: 'hidden', zIndex: 1 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px', borderBottom: '1px solid #253047' }}>
+        <div style={{ position: 'relative', width: 520, background: '#ffffff', borderLeft: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', overflow: 'hidden', zIndex: 1, boxShadow: '-4px 0 24px rgba(0,0,0,0.08)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px', borderBottom: '1px solid #e2e8f0' }}>
             <div>
-              <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: 'white' }}>{event.name}</h2>
+              <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: '#0f172a' }}>{event.name}</h2>
               <span style={{ fontSize: 12, padding: '2px 10px', borderRadius: 999, background: tc.bg, color: tc.color, marginTop: 6, display: 'inline-block' }}>{event.event_type.replace('_', ' ')}</span>
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={() => setEditing(true)} style={{ background: 'none', border: '1px solid #253047', cursor: 'pointer', color: '#94a3b8', padding: '6px 12px', borderRadius: 8, fontSize: 13, display: 'flex', alignItems: 'center', gap: 5 }}><Edit2 size={13} />Edit</button>
+              <button onClick={() => setEditing(true)} style={{ background: 'none', border: '1px solid #e2e8f0', cursor: 'pointer', color: '#94a3b8', padding: '6px 12px', borderRadius: 8, fontSize: 13, display: 'flex', alignItems: 'center', gap: 5 }}><Edit2 size={13} />Edit</button>
               <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', padding: 4 }}><X size={18} /></button>
             </div>
           </div>
           <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px' }}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
               {[{ label: 'Date', value: event.event_date ? new Date(event.event_date).toLocaleDateString() : '—' }, { label: 'Location', value: event.location || '—' }, { label: 'Expected Attendees', value: String(event.attendee_count || 0) }].map(s => (
-                <div key={s.label} style={{ padding: '12px', background: '#0f172a', borderRadius: 8, border: '1px solid #1f2d45' }}>
-                  <div style={{ fontSize: 11, color: '#475569', fontWeight: 600, letterSpacing: '0.04em' }}>{s.label.toUpperCase()}</div>
-                  <div style={{ fontSize: 14, color: 'white', fontWeight: 500, marginTop: 4 }}>{s.value}</div>
+                <div key={s.label} style={{ padding: '12px', background: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                  <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600, letterSpacing: '0.04em' }}>{s.label.toUpperCase()}</div>
+                  <div style={{ fontSize: 14, color: '#0f172a', fontWeight: 500, marginTop: 4 }}>{s.value}</div>
                 </div>
               ))}
             </div>
             {event.description && <p style={{ fontSize: 13, color: '#94a3b8', lineHeight: 1.6, marginBottom: 20 }}>{event.description}</p>}
 
-            <div style={{ borderTop: '1px solid #253047', paddingTop: 20 }}>
+            <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: 20 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-                <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: 'white' }}>Attendees ({attendees.length})</h3>
+                <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#0f172a' }}>Attendees ({attendees.length})</h3>
               </div>
 
               <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
@@ -188,9 +188,9 @@ function EventSlideOver({ event, onClose, onUpdated }: { event: Event; onClose: 
                   {attendees.map(a => {
                     const rb = roleBadge(a.role)
                     return (
-                      <div key={a.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', background: '#0f172a', borderRadius: 8, border: '1px solid #1f2d45' }}>
+                      <div key={a.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', background: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0' }}>
                         <div>
-                          <div style={{ fontSize: 13, color: 'white', fontWeight: 500 }}>{a.contact_name}</div>
+                          <div style={{ fontSize: 13, color: '#0f172a', fontWeight: 500 }}>{a.contact_name}</div>
                           <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>{a.company}{a.title ? ` · ${a.title}` : ''}</div>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -257,7 +257,7 @@ export default function Events() {
 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div>
-          <h1 style={{ fontSize: 20, fontWeight: 600, color: 'white', margin: 0 }}>Events</h1>
+          <h1 style={{ fontSize: 20, fontWeight: 600, color: '#0f172a', margin: 0 }}>Events</h1>
           <p style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>{loading ? 'Loading...' : `${events.length} events`}</p>
         </div>
         <button onClick={() => setModal({})} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, border: 'none', background: '#3b82f6', color: 'white', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
@@ -268,7 +268,7 @@ export default function Events() {
       <div style={{ position: 'relative', maxWidth: 360 }}>
         <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#475569' }} />
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search events, locations..."
-          style={{ width: '100%', padding: '8px 12px 8px 36px', borderRadius: 8, background: '#161b27', border: '1px solid #253047', color: '#e2e8f0', fontSize: 13, outline: 'none', boxSizing: 'border-box' }} />
+          style={{ width: '100%', padding: '8px 12px 8px 36px', borderRadius: 8, background: '#ffffff', border: '1px solid #d1d5db', color: '#0f172a', fontSize: 13, outline: 'none', boxSizing: 'border-box' }} />
       </div>
 
       {loading && <div style={{ textAlign: 'center', padding: '60px 0', color: '#475569', fontSize: 13 }}>Loading events...</div>}
@@ -287,24 +287,24 @@ export default function Events() {
             const avatarColor = AVATAR_COLORS[i % AVATAR_COLORS.length]
             return (
               <div key={ev.id} onClick={() => setSelected(ev)}
-                style={{ background: '#1e293b', border: '1px solid #253047', borderRadius: 12, padding: 20, cursor: 'pointer', transition: 'border-color 0.15s, box-shadow 0.15s' }}
+                style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 12, padding: 20, cursor: 'pointer', transition: 'border-color 0.15s, box-shadow 0.15s', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}
                 onMouseEnter={e => { e.currentTarget.style.borderColor = '#3b82f6'; e.currentTarget.style.boxShadow = '0 4px 20px rgba(59,130,246,0.1)' }}
-                onMouseLeave={e => { e.currentTarget.style.borderColor = '#253047'; e.currentTarget.style.boxShadow = 'none' }}>
+                onMouseLeave={e => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.06)' }}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 14 }}>
                   <div style={{ width: 40, height: 40, borderRadius: 10, background: avatarColor + '22', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <Calendar size={20} color={avatarColor} />
                   </div>
                   <span style={{ fontSize: 12, padding: '3px 10px', borderRadius: 999, background: tc.bg, color: tc.color, whiteSpace: 'nowrap' }}>{ev.event_type.replace('_', ' ')}</span>
                 </div>
-                <div style={{ fontSize: 15, fontWeight: 600, color: 'white', marginBottom: 8, lineHeight: 1.3 }}>{ev.name}</div>
+                <div style={{ fontSize: 15, fontWeight: 600, color: '#0f172a', marginBottom: 8, lineHeight: 1.3 }}>{ev.name}</div>
                 {ev.description && <div style={{ fontSize: 13, color: '#64748b', marginBottom: 12, lineHeight: 1.5, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{ev.description}</div>}
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, fontSize: 12, color: '#475569', borderTop: '1px solid #1f2d45', paddingTop: 12 }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, fontSize: 12, color: '#64748b', borderTop: '1px solid #f1f5f9', paddingTop: 12 }}>
                   {ev.event_date && <span>{new Date(ev.event_date).toLocaleDateString()}</span>}
                   {ev.location && <span>📍 {ev.location}</span>}
                   {ev.attendee_count > 0 && <span><Users size={11} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 3 }} />{ev.attendee_count}</span>}
                 </div>
                 <div style={{ display: 'flex', gap: 6, marginTop: 12 }} onClick={e => e.stopPropagation()}>
-                  <button onClick={() => setModal(ev)} style={{ flex: 1, padding: '6px 0', borderRadius: 7, border: '1px solid #253047', background: 'transparent', color: '#94a3b8', fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}><Edit2 size={11} />Edit</button>
+                  <button onClick={() => setModal(ev)} style={{ flex: 1, padding: '6px 0', borderRadius: 7, border: '1px solid #e2e8f0', background: 'transparent', color: '#94a3b8', fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}><Edit2 size={11} />Edit</button>
                   <button onClick={() => deleteEvent(ev)} style={{ padding: '6px 10px', borderRadius: 7, border: '1px solid rgba(239,68,68,0.2)', background: 'transparent', color: '#f87171', fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center' }}><Trash2 size={11} /></button>
                 </div>
               </div>

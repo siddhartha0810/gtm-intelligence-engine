@@ -59,15 +59,15 @@ function InviteModal({ onClose, onSave }: { onClose: () => void; onSave: () => v
     } finally { setSaving(false) }
   }
 
-  const inp: React.CSSProperties = { width: '100%', padding: '8px 12px', borderRadius: 8, background: '#0f172a', border: '1px solid #253047', color: '#e2e8f0', fontSize: 13, outline: 'none', boxSizing: 'border-box' }
+  const inp: React.CSSProperties = { width: '100%', padding: '8px 12px', borderRadius: 8, background: '#ffffff', border: '1px solid #d1d5db', color: '#0f172a', fontSize: 13, outline: 'none', boxSizing: 'border-box' }
   const lbl: React.CSSProperties = { fontSize: 12, color: '#64748b', fontWeight: 600, letterSpacing: '0.04em', display: 'block', marginBottom: 6 }
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 500, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.6)' }} />
-      <div style={{ position: 'relative', width: 420, background: '#1e293b', borderRadius: 14, border: '1px solid #253047', zIndex: 1 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px', borderBottom: '1px solid #253047' }}>
-          <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: 'white' }}>Invite User</h2>
+      <div style={{ position: 'relative', width: 420, background: '#ffffff', borderRadius: 14, border: '1px solid #e2e8f0', zIndex: 1, boxShadow: '0 8px 40px rgba(0,0,0,0.12)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px', borderBottom: '1px solid #e2e8f0' }}>
+          <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: '#0f172a' }}>Invite User</h2>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', padding: 4 }}><X size={18} /></button>
         </div>
         <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -81,8 +81,8 @@ function InviteModal({ onClose, onSave }: { onClose: () => void; onSave: () => v
             </select>
           </div>
         </div>
-        <div style={{ padding: '16px 24px', borderTop: '1px solid #253047', display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-          <button onClick={onClose} style={{ padding: '8px 20px', borderRadius: 8, border: '1px solid #253047', background: 'transparent', color: '#94a3b8', fontSize: 13, cursor: 'pointer' }}>Cancel</button>
+        <div style={{ padding: '16px 24px', borderTop: '1px solid #e2e8f0', display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+          <button onClick={onClose} style={{ padding: '8px 20px', borderRadius: 8, border: '1px solid #e2e8f0', background: 'transparent', color: '#94a3b8', fontSize: 13, cursor: 'pointer' }}>Cancel</button>
           <button onClick={save} disabled={saving} style={{ padding: '8px 20px', borderRadius: 8, border: 'none', background: '#3b82f6', color: 'white', fontSize: 13, fontWeight: 500, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1 }}>{saving ? 'Inviting...' : 'Send Invite'}</button>
         </div>
       </div>
@@ -155,14 +155,14 @@ export default function UserManagement() {
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <Shield size={20} color="#3b82f6" />
-            <h1 style={{ fontSize: 20, fontWeight: 600, color: 'white', margin: 0 }}>User Management</h1>
+            <h1 style={{ fontSize: 20, fontWeight: 600, color: '#0f172a', margin: 0 }}>User Management</h1>
           </div>
           <p style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>
             {loading ? 'Loading...' : `${users.length} users · ${activeCount} active`}
           </p>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
-          <button onClick={load} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 8, border: '1px solid #253047', background: 'transparent', color: '#94a3b8', fontSize: 13, cursor: 'pointer' }}>
+          <button onClick={load} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 8, border: '1px solid #e2e8f0', background: 'transparent', color: '#94a3b8', fontSize: 13, cursor: 'pointer' }}>
             <RefreshCw size={13} />
           </button>
           <button onClick={() => setInviteOpen(true)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, border: 'none', background: '#3b82f6', color: 'white', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
@@ -177,11 +177,11 @@ export default function UserManagement() {
         </div>
       )}
 
-      <div style={{ border: '1px solid #1f2d45', borderRadius: 12, overflow: 'hidden' }}>
+      <div style={{ border: '1px solid #e2e8f0', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 760 }}>
             <thead>
-              <tr style={{ background: '#161b27', borderBottom: '1px solid #1f2d45' }}>
+              <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
                 <th style={thStyle}>User</th>
                 <th style={thStyle}>Role</th>
                 <th style={thStyle}>Status</th>
@@ -199,16 +199,16 @@ export default function UserManagement() {
                 const AVATAR_COLORS = ['#3b82f6', '#6366f1', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899']
                 const avatarColor = AVATAR_COLORS[i % AVATAR_COLORS.length]
                 return (
-                  <tr key={u.id} style={{ background: i % 2 === 0 ? '#0d1117' : '#111827', borderBottom: '1px solid #1a2438' }}
-                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
-                    onMouseLeave={e => e.currentTarget.style.background = i % 2 === 0 ? '#0d1117' : '#111827'}>
+                  <tr key={u.id} style={{ background: '#ffffff', borderBottom: '1px solid #f1f5f9' }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(37,99,235,0.04)'}
+                    onMouseLeave={e => e.currentTarget.style.background = '#ffffff'}>
                     <td style={tdStyle}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                         <div style={{ width: 34, height: 34, borderRadius: '50%', background: avatarColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: 'white', flexShrink: 0 }}>
                           {(u.name || u.email || '?')[0].toUpperCase()}
                         </div>
                         <div>
-                          <div style={{ fontSize: 13, fontWeight: 500, color: 'white' }}>{u.name || '—'} {isSelf && <span style={{ fontSize: 11, color: '#3b82f6', fontWeight: 400 }}>(you)</span>}</div>
+                          <div style={{ fontSize: 13, fontWeight: 500, color: '#0f172a' }}>{u.name || '—'} {isSelf && <span style={{ fontSize: 11, color: '#3b82f6', fontWeight: 400 }}>(you)</span>}</div>
                           <div style={{ fontSize: 11, color: '#475569', marginTop: 2 }}>{u.email}</div>
                         </div>
                       </div>
@@ -220,7 +220,7 @@ export default function UserManagement() {
                           value={u.role}
                           onChange={e => changeRole(u, e.target.value as Role)}
                           onClick={e => e.stopPropagation()}
-                          style={{ padding: '4px 8px', borderRadius: 6, background: '#0f172a', border: '1px solid #253047', color: '#94a3b8', fontSize: 11, outline: 'none', cursor: 'pointer' }}>
+                          style={{ padding: '4px 8px', borderRadius: 6, background: '#ffffff', border: '1px solid #d1d5db', color: '#64748b', fontSize: 11, outline: 'none', cursor: 'pointer' }}>
                           {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
                         </select>
                       </div>
@@ -264,13 +264,13 @@ export default function UserManagement() {
             </tbody>
           </table>
         </div>
-        <div style={{ padding: '12px 16px', background: '#161b27', borderTop: '1px solid #1f2d45', fontSize: 12, color: '#475569' }}>
+        <div style={{ padding: '12px 16px', background: '#f8fafc', borderTop: '1px solid #e2e8f0', fontSize: 12, color: '#64748b' }}>
           {users.length} users · {activeCount} active · {users.length - activeCount} inactive
         </div>
       </div>
 
       {/* Role legend */}
-      <div style={{ padding: '16px 20px', background: '#1e293b', borderRadius: 10, border: '1px solid #253047' }}>
+      <div style={{ padding: '16px 20px', background: '#ffffff', borderRadius: 10, border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
         <div style={{ fontSize: 12, color: '#475569', fontWeight: 600, letterSpacing: '0.04em', marginBottom: 12 }}>ROLE PERMISSIONS</div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
           {[
@@ -282,7 +282,7 @@ export default function UserManagement() {
           ].map(({ role, desc }) => {
             const rb = roleBadge(role)
             return (
-              <div key={role} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', background: '#0f172a', borderRadius: 8, border: '1px solid #1f2d45' }}>
+              <div key={role} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', background: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0' }}>
                 <span style={{ fontSize: 12, padding: '2px 8px', borderRadius: 999, background: rb.bg, color: rb.color, fontWeight: 500 }}>{role}</span>
                 <span style={{ fontSize: 12, color: '#64748b' }}>{desc}</span>
               </div>

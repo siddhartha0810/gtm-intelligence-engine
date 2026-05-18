@@ -22,7 +22,7 @@ interface TaxonomyItem {
 }
 
 const thStyle: React.CSSProperties = { padding: '11px 16px', textAlign: 'left', fontSize: 12, fontWeight: 600, color: '#475569', letterSpacing: '0.03em', whiteSpace: 'nowrap' }
-const tdStyle: React.CSSProperties = { padding: '13px 16px', fontSize: 13, verticalAlign: 'middle', color: '#cbd5e1' }
+const tdStyle: React.CSSProperties = { padding: '13px 16px', fontSize: 13, verticalAlign: 'middle', color: '#374151' }
 
 function SlideOver({ profile, onClose, onSave }: { profile: Partial<TechProfile> | null; onClose: () => void; onSave: () => void }) {
   const isEdit = !!(profile && profile.id)
@@ -59,15 +59,15 @@ function SlideOver({ profile, onClose, onSave }: { profile: Partial<TechProfile>
     } catch { toast.error('Save failed') } finally { setSaving(false) }
   }
 
-  const inp: React.CSSProperties = { width: '100%', padding: '8px 12px', borderRadius: 8, background: '#0f172a', border: '1px solid #253047', color: '#e2e8f0', fontSize: 13, outline: 'none', boxSizing: 'border-box' }
+  const inp: React.CSSProperties = { width: '100%', padding: '8px 12px', borderRadius: 8, background: '#ffffff', border: '1px solid #d1d5db', color: '#0f172a', fontSize: 13, outline: 'none', boxSizing: 'border-box' }
   const lbl: React.CSSProperties = { fontSize: 12, color: '#64748b', fontWeight: 600, letterSpacing: '0.04em', display: 'block', marginBottom: 6 }
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 500, display: 'flex', justifyContent: 'flex-end' }}>
       <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)' }} />
-      <div style={{ position: 'relative', width: 480, background: '#1e293b', borderLeft: '1px solid #253047', display: 'flex', flexDirection: 'column', overflow: 'hidden', zIndex: 1 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px', borderBottom: '1px solid #253047' }}>
-          <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: 'white' }}>{isEdit ? 'Edit Profile' : 'New Technology Profile'}</h2>
+      <div style={{ position: 'relative', width: 480, background: '#ffffff', borderLeft: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', overflow: 'hidden', zIndex: 1, boxShadow: '-4px 0 24px rgba(0,0,0,0.08)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px', borderBottom: '1px solid #e2e8f0' }}>
+          <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: '#0f172a' }}>{isEdit ? 'Edit Profile' : 'New Technology Profile'}</h2>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', padding: 4 }}><X size={18} /></button>
         </div>
         <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -78,8 +78,8 @@ function SlideOver({ profile, onClose, onSave }: { profile: Partial<TechProfile>
           <div><label style={lbl}>Oracle Products (comma-separated)</label><textarea style={{ ...inp, minHeight: 64, resize: 'vertical' }} value={form.oracle_products} onChange={e => set('oracle_products', e.target.value)} placeholder="Oracle EBS, NetSuite..." /></div>
           <div><label style={lbl}>Manufacturer Domain</label><input style={inp} value={form.manufacturer_domain} onChange={e => set('manufacturer_domain', e.target.value)} placeholder="oracle.com" /></div>
         </div>
-        <div style={{ padding: '16px 24px', borderTop: '1px solid #253047', display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-          <button onClick={onClose} style={{ padding: '8px 20px', borderRadius: 8, border: '1px solid #253047', background: 'transparent', color: '#94a3b8', fontSize: 13, cursor: 'pointer' }}>Cancel</button>
+        <div style={{ padding: '16px 24px', borderTop: '1px solid #e2e8f0', display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+          <button onClick={onClose} style={{ padding: '8px 20px', borderRadius: 8, border: '1px solid #e2e8f0', background: 'transparent', color: '#94a3b8', fontSize: 13, cursor: 'pointer' }}>Cancel</button>
           <button onClick={save} disabled={saving} style={{ padding: '8px 20px', borderRadius: 8, border: 'none', background: '#3b82f6', color: 'white', fontSize: 13, fontWeight: 500, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1 }}>{saving ? 'Saving...' : 'Save Profile'}</button>
         </div>
       </div>
@@ -130,17 +130,17 @@ function TaxonomyRow({ profileId, onClose }: { profileId: number; onClose: () =>
     } catch { toast.error('Delete failed') }
   }
 
-  const inp: React.CSSProperties = { padding: '6px 10px', borderRadius: 6, background: '#0f172a', border: '1px solid #253047', color: '#e2e8f0', fontSize: 12, outline: 'none' }
+  const inp: React.CSSProperties = { padding: '6px 10px', borderRadius: 6, background: '#ffffff', border: '1px solid #d1d5db', color: '#0f172a', fontSize: 12, outline: 'none' }
 
   return (
     <tr>
-      <td colSpan={6} style={{ padding: 0, background: '#0a1628', borderBottom: '1px solid #1f2d45' }}>
+      <td colSpan={6} style={{ padding: 0, background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
         <div style={{ padding: '14px 24px 14px 56px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
             <span style={{ fontSize: 12, fontWeight: 600, color: '#64748b', letterSpacing: '0.04em' }}>PRODUCT TAXONOMY</span>
             <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={() => setAdding(a => !a)} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', borderRadius: 6, border: '1px solid #253047', background: 'transparent', color: '#94a3b8', fontSize: 12, cursor: 'pointer' }}><Plus size={12} />Add</button>
-              <button onClick={onClose} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', borderRadius: 6, border: '1px solid #253047', background: 'transparent', color: '#64748b', fontSize: 12, cursor: 'pointer' }}><X size={12} />Close</button>
+              <button onClick={() => setAdding(a => !a)} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', borderRadius: 6, border: '1px solid #e2e8f0', background: 'transparent', color: '#94a3b8', fontSize: 12, cursor: 'pointer' }}><Plus size={12} />Add</button>
+              <button onClick={onClose} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', borderRadius: 6, border: '1px solid #e2e8f0', background: 'transparent', color: '#64748b', fontSize: 12, cursor: 'pointer' }}><X size={12} />Close</button>
             </div>
           </div>
           {adding && (
@@ -150,7 +150,7 @@ function TaxonomyRow({ profileId, onClose }: { profileId: number; onClose: () =>
               <input style={{ ...inp, flex: '1 1 100px' }} value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))} placeholder="Category" />
               <input style={{ ...inp, width: 80 }} type="number" step="0.1" min="0" max="1" value={form.confidence_weight} onChange={e => setForm(f => ({ ...f, confidence_weight: e.target.value }))} placeholder="Weight" />
               <button onClick={addTaxonomy} style={{ padding: '6px 14px', borderRadius: 6, border: 'none', background: '#3b82f6', color: 'white', fontSize: 12, cursor: 'pointer' }}>Add</button>
-              <button onClick={() => setAdding(false)} style={{ padding: '6px 12px', borderRadius: 6, border: '1px solid #253047', background: 'transparent', color: '#64748b', fontSize: 12, cursor: 'pointer' }}>Cancel</button>
+              <button onClick={() => setAdding(false)} style={{ padding: '6px 12px', borderRadius: 6, border: '1px solid #e2e8f0', background: 'transparent', color: '#64748b', fontSize: 12, cursor: 'pointer' }}>Cancel</button>
             </div>
           )}
           {loading ? <p style={{ fontSize: 12, color: '#475569', margin: '8px 0' }}>Loading...</p> : items.length === 0 ? <p style={{ fontSize: 12, color: '#475569', margin: '8px 0' }}>No taxonomy items yet.</p> : (
@@ -165,9 +165,9 @@ function TaxonomyRow({ profileId, onClose }: { profileId: number; onClose: () =>
               <tbody>
                 {items.map(item => (
                   <tr key={item.id}>
-                    <td style={{ padding: '7px 10px', fontSize: 12, color: '#e2e8f0' }}>{item.canonical_name}</td>
-                    <td style={{ padding: '7px 10px', fontSize: 12, color: '#94a3b8' }}>{(item.aliases || []).join(', ') || '—'}</td>
-                    <td style={{ padding: '7px 10px', fontSize: 12, color: '#94a3b8' }}>{item.category || '—'}</td>
+                    <td style={{ padding: '7px 10px', fontSize: 12, color: '#0f172a' }}>{item.canonical_name}</td>
+                    <td style={{ padding: '7px 10px', fontSize: 12, color: '#64748b' }}>{(item.aliases || []).join(', ') || '—'}</td>
+                    <td style={{ padding: '7px 10px', fontSize: 12, color: '#64748b' }}>{item.category || '—'}</td>
                     <td style={{ padding: '7px 10px', fontSize: 12, color: '#64748b' }}>{item.confidence_weight}</td>
                     <td style={{ padding: '7px 10px' }}>
                       <button onClick={() => deleteTaxonomy(item.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', padding: 4, borderRadius: 4 }}
@@ -231,13 +231,13 @@ export default function TechnologyProfiles() {
 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div>
-          <h1 style={{ fontSize: 20, fontWeight: 600, color: 'white', margin: 0 }}>Technology Profiles</h1>
+          <h1 style={{ fontSize: 20, fontWeight: 600, color: '#0f172a', margin: 0 }}>Technology Profiles</h1>
           <p style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>
             {loading ? 'Loading...' : `${profiles.length} profiles · ${profiles.filter(p => p.is_active).length} active`}
           </p>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
-          <button onClick={load} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 8, border: '1px solid #253047', background: 'transparent', color: '#94a3b8', fontSize: 13, cursor: 'pointer' }}>
+          <button onClick={load} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 8, border: '1px solid #e2e8f0', background: 'transparent', color: '#94a3b8', fontSize: 13, cursor: 'pointer' }}>
             <RefreshCw size={13} />
           </button>
           <button onClick={() => setSlideOver({})} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, border: 'none', background: '#3b82f6', color: 'white', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
@@ -246,10 +246,10 @@ export default function TechnologyProfiles() {
         </div>
       </div>
 
-      <div style={{ border: '1px solid #1f2d45', borderRadius: 12, overflow: 'hidden' }}>
+      <div style={{ border: '1px solid #e2e8f0', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
-            <tr style={{ background: '#161b27', borderBottom: '1px solid #1f2d45' }}>
+            <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
               <th style={{ ...thStyle, width: 36 }}></th>
               <th style={thStyle}>Name</th>
               <th style={thStyle}>Description</th>
@@ -262,18 +262,18 @@ export default function TechnologyProfiles() {
           <tbody>
             {loading && <tr><td colSpan={7} style={{ padding: '40px 0', textAlign: 'center', color: '#475569', fontSize: 13 }}>Loading profiles...</td></tr>}
             {!loading && profiles.length === 0 && <tr><td colSpan={7} style={{ padding: '40px 0', textAlign: 'center', color: '#475569', fontSize: 13 }}>No profiles yet. Create one to get started.</td></tr>}
-            {!loading && profiles.map((p, i) => (
+            {!loading && profiles.map((p) => (
               <>
-                <tr key={p.id} style={{ background: i % 2 === 0 ? '#0d1117' : '#111827', borderBottom: expanded === p.id ? 'none' : '1px solid #1a2438' }}
-                  onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.02)')}
-                  onMouseLeave={e => (e.currentTarget.style.background = i % 2 === 0 ? '#0d1117' : '#111827')}>
+                <tr key={p.id} style={{ background: '#ffffff', borderBottom: expanded === p.id ? 'none' : '1px solid #f1f5f9' }}
+                  onMouseEnter={e => (e.currentTarget.style.background = 'rgba(37,99,235,0.04)')}
+                  onMouseLeave={e => (e.currentTarget.style.background = '#ffffff')}>
                   <td style={tdStyle}>
                     <button onClick={() => setExpanded(expanded === p.id ? null : p.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#475569', padding: 4, display: 'flex', alignItems: 'center' }}>
                       <ChevronDown size={14} style={{ transform: expanded === p.id ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
                     </button>
                   </td>
                   <td style={tdStyle}>
-                    <div style={{ fontWeight: 500, color: 'white' }}>{p.name}</div>
+                    <div style={{ fontWeight: 500, color: '#0f172a' }}>{p.name}</div>
                     {p.manufacturer_domain && <div style={{ fontSize: 11, color: '#475569', marginTop: 2 }}>{p.manufacturer_domain}</div>}
                   </td>
                   <td style={{ ...tdStyle, color: '#94a3b8', maxWidth: 240 }}>
@@ -289,9 +289,9 @@ export default function TechnologyProfiles() {
                   </td>
                   <td style={tdStyle}>
                     <div style={{ display: 'flex', gap: 4 }}>
-                      <button onClick={() => setSlideOver(p)} title="Edit" style={{ padding: '5px 10px', borderRadius: 6, border: '1px solid #253047', background: 'transparent', color: '#94a3b8', fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
+                      <button onClick={() => setSlideOver(p)} title="Edit" style={{ padding: '5px 10px', borderRadius: 6, border: '1px solid #e2e8f0', background: 'transparent', color: '#94a3b8', fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
                         onMouseEnter={e => { e.currentTarget.style.borderColor = '#3b82f6'; e.currentTarget.style.color = '#60a5fa' }}
-                        onMouseLeave={e => { e.currentTarget.style.borderColor = '#253047'; e.currentTarget.style.color = '#94a3b8' }}>
+                        onMouseLeave={e => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.color = '#94a3b8' }}>
                         <Edit2 size={12} /> Edit
                       </button>
                       <button onClick={() => deleteProfile(p)} title="Delete" style={{ padding: '5px 8px', borderRadius: 6, border: '1px solid rgba(239,68,68,0.2)', background: 'transparent', color: '#f87171', fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center' }}
@@ -307,7 +307,7 @@ export default function TechnologyProfiles() {
             ))}
           </tbody>
         </table>
-        <div style={{ padding: '12px 16px', background: '#161b27', borderTop: '1px solid #1f2d45', fontSize: 12, color: '#475569' }}>
+        <div style={{ padding: '12px 16px', background: '#f8fafc', borderTop: '1px solid #e2e8f0', fontSize: 12, color: '#64748b' }}>
           {profiles.length} technology profiles
         </div>
       </div>

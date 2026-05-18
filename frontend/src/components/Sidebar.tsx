@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Building2, Users, Cpu, ClipboardCheck,
   BarChart3, Settings, ChevronLeft, ChevronRight,
   Zap, Target, Layers, Upload, CalendarDays, Factory,
-  ScrollText, UserCog, Shield
+  ScrollText, UserCog, Shield, RefreshCw, PackageSearch, Briefcase
 } from 'lucide-react'
 
 interface SidebarProps {
@@ -18,7 +18,7 @@ const NAV_STATIC = [
     label: 'OVERVIEW',
     items: [
       { to: '/dashboard',   icon: LayoutDashboard, label: 'Control Panel' },
-      { to: '/review',      icon: ClipboardCheck,  label: 'Review Queue', badge: '12' },
+      { to: '/review-queue', icon: ClipboardCheck,  label: 'Review Queue', badge: '12' },
     ]
   },
   {
@@ -26,17 +26,19 @@ const NAV_STATIC = [
     items: [
       { to: '/companies',         icon: Building2,   label: 'Companies' },
       { to: '/contacts',          icon: Users,        label: 'Contacts' },
-      { to: '/intent',            icon: Target,       label: 'Intent Data' },
+      { to: '/intent-data',       icon: Target,       label: 'Intent Data' },
       { to: '/list-import',       icon: Upload,       label: 'List Import' },
       { to: '/events',            icon: CalendarDays, label: 'Events' },
       { to: '/manufacturer-intel',icon: Factory,      label: 'Manufacturer Intel' },
-      { to: '/engine',            icon: Cpu,          label: 'Engine Control' },
+      { to: '/engine-control',    icon: Cpu,          label: 'Engine Control' },
+      { to: '/product-intelligence', icon: PackageSearch, label: 'Product Intel' },
     ]
   },
   {
     label: 'CONFIGURATION',
     items: [
       { to: '/technology-profiles', icon: Layers, label: 'Technology Profiles' },
+      { to: '/hubspot-sync', icon: RefreshCw, label: 'HubSpot Sync' },
     ]
   },
   {
@@ -61,17 +63,29 @@ const ADMIN_GROUP = {
   ]
 }
 
+const SENSITIVE_GROUP = {
+  label: 'SENSITIVE',
+  items: [
+    { to: '/recruitment', icon: Briefcase, label: 'Recruitment' },
+  ]
+}
+
 export default function Sidebar({ collapsed, onToggle, user, isAdmin }: SidebarProps) {
   const w = collapsed ? 64 : 240
 
-  const groups = isAdmin ? [...NAV_STATIC, ADMIN_GROUP] : NAV_STATIC
+  const canSeeSensitive = user?.role === 'admin' || user?.role === 'owner' || user?.role === 'recruitment'
+  const groups = [
+    ...NAV_STATIC,
+    ...(isAdmin ? [ADMIN_GROUP] : []),
+    ...(canSeeSensitive ? [SENSITIVE_GROUP] : []),
+  ]
 
   return (
     <aside style={{
       width: w, minWidth: w, maxWidth: w,
       height: '100vh',
-      background: '#111827',
-      borderRight: '1px solid #1f2d45',
+      background: '#0f1e36',
+      borderRight: '1px solid #1a3050',
       display: 'flex',
       flexDirection: 'column',
       transition: 'width 0.3s ease',
@@ -82,7 +96,8 @@ export default function Sidebar({ collapsed, onToggle, user, isAdmin }: SidebarP
       <div style={{
         height: 56, display: 'flex', alignItems: 'center',
         gap: 12, padding: '0 16px',
-        borderBottom: '1px solid #1f2d45', flexShrink: 0
+        borderBottom: '1px solid #1a3050', flexShrink: 0,
+        background: '#0a1628',
       }}>
         <div style={{
           width: 32, height: 32, borderRadius: 8, flexShrink: 0,
@@ -94,7 +109,7 @@ export default function Sidebar({ collapsed, onToggle, user, isAdmin }: SidebarP
         {!collapsed && (
           <div>
             <div style={{ fontSize: 13, fontWeight: 600, color: 'white', lineHeight: 1 }}>Inoapps</div>
-            <div style={{ fontSize: 11, color: '#64748b', marginTop: 3 }}>Intelligence Hub</div>
+            <div style={{ fontSize: 11, color: '#4a7ab5', marginTop: 3 }}>Intelligence Hub</div>
           </div>
         )}
       </div>
@@ -104,8 +119,9 @@ export default function Sidebar({ collapsed, onToggle, user, isAdmin }: SidebarP
         {groups.map(group => (
           <div key={group.label} style={{ marginBottom: 20 }}>
             {!collapsed && (
-              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: group.label === 'ADMIN' ? '#7c3aed' : '#374151', padding: '0 8px', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 4 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: group.label === 'ADMIN' ? '#7c3aed' : group.label === 'SENSITIVE' ? '#dc2626' : '#4a7ab5', padding: '0 8px', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 4 }}>
                 {group.label === 'ADMIN' && <Shield size={9} color="#7c3aed" />}
+                {group.label === 'SENSITIVE' && <Shield size={9} color="#dc2626" />}
                 {group.label}
               </div>
             )}
@@ -122,10 +138,12 @@ export default function Sidebar({ collapsed, onToggle, user, isAdmin }: SidebarP
                   textDecoration: 'none',
                   marginBottom: 2,
                   position: 'relative',
-                  background: isActive ? 'rgba(59,130,246,0.15)' : 'transparent',
-                  color: isActive ? '#93c5fd' : '#94a3b8',
+                  background: isActive ? 'rgba(59,130,246,0.18)' : 'transparent',
+                  color: isActive ? '#93c5fd' : '#94b8d9',
                   transition: 'background 0.15s',
                 })}
+                onMouseEnter={e => { const el = e.currentTarget as HTMLElement; if (!el.classList.contains('active')) el.style.background = 'rgba(255,255,255,0.06)' }}
+                onMouseLeave={e => { const el = e.currentTarget as HTMLElement; if (!el.classList.contains('active')) el.style.background = 'transparent' }}
               >
                 {({ isActive }) => (
                   <>
@@ -167,9 +185,9 @@ export default function Sidebar({ collapsed, onToggle, user, isAdmin }: SidebarP
         onClick={onToggle}
         style={{
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-          height: 40, borderTop: '1px solid #1f2d45',
+          height: 40, borderTop: '1px solid #1a3050',
           background: 'transparent', border: 'none', cursor: 'pointer',
-          color: '#475569', fontSize: 12, flexShrink: 0,
+          color: '#7aadd4', fontSize: 12, flexShrink: 0,
           width: '100%'
         }}
       >

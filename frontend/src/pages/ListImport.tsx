@@ -115,7 +115,7 @@ export default function ListImport() {
 
   const reset = () => { setStep(1); setFile(null); setHeaders([]); setMappings({}); setResult(null); setSaveAsTemplate(false); setTemplateName(''); setSelectedTemplateId(undefined) }
 
-  const inp: React.CSSProperties = { width: '100%', padding: '8px 12px', borderRadius: 8, background: '#0f172a', border: '1px solid #253047', color: '#e2e8f0', fontSize: 13, outline: 'none', boxSizing: 'border-box' }
+  const inp: React.CSSProperties = { width: '100%', padding: '8px 12px', borderRadius: 8, background: '#ffffff', border: '1px solid #d1d5db', color: '#0f172a', fontSize: 13, outline: 'none', boxSizing: 'border-box' }
   const stepActive = (n: number) => step === n
   const stepDone = (n: number) => step > n
 
@@ -123,7 +123,7 @@ export default function ListImport() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24, width: '100%' }}>
       {/* Header */}
       <div>
-        <h1 style={{ fontSize: 20, fontWeight: 600, color: 'white', margin: 0 }}>List Import</h1>
+        <h1 style={{ fontSize: 20, fontWeight: 600, color: '#0f172a', margin: 0 }}>List Import</h1>
         <p style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>Import contacts and companies from CSV files</p>
       </div>
 
@@ -134,23 +134,23 @@ export default function ListImport() {
           return (
             <div key={label} style={{ display: 'flex', alignItems: 'center', flex: i < 3 ? '1 1 auto' : 'none' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <div style={{ width: 28, height: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 600, background: stepDone(n) ? '#10b981' : stepActive(n) ? '#3b82f6' : '#1e293b', color: stepDone(n) || stepActive(n) ? 'white' : '#475569', border: `2px solid ${stepDone(n) ? '#10b981' : stepActive(n) ? '#3b82f6' : '#253047'}` }}>
+                <div style={{ width: 28, height: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 600, background: stepDone(n) ? '#10b981' : stepActive(n) ? '#3b82f6' : '#f1f5f9', color: stepDone(n) || stepActive(n) ? 'white' : '#64748b', border: `2px solid ${stepDone(n) ? '#10b981' : stepActive(n) ? '#3b82f6' : '#e2e8f0'}` }}>
                   {stepDone(n) ? <CheckCircle2 size={14} /> : n}
                 </div>
-                <span style={{ fontSize: 13, fontWeight: stepActive(n) ? 600 : 400, color: stepActive(n) ? 'white' : stepDone(n) ? '#10b981' : '#475569' }}>{label}</span>
+                <span style={{ fontSize: 13, fontWeight: stepActive(n) ? 600 : 400, color: stepActive(n) ? '#0f172a' : stepDone(n) ? '#10b981' : '#64748b' }}>{label}</span>
               </div>
-              {i < 3 && <div style={{ flex: 1, height: 1, background: stepDone(n) ? '#10b981' : '#253047', margin: '0 16px' }} />}
+              {i < 3 && <div style={{ flex: 1, height: 1, background: stepDone(n) ? '#10b981' : '#e2e8f0', margin: '0 16px' }} />}
             </div>
           )
         })}
       </div>
 
       {/* Step content */}
-      <div style={{ background: '#1e293b', borderRadius: 12, border: '1px solid #253047', padding: 28 }}>
+      <div style={{ background: '#ffffff', borderRadius: 12, border: '1px solid #e2e8f0', padding: 28, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
         {/* Step 1 */}
         {step === 1 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-            <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: 'white' }}>Select Entity Type & Upload File</h2>
+            <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: '#0f172a' }}>Select Entity Type & Upload File</h2>
             <div style={{ display: 'flex', gap: 12 }}>
               {(['Company', 'Contact'] as EntityType[]).map(et => (
                 <button key={et} onClick={() => setEntityType(et)} style={{ flex: 1, padding: '16px 20px', borderRadius: 10, border: `2px solid ${entityType === et ? '#3b82f6' : '#253047'}`, background: entityType === et ? 'rgba(59,130,246,0.08)' : 'transparent', color: entityType === et ? '#60a5fa' : '#64748b', fontSize: 14, fontWeight: 600, cursor: 'pointer', textAlign: 'center', transition: 'all 0.15s' }}>
@@ -164,18 +164,18 @@ export default function ListImport() {
               onDragLeave={() => setDragging(false)}
               onDrop={e => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files[0]; if (f) handleFile(f) }}
               onClick={() => fileInputRef.current?.click()}
-              style={{ border: `2px dashed ${dragging ? '#3b82f6' : file ? '#10b981' : '#253047'}`, borderRadius: 12, padding: '40px 20px', textAlign: 'center', cursor: 'pointer', background: dragging ? 'rgba(59,130,246,0.04)' : file ? 'rgba(16,185,129,0.04)' : 'transparent', transition: 'all 0.15s' }}>
+              style={{ border: `2px dashed ${dragging ? '#3b82f6' : file ? '#10b981' : '#d1d5db'}`, borderRadius: 12, padding: '40px 20px', textAlign: 'center', cursor: 'pointer', background: dragging ? 'rgba(59,130,246,0.04)' : file ? 'rgba(16,185,129,0.04)' : '#f8fafc', transition: 'all 0.15s' }}>
               <input ref={fileInputRef} type="file" accept=".csv" style={{ display: 'none' }} onChange={e => { if (e.target.files?.[0]) handleFile(e.target.files[0]) }} />
               {file ? (
                 <div>
                   <CheckCircle2 size={32} color="#10b981" style={{ marginBottom: 12 }} />
-                  <div style={{ fontSize: 15, fontWeight: 600, color: 'white' }}>{file.name}</div>
+                  <div style={{ fontSize: 15, fontWeight: 600, color: '#0f172a' }}>{file.name}</div>
                   <div style={{ fontSize: 13, color: '#64748b', marginTop: 6 }}>{(file.size / 1024).toFixed(1)} KB · Click to change</div>
                 </div>
               ) : (
                 <div>
                   <Upload size={32} color="#475569" style={{ marginBottom: 12 }} />
-                  <div style={{ fontSize: 15, fontWeight: 500, color: '#94a3b8' }}>Drop CSV here or click to browse</div>
+                  <div style={{ fontSize: 15, fontWeight: 500, color: '#64748b' }}>Drop CSV here or click to browse</div>
                   <div style={{ fontSize: 13, color: '#475569', marginTop: 6 }}>Only .csv files are supported</div>
                 </div>
               )}
@@ -191,7 +191,7 @@ export default function ListImport() {
               </div>
             )}
 
-            <button onClick={parseHeaders} disabled={!file || processing} style={{ padding: '10px 24px', borderRadius: 8, border: 'none', background: file ? '#3b82f6' : '#1e293b', color: file ? 'white' : '#475569', fontSize: 14, fontWeight: 500, cursor: file ? 'pointer' : 'not-allowed', alignSelf: 'flex-start' }}>
+            <button onClick={parseHeaders} disabled={!file || processing} style={{ padding: '10px 24px', borderRadius: 8, border: 'none', background: file ? '#3b82f6' : '#e2e8f0', color: file ? 'white' : '#94a3b8', fontSize: 14, fontWeight: 500, cursor: file ? 'pointer' : 'not-allowed', alignSelf: 'flex-start' }}>
               {processing ? 'Parsing...' : 'Continue →'}
             </button>
           </div>
@@ -201,18 +201,18 @@ export default function ListImport() {
         {step === 2 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: 'white' }}>Map CSV Columns to Fields</h2>
+              <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: '#0f172a' }}>Map CSV Columns to Fields</h2>
               <span style={{ fontSize: 13, color: '#64748b' }}>{recordCount} records detected</span>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 380, overflowY: 'auto' }}>
               {headers.map(h => (
-                <div key={h.csv_header} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', background: '#0f172a', borderRadius: 8, border: '1px solid #1f2d45' }}>
+                <div key={h.csv_header} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', background: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0' }}>
                   <span style={{ flex: 1, fontSize: 13, color: '#94a3b8', fontFamily: 'monospace' }}>{h.csv_header}</span>
                   <ChevronDown size={14} color="#475569" />
                   <div style={{ position: 'relative', flex: 1 }}>
                     <select value={mappings[h.csv_header] ?? ''} onChange={e => setMappings(m => ({ ...m, [h.csv_header]: e.target.value }))}
-                      style={{ width: '100%', padding: '7px 12px', borderRadius: 8, background: '#161b27', border: '1px solid #253047', color: mappings[h.csv_header] ? '#e2e8f0' : '#475569', fontSize: 13, outline: 'none', cursor: 'pointer' }}>
+                      style={{ width: '100%', padding: '7px 12px', borderRadius: 8, background: '#ffffff', border: '1px solid #d1d5db', color: mappings[h.csv_header] ? '#0f172a' : '#64748b', fontSize: 13, outline: 'none', cursor: 'pointer' }}>
                       <option value="">— Skip this column —</option>
                       {fields.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
                     </select>
@@ -221,7 +221,7 @@ export default function ListImport() {
               ))}
             </div>
 
-            <div style={{ padding: '14px', background: '#0f172a', borderRadius: 8, border: '1px solid #253047' }}>
+            <div style={{ padding: '14px', background: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0' }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
                 <input type="checkbox" checked={saveAsTemplate} onChange={e => setSaveAsTemplate(e.target.checked)} style={{ accentColor: '#3b82f6', width: 16, height: 16 }} />
                 <span style={{ fontSize: 13, color: '#94a3b8' }}>Save these mappings as a template</span>
@@ -232,7 +232,7 @@ export default function ListImport() {
             </div>
 
             <div style={{ display: 'flex', gap: 10 }}>
-              <button onClick={() => setStep(1)} style={{ padding: '9px 20px', borderRadius: 8, border: '1px solid #253047', background: 'transparent', color: '#94a3b8', fontSize: 13, cursor: 'pointer' }}>← Back</button>
+              <button onClick={() => setStep(1)} style={{ padding: '9px 20px', borderRadius: 8, border: '1px solid #e2e8f0', background: 'transparent', color: '#94a3b8', fontSize: 13, cursor: 'pointer' }}>← Back</button>
               <button onClick={() => setStep(3)} style={{ padding: '9px 20px', borderRadius: 8, border: 'none', background: '#3b82f6', color: 'white', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>Review →</button>
             </div>
           </div>
@@ -241,12 +241,12 @@ export default function ListImport() {
         {/* Step 3 */}
         {step === 3 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-            <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: 'white' }}>Confirm Import</h2>
+            <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: '#0f172a' }}>Confirm Import</h2>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
               {[{ label: 'File', value: file?.name ?? '' }, { label: 'Entity Type', value: entityType }, { label: 'Records', value: String(recordCount) }].map(stat => (
-                <div key={stat.label} style={{ padding: '16px', background: '#0f172a', borderRadius: 8, border: '1px solid #1f2d45' }}>
+                <div key={stat.label} style={{ padding: '16px', background: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0' }}>
                   <div style={{ fontSize: 11, color: '#475569', fontWeight: 600, letterSpacing: '0.04em', marginBottom: 6 }}>{stat.label.toUpperCase()}</div>
-                  <div style={{ fontSize: 15, fontWeight: 600, color: 'white', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{stat.value}</div>
+                  <div style={{ fontSize: 15, fontWeight: 600, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{stat.value}</div>
                 </div>
               ))}
             </div>
@@ -255,7 +255,7 @@ export default function ListImport() {
               <div style={{ fontSize: 12, color: '#64748b', fontWeight: 600, letterSpacing: '0.04em', marginBottom: 10 }}>MAPPED FIELDS</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 240, overflowY: 'auto' }}>
                 {Object.entries(mappings).filter(([, v]) => v).map(([k, v]) => (
-                  <div key={k} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 14px', background: '#0f172a', borderRadius: 6, border: '1px solid #1f2d45' }}>
+                  <div key={k} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 14px', background: '#f8fafc', borderRadius: 6, border: '1px solid #e2e8f0' }}>
                     <span style={{ fontSize: 13, color: '#94a3b8', fontFamily: 'monospace' }}>{k}</span>
                     <span style={{ fontSize: 13, color: '#60a5fa' }}>{v}</span>
                   </div>
@@ -265,7 +265,7 @@ export default function ListImport() {
             </div>
 
             <div style={{ display: 'flex', gap: 10 }}>
-              <button onClick={() => setStep(2)} style={{ padding: '9px 20px', borderRadius: 8, border: '1px solid #253047', background: 'transparent', color: '#94a3b8', fontSize: 13, cursor: 'pointer' }}>← Back</button>
+              <button onClick={() => setStep(2)} style={{ padding: '9px 20px', borderRadius: 8, border: '1px solid #e2e8f0', background: 'transparent', color: '#94a3b8', fontSize: 13, cursor: 'pointer' }}>← Back</button>
               <button onClick={runImport} disabled={processing} style={{ padding: '9px 24px', borderRadius: 8, border: 'none', background: '#3b82f6', color: 'white', fontSize: 13, fontWeight: 500, cursor: processing ? 'not-allowed' : 'pointer', opacity: processing ? 0.7 : 1 }}>
                 {processing ? 'Importing...' : 'Process Import'}
               </button>
@@ -276,7 +276,7 @@ export default function ListImport() {
         {/* Step 4 */}
         {step === 4 && result && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-            <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: 'white' }}>Import Results</h2>
+            <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: '#0f172a' }}>Import Results</h2>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
               <div style={{ padding: 20, background: 'rgba(16,185,129,0.08)', borderRadius: 10, border: '1px solid rgba(16,185,129,0.2)', textAlign: 'center' }}>
                 <CheckCircle2 size={28} color="#10b981" style={{ marginBottom: 8 }} />
@@ -312,16 +312,16 @@ export default function ListImport() {
       </div>
 
       {/* Import History */}
-      <div style={{ background: '#1e293b', borderRadius: 12, border: '1px solid #253047', overflow: 'hidden' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid #253047' }}>
-          <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: 'white' }}>Import History</h3>
+      <div style={{ background: '#ffffff', borderRadius: 12, border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid #f1f5f9' }}>
+          <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#0f172a' }}>Import History</h3>
           <button onClick={loadHistory} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', display: 'flex', alignItems: 'center', gap: 5, fontSize: 12 }}>
             <RefreshCw size={12} /> Refresh
           </button>
         </div>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
-            <tr style={{ background: '#161b27', borderBottom: '1px solid #1f2d45' }}>
+            <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
               {['File', 'Type', 'Status', 'Records', 'Success', 'Date'].map(h => (
                 <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontSize: 12, fontWeight: 600, color: '#475569' }}>{h}</th>
               ))}
@@ -330,12 +330,12 @@ export default function ListImport() {
           <tbody>
             {loadingHistory && <tr><td colSpan={6} style={{ padding: '24px 0', textAlign: 'center', color: '#475569', fontSize: 13 }}>Loading...</td></tr>}
             {!loadingHistory && batches.length === 0 && <tr><td colSpan={6} style={{ padding: '24px 0', textAlign: 'center', color: '#475569', fontSize: 13 }}>No imports yet.</td></tr>}
-            {!loadingHistory && batches.map((b, i) => {
+            {!loadingHistory && batches.map((b) => {
               const sc = statusColor(b.status)
               const ec = entityBadge(b.entity_type)
               return (
-                <tr key={b.id} style={{ background: i % 2 === 0 ? '#0d1117' : '#111827', borderBottom: '1px solid #1a2438' }}>
-                  <td style={{ padding: '11px 16px', fontSize: 13, color: '#e2e8f0' }}>{b.file_name}</td>
+                <tr key={b.id} style={{ background: '#ffffff', borderBottom: '1px solid #f1f5f9' }}>
+                  <td style={{ padding: '11px 16px', fontSize: 13, color: '#0f172a' }}>{b.file_name}</td>
                   <td style={{ padding: '11px 16px' }}><span style={{ fontSize: 12, padding: '3px 10px', borderRadius: 999, background: ec.bg, color: ec.color }}>{b.entity_type}</span></td>
                   <td style={{ padding: '11px 16px' }}><span style={{ fontSize: 12, padding: '3px 10px', borderRadius: 999, background: sc.bg, color: sc.color }}>{b.status}</span></td>
                   <td style={{ padding: '11px 16px', fontSize: 13, color: '#94a3b8' }}>{b.record_count}</td>
@@ -350,24 +350,24 @@ export default function ListImport() {
 
       {/* Saved Templates */}
       {templates.length > 0 && (
-        <div style={{ background: '#1e293b', borderRadius: 12, border: '1px solid #253047', overflow: 'hidden' }}>
-          <div style={{ padding: '16px 20px', borderBottom: '1px solid #253047' }}>
-            <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: 'white' }}>Saved Templates</h3>
+        <div style={{ background: '#ffffff', borderRadius: 12, border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+          <div style={{ padding: '16px 20px', borderBottom: '1px solid #f1f5f9' }}>
+            <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#0f172a' }}>Saved Templates</h3>
           </div>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
-              <tr style={{ background: '#161b27', borderBottom: '1px solid #1f2d45' }}>
+              <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
                 {['Name', 'Entity Type', 'Fields Mapped', ''].map(h => (
                   <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontSize: 12, fontWeight: 600, color: '#475569' }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {templates.map((t, i) => {
+              {templates.map((t) => {
                 const ec = entityBadge(t.entity_type)
                 return (
-                  <tr key={t.id} style={{ background: i % 2 === 0 ? '#0d1117' : '#111827', borderBottom: '1px solid #1a2438' }}>
-                    <td style={{ padding: '11px 16px', fontSize: 13, color: '#e2e8f0', fontWeight: 500 }}>{t.name}</td>
+                  <tr key={t.id} style={{ background: '#ffffff', borderBottom: '1px solid #f1f5f9' }}>
+                    <td style={{ padding: '11px 16px', fontSize: 13, color: '#0f172a', fontWeight: 500 }}>{t.name}</td>
                     <td style={{ padding: '11px 16px' }}><span style={{ fontSize: 12, padding: '3px 10px', borderRadius: 999, background: ec.bg, color: ec.color }}>{t.entity_type}</span></td>
                     <td style={{ padding: '11px 16px', fontSize: 13, color: '#94a3b8' }}>{Object.keys(t.mappings || {}).length} fields</td>
                     <td style={{ padding: '11px 16px' }}>

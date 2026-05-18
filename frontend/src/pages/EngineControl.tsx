@@ -25,7 +25,7 @@ const SOURCES: { label: string; id: string; desc: string }[] = [
 
 const DEFAULT_SOURCES = ['linkedin', 'oracle_website', 'partner_casestudy', 'si_casestudy', 'oracle_community', 'oracle_event', 'news', 'erp_today', 'home_builders']
 
-const card = { background: '#161b27', border: '1px solid #1f2d45', borderRadius: 12, padding: 20 }
+const card = { background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 12, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }
 const now  = () => new Date().toLocaleTimeString('en-GB', { hour12: false })
 const levelColor = (l: string) =>
   l === 'SUCCESS' ? '#10b981' : l === 'ERROR' ? '#ef4444' : l === 'WARN' ? '#f59e0b' : '#64748b'
@@ -232,7 +232,7 @@ export default function EngineControl() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20, width: '100%' }}>
       <div>
-        <h1 style={{ fontSize: 20, fontWeight: 600, color: 'white', margin: 0 }}>Engine Control</h1>
+        <h1 style={{ fontSize: 20, fontWeight: 600, color: '#0f172a', margin: 0 }}>Engine Control</h1>
         <p style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>Start, stop, and monitor intelligence engines in real time</p>
       </div>
 
@@ -246,13 +246,13 @@ export default function EngineControl() {
             <div key={engine.id} style={card}>
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 12 }}>
                 <div style={{ flex: 1, paddingRight: 12 }}>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: 'white' }}>{engine.label}</div>
-                  <div style={{ fontSize: 12, color: '#475569', marginTop: 4, lineHeight: 1.5 }}>{engine.desc}</div>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: '#0f172a' }}>{engine.label}</div>
+                  <div style={{ fontSize: 12, color: '#64748b', marginTop: 4, lineHeight: 1.5 }}>{engine.desc}</div>
                 </div>
-                <div style={{ width: 10, height: 10, borderRadius: '50%', flexShrink: 0, marginTop: 4, background: running ? engine.color : '#374151', boxShadow: running ? `0 0 8px ${engine.color}` : 'none' }} />
+                <div style={{ width: 10, height: 10, borderRadius: '50%', flexShrink: 0, marginTop: 4, background: running ? engine.color : '#cbd5e1', boxShadow: running ? `0 0 8px ${engine.color}` : 'none' }} />
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-                <span style={{ fontSize: 12, padding: '2px 10px', borderRadius: 999, fontWeight: 500, background: running ? `${engine.color}18` : state === 'stopping' ? 'rgba(245,158,11,0.12)' : 'rgba(55,65,81,0.4)', color: running ? engine.color : state === 'stopping' ? '#f59e0b' : '#6b7280' }}>
+                <span style={{ fontSize: 12, padding: '2px 10px', borderRadius: 999, fontWeight: 500, background: running ? `${engine.color}18` : state === 'stopping' ? 'rgba(245,158,11,0.12)' : 'rgba(203,213,225,0.5)', color: running ? engine.color : state === 'stopping' ? '#f59e0b' : '#94a3b8' }}>
                   {running ? 'Running' : state === 'stopping' ? 'Stopping...' : 'Idle'}
                 </span>
                 {engine.modules > 1 && <span style={{ fontSize: 12, color: '#374151' }}>{engine.modules} modules</span>}
@@ -269,11 +269,11 @@ export default function EngineControl() {
                     </button>
                   )
                 ) : (
-                  <button disabled style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '9px 0', borderRadius: 8, border: 'none', background: 'rgba(55,65,81,0.4)', color: '#6b7280', fontSize: 13, cursor: 'default' }}>
+                  <button disabled style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '9px 0', borderRadius: 8, border: 'none', background: 'rgba(203,213,225,0.5)', color: '#94a3b8', fontSize: 13, cursor: 'default' }}>
                     <Play size={13} /> Start
                   </button>
                 )}
-                <button onClick={isOracle ? resetEngine : undefined} style={{ width: 36, height: 36, borderRadius: 8, border: '1px solid #1f2d45', background: 'transparent', cursor: isOracle ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#475569', opacity: isOracle ? 1 : 0.3 }}>
+                <button onClick={isOracle ? resetEngine : undefined} style={{ width: 36, height: 36, borderRadius: 8, border: '1px solid #e2e8f0', background: 'transparent', cursor: isOracle ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', opacity: isOracle ? 1 : 0.3 }}>
                   <RotateCcw size={13} />
                 </button>
               </div>
@@ -286,20 +286,20 @@ export default function EngineControl() {
       <div style={{ display: 'grid', gridTemplateColumns: '360px 1fr', gap: 16 }}>
         {/* Scan config */}
         <div style={card}>
-          <div style={{ fontSize: 14, fontWeight: 600, color: 'white', marginBottom: 16 }}>Scan Configuration</div>
+          <div style={{ fontSize: 14, fontWeight: 600, color: '#0f172a', marginBottom: 16 }}>Scan Configuration</div>
 
           {/* JDE Manufacturing Focus */}
-          <div style={{ marginBottom: 16, padding: '12px 14px', background: jdeMfg ? 'rgba(16,185,129,0.08)' : '#0d1117', border: `1px solid ${jdeMfg ? 'rgba(16,185,129,0.3)' : '#253047'}`, borderRadius: 10 }}>
+          <div style={{ marginBottom: 16, padding: '12px 14px', background: jdeMfg ? 'rgba(16,185,129,0.08)' : '#f8fafc', border: `1px solid ${jdeMfg ? 'rgba(16,185,129,0.3)' : '#e2e8f0'}`, borderRadius: 10 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <button
                 onClick={() => setJdeMfg(v => !v)}
-                style={{ width: 36, height: 20, borderRadius: 10, border: 'none', cursor: 'pointer', background: jdeMfg ? '#10b981' : '#374151', position: 'relative', flexShrink: 0, transition: 'background 0.2s' }}
+                style={{ width: 36, height: 20, borderRadius: 10, border: 'none', cursor: 'pointer', background: jdeMfg ? '#10b981' : '#cbd5e1', position: 'relative', flexShrink: 0, transition: 'background 0.2s' }}
               >
                 <span style={{ position: 'absolute', top: 2, left: jdeMfg ? 18 : 2, width: 16, height: 16, borderRadius: '50%', background: 'white', transition: 'left 0.2s' }} />
               </button>
               <Factory size={14} color={jdeMfg ? '#10b981' : '#475569'} />
               <div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: jdeMfg ? '#10b981' : '#94a3b8' }}>JDE Manufacturing Focus</div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: jdeMfg ? '#10b981' : '#0f172a' }}>JDE Manufacturing Focus</div>
                 <div style={{ fontSize: 11, color: '#475569', marginTop: 2 }}>Manufacturing queries + LinkedIn industry filter</div>
               </div>
             </div>
@@ -320,11 +320,11 @@ export default function EngineControl() {
                 const active = selectedSources.includes(s.id)
                 return (
                   <button key={s.id} onClick={() => toggleSource(s.id)}
-                    style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 8, cursor: 'pointer', background: active ? 'rgba(59,130,246,0.1)' : 'rgba(255,255,255,0.02)', color: active ? '#93c5fd' : '#475569', border: active ? '1px solid rgba(59,130,246,0.25)' : '1px solid #1f2d45', textAlign: 'left', transition: 'all 0.15s' }}>
-                    <div style={{ width: 6, height: 6, borderRadius: '50%', background: active ? '#3b82f6' : '#374151', flexShrink: 0 }} />
+                    style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 8, cursor: 'pointer', background: active ? 'rgba(59,130,246,0.08)' : '#f8fafc', color: active ? '#2563eb' : '#64748b', border: active ? '1px solid rgba(59,130,246,0.25)' : '1px solid #e2e8f0', textAlign: 'left', transition: 'all 0.15s' }}>
+                    <div style={{ width: 6, height: 6, borderRadius: '50%', background: active ? '#3b82f6' : '#cbd5e1', flexShrink: 0 }} />
                     <div style={{ flex: 1 }}>
                       <span style={{ fontSize: 12, fontWeight: 500 }}>{s.label}</span>
-                      <span style={{ fontSize: 11, color: '#374151', marginLeft: 6 }}>{s.desc}</span>
+                      <span style={{ fontSize: 11, color: '#94a3b8', marginLeft: 6 }}>{s.desc}</span>
                     </div>
                   </button>
                 )
@@ -335,14 +335,14 @@ export default function EngineControl() {
           {/* Scan Depth */}
           <div style={{ marginBottom: 16 }}>
             <div style={{ fontSize: 12, fontWeight: 500, color: '#94a3b8', marginBottom: 8 }}>Scan Depth</div>
-            <select value={depth} onChange={e => setDepth(e.target.value)} style={{ width: '100%', padding: '8px 12px', borderRadius: 8, background: '#0d1117', color: '#e2e8f0', border: '1px solid #253047', fontSize: 13, cursor: 'pointer' }}>
+            <select value={depth} onChange={e => setDepth(e.target.value)} style={{ width: '100%', padding: '8px 12px', borderRadius: 8, background: '#ffffff', color: '#0f172a', border: '1px solid #d1d5db', fontSize: 13, cursor: 'pointer' }}>
               <option value="shallow">Shallow — fast, 1 page per source</option>
               <option value="medium">Medium — balanced, 3 pages</option>
               <option value="deep">Deep — thorough, 5 pages</option>
             </select>
           </div>
 
-          <div style={{ padding: '10px 12px', background: '#0d1117', border: '1px solid #253047', borderRadius: 8, fontSize: 11, color: '#374151' }}>
+          <div style={{ padding: '10px 12px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 11, color: '#94a3b8' }}>
             {selectedSources.length} sources selected · depth: {depth}
             {jdeMfg && <span style={{ color: '#10b981', marginLeft: 8 }}>· JDE Mfg focus ON</span>}
           </div>
@@ -382,7 +382,7 @@ export default function EngineControl() {
       <div style={card}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
           <div>
-            <div style={{ fontSize: 14, fontWeight: 600, color: 'white' }}>Contact Enrichment Pipeline</div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: '#0f172a' }}>Contact Enrichment Pipeline</div>
             <div style={{ fontSize: 12, color: '#475569', marginTop: 3 }}>
               For each new company: check DB → Apollo people search → validate emails → store contacts
             </div>
@@ -408,12 +408,12 @@ export default function EngineControl() {
             { icon: <Users size={14} />, label: 'Contacts Found', value: totalCt, color: '#8b5cf6' },
             { icon: <Mail size={14} />, label: 'Valid Emails', value: validCt, color: '#06b6d4' },
           ].map(({ icon, label, value, color }) => (
-            <div key={label} style={{ background: '#0d1117', border: '1px solid #1f2d45', borderRadius: 10, padding: '12px 14px' }}>
+            <div key={label} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '12px 14px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6, color }}>
                 {icon}
-                <span style={{ fontSize: 11, color: '#475569' }}>{label}</span>
+                <span style={{ fontSize: 11, color: '#64748b' }}>{label}</span>
               </div>
-              <div style={{ fontSize: 22, fontWeight: 700, color: 'white' }}>{value.toLocaleString()}</div>
+              <div style={{ fontSize: 22, fontWeight: 700, color: '#0f172a' }}>{value.toLocaleString()}</div>
             </div>
           ))}
         </div>
@@ -425,7 +425,7 @@ export default function EngineControl() {
               <span>Enrichment coverage</span>
               <span>{enriched} / {totalCo} companies ({pctDone}%)</span>
             </div>
-            <div style={{ height: 6, background: '#1f2d45', borderRadius: 3, overflow: 'hidden' }}>
+            <div style={{ height: 6, background: '#e2e8f0', borderRadius: 3, overflow: 'hidden' }}>
               <div style={{ height: '100%', width: `${pctDone}%`, background: 'linear-gradient(90deg, #3b82f6, #6366f1)', borderRadius: 3, transition: 'width 0.4s' }} />
             </div>
           </div>
@@ -452,7 +452,7 @@ export default function EngineControl() {
           <div>
             <div style={{ fontSize: 11, color: '#64748b', marginBottom: 5 }}>Companies per run</div>
             <select value={enrichLimit} onChange={e => setEnrichLimit(+e.target.value)}
-              style={{ padding: '7px 10px', borderRadius: 8, background: '#0d1117', color: '#e2e8f0', border: '1px solid #253047', fontSize: 12 }}>
+              style={{ padding: '7px 10px', borderRadius: 8, background: '#ffffff', color: '#0f172a', border: '1px solid #d1d5db', fontSize: 12 }}>
               <option value={20}>20</option>
               <option value={50}>50</option>
               <option value={100}>100</option>
@@ -462,7 +462,7 @@ export default function EngineControl() {
           <div>
             <div style={{ fontSize: 11, color: '#64748b', marginBottom: 5 }}>Contacts per company</div>
             <select value={enrichPerCo} onChange={e => setEnrichPerCo(+e.target.value)}
-              style={{ padding: '7px 10px', borderRadius: 8, background: '#0d1117', color: '#e2e8f0', border: '1px solid #253047', fontSize: 12 }}>
+              style={{ padding: '7px 10px', borderRadius: 8, background: '#ffffff', color: '#0f172a', border: '1px solid #d1d5db', fontSize: 12 }}>
               <option value={5}>5</option>
               <option value={10}>10</option>
               <option value={15}>15</option>
@@ -488,7 +488,7 @@ export default function EngineControl() {
           )}
 
           <button onClick={() => { setShowEnrichLog(v => !v); if (!showEnrichLog) fetchEnrichLog() }}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 14px', borderRadius: 8, border: '1px solid #1f2d45', background: 'transparent', color: '#64748b', fontSize: 12, cursor: 'pointer' }}>
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 14px', borderRadius: 8, border: '1px solid #e2e8f0', background: 'transparent', color: '#64748b', fontSize: 12, cursor: 'pointer' }}>
             {showEnrichLog ? 'Hide' : 'Show'} log
           </button>
 

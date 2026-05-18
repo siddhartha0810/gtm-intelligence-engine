@@ -49,6 +49,7 @@ from src.phase_classifier import PHASE_LABELS, PHASE_COLORS
 from src import auth as oracle_auth
 from src.audit import log_audit, get_audit_logs
 from src import tech_profiles as tp_mod
+import oracle_intent_engine.src.hubspot_push as hs_push
 from src import events as events_mod
 from src import manufacturer as mfr_mod
 from src import list_import as import_mod
@@ -1250,62 +1251,26 @@ async def api_signals(limit: int = 200):
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
-@app.get("/api/review-queue")
-async def api_review_queue(limit: int = 100):
-    """Oracle-enriched contacts (company_contacts table) for review."""
-    try:
-        with oracle_db.db_cursor(commit=False) as cur:
-            cur.execute("""
-                SELECT cc.id, cc.first_name, cc.last_name, cc.title,
-                       cc.email, cc.linkedin_url, cc.confidence,
-                       cc.is_target, cc.source,
-                       cc.fetched_at::text AS created_at,
-                       c.name AS company_name,
-                       c.domain AS company_domain
-                FROM company_contacts cc
-                JOIN companies c ON cc.company_id = c.id
-                WHERE cc.email IS NOT NULL AND cc.email != ''
-                ORDER BY cc.is_target DESC, cc.confidence DESC
-                LIMIT %s
-            """, (min(limit, 500),))
-            rows = [dict(r) for r in cur.fetchall()]
-        return JSONResponse(rows)
-    except Exception as e:
-        return JSONResponse({"error": str(e)}, status_code=500)
-
-
 @app.post("/api/contacts/push-hubspot")
-async def push_contact_to_hubspot(request: Request):
-    """Push a single contact dict to HubSpot CRM."""
-    import httpx
+async def push_contact_to_hubspot_endpoint(
+    request: Request,
+    current_user: dict = Depends(oracle_auth.require_analyst),
+):
+    """Push a single contact to HubSpot using email-based upsert."""
     body = await request.json()
-    hubspot_key = os.getenv("HUBSPOT_API_KEY", "") or os.getenv("HUBSPOT_TOKEN", "")
-    if not hubspot_key:
-        return JSONResponse({"ok": False, "message": "HubSpot API key not configured — add it in Settings."})
-    payload = {
-        "properties": {
-            "firstname": body.get("first_name", ""),
-            "lastname":  body.get("last_name", ""),
-            "email":     body.get("email", ""),
-            "jobtitle":  body.get("job_title", ""),
-            "company":   body.get("company_name", ""),
-        }
-    }
-    try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            r = await client.post(
-                "https://api.hubapi.com/crm/v3/objects/contacts",
-                json=payload,
-                headers={"Authorization": f"Bearer {hubspot_key}", "Content-Type": "application/json"},
-            )
-        if r.status_code in (200, 201):
-            return {"ok": True, "message": "Pushed to HubSpot"}
-        if r.status_code == 409:
-            return {"ok": True, "message": "Already exists in HubSpot"}
-        data = r.json() if r.content else {}
-        return JSONResponse({"ok": False, "message": data.get("message", f"HubSpot error {r.status_code}")})
-    except Exception as e:
-        return JSONResponse({"ok": False, "message": str(e)})
+    result = await hs_push.push_contact_to_hubspot(body)
+    if result["ok"]:
+        # Update local status
+        contact_id = body.get("id")
+        if contact_id:
+            with oracle_db.db_cursor() as cur:
+                cur.execute(
+                    "UPDATE company_contacts SET status='pushed_to_hubspot', hubspot_id=%s, hubspot_synced_at=NOW() WHERE id=%s",
+                    (result.get("hubspot_id"), contact_id),
+                )
+        log_audit(current_user, "push_to_hubspot", "contact", str(body.get("id","")),
+                  new_value={"hubspot_id": result.get("hubspot_id"), "action": result.get("action")})
+    return result
 
 
 @app.get("/api/reporting")
@@ -1830,105 +1795,257 @@ async def api_hubspot_sync_pull(
     request: Request,
     current_user: dict = Depends(oracle_auth.require_admin),
 ):
-    """Pull contacts and companies from HubSpot into the local DB."""
-    import urllib.request as _urllib
-    data     = await request.json()
-    hs_key   = data.get("hubspot_key") or os.getenv("HUBSPOT_API_KEY", "")
+    """Pull companies AND contacts from HubSpot into local DB (doc §6.3)."""
+    body    = await request.json()
+    hs_key  = body.get("hubspot_key") or os.getenv("HUBSPOT_API_KEY", "")
+    cfg     = oracle_db.get_hubspot_config()
+    if not hs_key:
+        hs_key = cfg.get("api_key", "")
     if not hs_key:
         return JSONResponse({"error": "HubSpot API key required"}, status_code=400)
 
-    pulled_companies = 0
-    pulled_contacts  = 0
-    errors: list     = []
-
-    def _hs_get(path: str) -> dict:
-        req = _urllib.Request(
-            f"https://api.hubapi.com{path}",
-            headers={"Authorization": f"Bearer {hs_key}", "Content-Type": "application/json"},
-        )
-        with _urllib.urlopen(req, timeout=30) as resp:
-            return json.loads(resp.read())
-
-    # Pull companies
-    try:
-        after = None
-        while True:
-            url  = "/crm/v3/objects/companies?limit=100&properties=name,domain,industry,phone,numberofemployees"
-            url += f"&after={after}" if after else ""
-            data_resp = _hs_get(url)
-            for obj in data_resp.get("results", []):
-                props = obj.get("properties", {})
-                name  = (props.get("name") or "").strip()
-                if not name:
-                    continue
-                with oracle_db.db_cursor() as cur:
-                    cur.execute(
-                        """INSERT INTO companies
-                               (name, domain, industry, phone, number_of_employees,
-                                hubspot_id, hubspot_synced_at, source, status)
-                           VALUES (%s,%s,%s,%s,%s,%s,NOW(),'hubspot_pull','approved')
-                           ON CONFLICT (name) DO UPDATE SET
-                               hubspot_id = EXCLUDED.hubspot_id,
-                               domain = COALESCE(EXCLUDED.domain, companies.domain),
-                               hubspot_synced_at = NOW()""",
-                        (
-                            name,
-                            props.get("domain"), props.get("industry"),
-                            props.get("phone"),
-                            int(props["numberofemployees"]) if props.get("numberofemployees") else None,
-                            str(obj["id"]),
-                        ),
-                    )
-                pulled_companies += 1
-            paging = data_resp.get("paging", {})
-            after  = paging.get("next", {}).get("after")
-            if not after:
-                break
-    except Exception as e:
-        errors.append(f"companies pull: {e}")
-
-    # Pull contacts
-    try:
-        after = None
-        while True:
-            url = ("/crm/v3/objects/contacts?limit=100"
-                   "&properties=firstname,lastname,email,jobtitle,phone,hs_object_id")
-            url += f"&after={after}" if after else ""
-            data_resp = _hs_get(url)
-            for obj in data_resp.get("results", []):
-                props = obj.get("properties", {})
-                first = (props.get("firstname") or "").strip()
-                last  = (props.get("lastname")  or "").strip()
-                if not first and not last:
-                    continue
-                with oracle_db.db_cursor() as cur:
-                    cur.execute(
-                        """INSERT INTO company_contacts
-                               (first_name, last_name, title, email, phone,
-                                hubspot_id, hubspot_synced_at, source, status)
-                           VALUES (%s,%s,%s,%s,%s,%s,NOW(),'hubspot_pull','approved')
-                           ON CONFLICT DO NOTHING""",
-                        (
-                            first, last,
-                            props.get("jobtitle"), props.get("email"), props.get("phone"),
-                            str(obj["id"]),
-                        ),
-                    )
-                pulled_contacts += 1
-            paging = data_resp.get("paging", {})
-            after  = paging.get("next", {}).get("after")
-            if not after:
-                break
-    except Exception as e:
-        errors.append(f"contacts pull: {e}")
-
+    result = await hs_push.sync_pull_from_hubspot(hs_key)
     log_audit(current_user, "hubspot_sync_pull", "system", "",
-              new_value={"companies": pulled_companies, "contacts": pulled_contacts})
+              new_value=result)
+    return result
+
+
+# ── HubSpot Config ────────────────────────────────────────────────────────────
+
+@app.get("/api/hubspot/config")
+async def get_hubspot_config(current_user: dict = Depends(oracle_auth.require_admin)):
+    """Get stored HubSpot config (API key masked)."""
+    cfg = oracle_db.get_hubspot_config()
+    if cfg.get("api_key"):
+        cfg["api_key"] = cfg["api_key"][:8] + "••••••••" + cfg["api_key"][-4:]
+    return cfg
+
+@app.post("/api/hubspot/config")
+async def save_hubspot_config(
+    request: Request,
+    current_user: dict = Depends(oracle_auth.require_admin),
+):
+    """Save HubSpot API key and portal ID."""
+    body = await request.json()
+    api_key   = body.get("api_key", "").strip()
+    portal_id = body.get("portal_id", "").strip()
+    if not api_key:
+        return JSONResponse({"error": "api_key required"}, status_code=400)
+    cfg = oracle_db.upsert_hubspot_config(api_key, portal_id)
+    # Also set in env for current process
+    os.environ["HUBSPOT_API_KEY"] = api_key
+    log_audit(current_user, "update_hubspot_config", "system", "",
+              new_value={"portal_id": portal_id})
+    return {"ok": True, "id": cfg.get("id")}
+
+@app.post("/api/hubspot/test")
+async def test_hubspot_connection(
+    request: Request,
+    current_user: dict = Depends(oracle_auth.require_admin),
+):
+    """Test HubSpot API key by calling /crm/v3/objects/contacts?limit=1."""
+    import httpx
+    body    = await request.json()
+    api_key = body.get("api_key") or os.getenv("HUBSPOT_API_KEY", "")
+    cfg     = oracle_db.get_hubspot_config()
+    if not api_key:
+        api_key = cfg.get("api_key", "")
+    if not api_key:
+        return JSONResponse({"ok": False, "error": "No API key"}, status_code=400)
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.get(
+                "https://api.hubapi.com/crm/v3/objects/contacts?limit=1",
+                headers={"Authorization": f"Bearer {api_key}"},
+            )
+        if r.status_code == 200:
+            return {"ok": True, "message": "HubSpot connected"}
+        return {"ok": False, "error": f"HTTP {r.status_code}: {r.text[:200]}"}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+# ── Company single push ───────────────────────────────────────────────────────
+
+@app.post("/api/companies/{company_id}/push-hubspot")
+async def push_company_to_hubspot_endpoint(
+    company_id: int,
+    current_user: dict = Depends(oracle_auth.require_analyst),
+):
+    """Push a single company to HubSpot using domain-based upsert (doc §6.2)."""
+    with oracle_db.db_cursor(commit=False) as cur:
+        cur.execute("SELECT * FROM companies WHERE id=%s", (company_id,))
+        row = cur.fetchone()
+    if not row:
+        return JSONResponse({"error": "Company not found"}, status_code=404)
+    record = dict(row)
+    result = await hs_push.push_company_to_hubspot(record)
+    if result["ok"]:
+        with oracle_db.db_cursor() as cur:
+            cur.execute(
+                "UPDATE companies SET status='pushed_to_hubspot', hubspot_id=%s, last_updated=NOW() WHERE id=%s",
+                (result.get("hubspot_id"), company_id),
+            )
+        log_audit(current_user, "push_to_hubspot", "company", str(company_id),
+                  new_value={"hubspot_id": result.get("hubspot_id"), "action": result.get("action")})
+    return result
+
+# ── Bulk push ─────────────────────────────────────────────────────────────────
+
+@app.post("/api/hubspot/bulk-push/companies")
+async def bulk_push_companies_endpoint(
+    request: Request,
+    current_user: dict = Depends(oracle_auth.require_analyst),
+):
+    """Bulk push all approved companies to HubSpot (doc §6.2)."""
+    body   = await request.json()
+    status = body.get("status", "approved")
+    limit  = min(int(body.get("limit", 100)), 500)
+    result = await hs_push.bulk_push_companies(status, limit)
+    log_audit(current_user, "bulk_push_companies", "system", "",
+              new_value=result)
+    return result
+
+@app.post("/api/hubspot/bulk-push/contacts")
+async def bulk_push_contacts_endpoint(
+    request: Request,
+    current_user: dict = Depends(oracle_auth.require_analyst),
+):
+    """Bulk push all approved contacts to HubSpot."""
+    body   = await request.json()
+    status = body.get("status", "approved")
+    limit  = min(int(body.get("limit", 100)), 500)
+    result = await hs_push.bulk_push_contacts(status, limit)
+    log_audit(current_user, "bulk_push_contacts", "system", "",
+              new_value=result)
+    return result
+
+# ── Engine Configs ────────────────────────────────────────────────────────────
+
+@app.get("/api/engine-configs")
+async def get_engine_configs(current_user: dict = Depends(oracle_auth.require_analyst)):
+    return oracle_db.list_engine_configs()
+
+@app.patch("/api/engine-configs/{engine_type}")
+async def update_engine_config_endpoint(
+    engine_type: str,
+    request: Request,
+    current_user: dict = Depends(oracle_auth.require_admin),
+):
+    body = await request.json()
+    result = oracle_db.update_engine_config(
+        engine_type,
+        is_enabled=body.get("is_enabled"),
+        schedule_expression=body.get("schedule_expression"),
+        last_run_status=body.get("last_run_status"),
+    )
+    log_audit(current_user, "update_engine_config", "system", engine_type, new_value=body)
+    return result
+
+# ── Review Queue (proper table) ───────────────────────────────────────────────
+
+@app.get("/api/review-queue")
+async def get_review_queue(
+    status: str = None,
+    entity_type: str = None,
+    limit: int = 100,
+    offset: int = 0,
+    current_user: dict = Depends(oracle_auth.require_analyst),
+):
+    return oracle_db.list_review_queue(status=status, entity_type=entity_type,
+                                        limit=limit, offset=offset)
+
+@app.post("/api/review-queue")
+async def add_review_queue_item(
+    request: Request,
+    current_user: dict = Depends(oracle_auth.require_analyst),
+):
+    body = await request.json()
+    return oracle_db.add_to_review_queue(
+        entity_type=body["entity_type"],
+        entity_id=body["entity_id"],
+        issue_type=body["issue_type"],
+        severity=body.get("severity", "warning"),
+        issue_detail=body.get("issue_detail"),
+    )
+
+@app.patch("/api/review-queue/{item_id}")
+async def resolve_review_item(
+    item_id: int,
+    request: Request,
+    current_user: dict = Depends(oracle_auth.require_analyst),
+):
+    body = await request.json()
+    result = oracle_db.resolve_review_queue_item(
+        item_id,
+        status=body["status"],
+        notes=body.get("notes"),
+        resolved_by=current_user.get("email"),
+    )
+    log_audit(current_user, f"review_queue_{body['status']}", "review_queue",
+              str(item_id), new_value=body)
+    return result
+
+@app.post("/api/review-queue/bulk-resolve")
+async def bulk_resolve_review(
+    request: Request,
+    current_user: dict = Depends(oracle_auth.require_analyst),
+):
+    body = await request.json()
+    oracle_db.bulk_resolve_review_queue(
+        body["ids"], body["status"], current_user.get("email")
+    )
+    log_audit(current_user, f"bulk_review_{body['status']}", "review_queue", "",
+              new_value={"count": len(body["ids"])})
+    return {"ok": True, "resolved": len(body["ids"])}
+
+# ── Product Intelligence ──────────────────────────────────────────────────────
+
+@app.get("/api/product-intelligence")
+async def get_product_intelligence(
+    limit: int = 100,
+    offset: int = 0,
+    product_filter: str = None,
+    current_user: dict = Depends(oracle_auth.require_analyst),
+):
+    """Company-product matrix: join companies.enrichment_data with product_taxonomy."""
+    with oracle_db.db_cursor(commit=False) as cur:
+        # Get all product taxonomy entries
+        cur.execute("SELECT * FROM product_taxonomy ORDER BY canonical_name")
+        taxonomy = [dict(r) for r in cur.fetchall()]
+
+        # Get companies with oracle product data
+        where = ""
+        params: list = []
+        if product_filter:
+            where = "WHERE (c.oracle_cloud_solutions ILIKE %s OR c.oracle_on_premise_solutions ILIKE %s OR c.oracle_version ILIKE %s)"
+            params = [f"%{product_filter}%"] * 3
+
+        cur.execute(
+            f"""SELECT c.id, c.name, c.domain, c.industry, c.status,
+                       c.oracle_cloud_solutions, c.oracle_on_premise_solutions,
+                       c.oracle_version, c.oracle_relationship_type,
+                       c.number_of_oracle_users, c.oracle_support_end_date,
+                       c.enrichment_data,
+                       COUNT(DISTINCT cc.id) AS contact_count
+                FROM companies c
+                LEFT JOIN company_contacts cc ON cc.company_id = c.id
+                {where}
+                GROUP BY c.id
+                ORDER BY c.name
+                LIMIT %s OFFSET %s""",
+            params + [limit, offset],
+        )
+        companies = [dict(r) for r in cur.fetchall()]
+
+        cur.execute("SELECT COUNT(*) FROM companies" + (" " + where if where else ""), params)
+        total = cur.fetchone()[0]
 
     return {
-        "pulled_companies": pulled_companies,
-        "pulled_contacts":  pulled_contacts,
-        "errors":           errors,
+        "taxonomy": taxonomy,
+        "companies": companies,
+        "total": total,
+        "limit": limit,
+        "offset": offset,
     }
 
 
@@ -1943,6 +2060,10 @@ async def startup():
         tp_mod.seed_default_profile()
     except Exception as e:
         print(f"[startup] Tech profile seed warning: {e}")
+    try:
+        oracle_db.seed_engine_configs()
+    except Exception as e:
+        print(f"[startup] Engine configs seed warning: {e}")
     # Ensure output dirs exist
     (ENRICH_DIR / "input").mkdir(exist_ok=True)
     (ENRICH_DIR / "output").mkdir(exist_ok=True)

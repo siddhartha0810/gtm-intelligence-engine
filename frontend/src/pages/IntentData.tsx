@@ -34,7 +34,7 @@ const relativeTime = (iso: string) => {
   return `${Math.floor(h / 24)}d ago`
 }
 
-const card = { background: '#161b27', border: '1px solid #1f2d45', borderRadius: 12, padding: 20 }
+const card = { background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 12, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }
 
 export default function IntentData() {
   const [signals, setSignals] = useState<Signal[]>([])
@@ -67,7 +67,7 @@ export default function IntentData() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20, width: '100%' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div>
-          <h1 style={{ fontSize: 20, fontWeight: 600, color: 'white', margin: 0 }}>Intent Data</h1>
+          <h1 style={{ fontSize: 20, fontWeight: 600, color: '#0f172a', margin: 0 }}>Intent Data</h1>
           <p style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>
             Oracle/JDE buying signals detected across {uniqueCompanies} companies
           </p>
@@ -75,7 +75,7 @@ export default function IntentData() {
         <button
           onClick={load}
           disabled={loading}
-          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 8, border: '1px solid #253047', background: 'transparent', color: '#94a3b8', fontSize: 12, cursor: loading ? 'default' : 'pointer', opacity: loading ? 0.5 : 1 }}
+          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 8, border: '1px solid #e2e8f0', background: 'transparent', color: '#94a3b8', fontSize: 12, cursor: loading ? 'default' : 'pointer', opacity: loading ? 0.5 : 1 }}
         >
           <RefreshCw size={12} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} />
           {loading ? 'Loading...' : 'Refresh'}
@@ -96,7 +96,7 @@ export default function IntentData() {
               <k.icon size={20} color={k.color} strokeWidth={1.75} />
             </div>
             <div>
-              <div style={{ fontSize: 28, fontWeight: 700, color: 'white', lineHeight: 1 }}>{k.value}</div>
+              <div style={{ fontSize: 28, fontWeight: 700, color: '#0f172a', lineHeight: 1 }}>{k.value}</div>
               <div style={{ fontSize: 12, color: '#64748b', marginTop: 6 }}>{k.label}</div>
             </div>
           </div>
@@ -104,8 +104,8 @@ export default function IntentData() {
       </div>
 
       {/* Signals table */}
-      <div style={{ background: '#161b27', border: '1px solid #1f2d45', borderRadius: 12, overflow: 'hidden' }}>
-        <div style={{ padding: '12px 20px', borderBottom: '1px solid #1f2d45', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: '#475569' }}>
+      <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+        <div style={{ padding: '12px 20px', borderBottom: '1px solid #f1f5f9', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: '#64748b' }}>
           LATEST INTENT SIGNALS ({signals.length})
         </div>
 
@@ -124,8 +124,8 @@ export default function IntentData() {
             key={sig.id}
             style={{
               display: 'flex', alignItems: 'center', gap: 16, padding: '14px 20px',
-              borderBottom: i < signals.length - 1 ? '1px solid #1a2438' : 'none',
-              background: i % 2 === 0 ? '#0d1117' : '#111827',
+              borderBottom: i < signals.length - 1 ? '1px solid #f1f5f9' : 'none',
+              background: '#ffffff',
             }}
           >
             <div style={{ width: 36, height: 36, borderRadius: 8, background: 'rgba(59,130,246,0.12)', color: '#60a5fa', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 14, flexShrink: 0 }}>
@@ -133,7 +133,7 @@ export default function IntentData() {
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                <span style={{ fontSize: 14, fontWeight: 500, color: 'white', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sig.company_name}</span>
+                <span style={{ fontSize: 14, fontWeight: 500, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sig.company_name}</span>
                 <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 999, fontWeight: 500, flexShrink: 0, ...strengthStyle(sig.confidence) }}>
                   {strengthLabel(sig.confidence)}
                 </span>
@@ -148,8 +148,8 @@ export default function IntentData() {
               </div>
             </div>
             <div style={{ textAlign: 'right', flexShrink: 0 }}>
-              <div style={{ fontSize: 12, color: '#475569' }}>{sig.source}</div>
-              <div style={{ fontSize: 11, color: '#374151', marginTop: 2 }}>{relativeTime(sig.detected_at)}</div>
+              <div style={{ fontSize: 12, color: '#64748b' }}>{sig.source}</div>
+              <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>{relativeTime(sig.detected_at)}</div>
             </div>
             <div style={{ fontSize: 14, fontWeight: 700, color: sig.confidence >= 0.7 ? '#10b981' : sig.confidence >= 0.4 ? '#f59e0b' : '#ef4444', flexShrink: 0, minWidth: 28, textAlign: 'right' }}>
               {Math.round(sig.confidence * 100)}
