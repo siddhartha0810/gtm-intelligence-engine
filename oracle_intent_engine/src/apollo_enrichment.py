@@ -53,6 +53,9 @@ _PREDICTION_PATTERNS = {
     "first":      lambda f, l: f,
     "lastf":      lambda f, l: f"{l}{f[0]}",
     "last.f":     lambda f, l: f"{l}.{f[0]}",
+    # Patterns from COMPANY_FORMAT_ANALYSIS reference data
+    "firstl":     lambda f, l: f"{f}{l[0]}",   # john + s → johns (first + last initial)
+    "last":       lambda f, l: l,               # smith only (last name)
 }
 
 # Industry-standard fallback when no domain-specific pattern is known.
@@ -111,15 +114,19 @@ def _predict_and_fill_emails(
     zerobounce_key: str,
     company_domain: str,
     log: Callable,
+    reference_patterns: dict = None,
 ) -> tuple[list, int]:
     """
     Stage 5+6: Email prediction for contacts that still have no email.
 
     Algorithm:
       1. Learn domain patterns from contacts with validated emails in this batch.
+      1b. Merge with pre-loaded reference_patterns from the email_patterns DB table
+          (sourced from COMPANY_FORMAT_ANALYSIS.xlsx — 40k companies, ~280k contacts).
+          Live-validated patterns take priority; reference fills gaps.
       2. For each no-email contact with a known domain:
-           - If domain pattern is known → generate TOP_N_COMPANY_PATTERNS candidates
-           - Otherwise → generate _DEFAULT_PREDICTION_ORDER candidates
+           - If domain pattern is known → try known patterns first
+           - Otherwise → try _DEFAULT_PREDICTION_ORDER fallbacks
       3. Batch-validate all candidates with ZeroBounce.
       4. For each contact, apply the first candidate whose status = 'valid'.
       5. Mark email_source='predicted' and email_prediction_pattern=<pattern>.
@@ -129,7 +136,7 @@ def _predict_and_fill_emails(
     if not zerobounce_key:
         return contacts, 0
 
-    # Step 1: learn domain → [pattern, ...] from contacts with valid emails
+    # Step 1: learn domain → [pattern, ...] from contacts with valid emails in this batch
     domain_patterns: dict[str, list[str]] = {}  # domain → ordered list of patterns seen
     for c in contacts:
         if not c.get("email") or c.get("email_validation_status") != "valid":
@@ -142,6 +149,18 @@ def _predict_and_fill_emails(
             domain_patterns.setdefault(dom, [])
             if pat not in domain_patterns[dom]:
                 domain_patterns[dom].append(pat)
+
+    # Step 1b: fill gaps with reference patterns from email_patterns DB table
+    # (pre-loaded from COMPANY_FORMAT_ANALYSIS.xlsx — highest sample_count first)
+    if reference_patterns:
+        for dom, ref_pats in reference_patterns.items():
+            if dom not in domain_patterns:
+                domain_patterns[dom] = list(ref_pats)
+            else:
+                # Append reference patterns not already known from live data
+                for p in ref_pats:
+                    if p not in domain_patterns[dom]:
+                        domain_patterns[dom].append(p)
 
     # Step 2: build candidate list for contacts with no email
     # candidate_map: email_string → (contact_index, pattern_name)
@@ -521,6 +540,17 @@ def enrich_companies(
     else:
         log("No ZeroBounce key — emails will NOT be validated (stored as 'not_validated')")
 
+    # Pre-load the email format reference table (sourced from COMPANY_FORMAT_ANALYSIS.xlsx).
+    # This gives the prediction engine domain-specific patterns for ~40k companies before
+    # any live enrichment runs — so even the very first Apollo contact can get a predicted
+    # email if Apollo doesn't supply one.
+    try:
+        reference_patterns = db.load_domain_patterns()
+        log(f"Email format reference loaded: {len(reference_patterns):,} domains")
+    except Exception as e:
+        reference_patterns = {}
+        log(f"Warning: could not load email format reference ({e}) — using defaults only")
+
     # Fetch companies needing enrichment
     companies = db.get_companies_needing_enrichment(limit)
     _status["companies_total"] = len(companies)
@@ -613,7 +643,8 @@ def enrich_companies(
         no_email_count = sum(1 for c in contacts if not c.get("email"))
         if no_email_count and zerobounce_key:
             contacts, pred_count = _predict_and_fill_emails(
-                contacts, zerobounce_key, company.get("domain", ""), log
+                contacts, zerobounce_key, company.get("domain", ""), log,
+                reference_patterns=reference_patterns,
             )
             if pred_count:
                 log(f"  ~ {pred_count} email(s) predicted and validated via pattern engine")

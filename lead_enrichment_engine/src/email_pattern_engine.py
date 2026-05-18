@@ -69,6 +69,9 @@ PATTERNS = {
     "first":      lambda f, l: f,
     "lastf":      lambda f, l: f"{l}{f[0]}",    # hohenwarter+a → hohenwartera (gov/edu common)
     "last.f":     lambda f, l: f"{l}.{f[0]}",   # hohenwarter.a → hohenwarter.a
+    # Added from COMPANY_FORMAT_ANALYSIS.xlsx reference data
+    "firstl":     lambda f, l: f"{f}{l[0]}",    # johns  (first name + last initial)
+    "last":       lambda f, l: l,               # smith  (last name only)
 }
 
 

@@ -665,3 +665,77 @@ def master_leads_stats() -> dict:
         """)
         row = cur.fetchone()
         return dict(row)
+
+
+# ── Email pattern operations ─────────────────────────────────────────────────
+
+def load_domain_patterns(domains: list = None) -> dict:
+    """
+    Load email naming patterns from the email_patterns reference table.
+
+    If `domains` is given, only returns patterns for those domains (fast per-run
+    lookup).  If None, loads ALL known domains (used to pre-cache at startup).
+
+    Returns: { domain: [pattern1, pattern2, ...] }
+    Patterns are ordered by sample_count DESC so the highest-evidence format
+    comes first — that's the one the prediction engine tries first.
+    """
+    with db_cursor(commit=False) as cur:
+        if domains:
+            cur.execute(
+                """SELECT domain, pattern
+                   FROM email_patterns
+                   WHERE domain = ANY(%s)
+                   ORDER BY domain, sample_count DESC""",
+                (list(domains),),
+            )
+        else:
+            cur.execute(
+                """SELECT domain, pattern
+                   FROM email_patterns
+                   ORDER BY domain, sample_count DESC"""
+            )
+        rows = cur.fetchall()
+
+    result: dict = {}
+    for r in rows:
+        result.setdefault(r["domain"], []).append(r["pattern"])
+    return result
+
+
+def upsert_email_patterns(rows: list) -> int:
+    """
+    Bulk upsert (domain, pattern, sample_count) tuples into email_patterns.
+    Uses GREATEST so live-validated counts are never downgraded by imports.
+    Returns the number of rows processed.
+    """
+    if not rows:
+        return 0
+    with db_cursor() as cur:
+        psycopg2.extras.execute_values(
+            cur,
+            """INSERT INTO email_patterns (domain, pattern, sample_count, last_seen_at)
+               VALUES %s
+               ON CONFLICT (domain, pattern) DO UPDATE SET
+                   sample_count = GREATEST(email_patterns.sample_count, EXCLUDED.sample_count),
+                   last_seen_at = NOW()""",
+            [(r[0], r[1], r[2]) for r in rows],
+            template="(%s, %s, %s, NOW())",
+            page_size=500,
+        )
+    return len(rows)
+
+
+def email_patterns_stats() -> dict:
+    """Row counts for the email_patterns reference table."""
+    with db_cursor(commit=False) as cur:
+        cur.execute("SELECT COUNT(*) AS total_rows, COUNT(DISTINCT domain) AS domains FROM email_patterns")
+        row = cur.fetchone()
+        cur.execute("""
+            SELECT pattern, COUNT(*) AS n, SUM(sample_count) AS total_samples
+            FROM email_patterns
+            GROUP BY pattern
+            ORDER BY total_samples DESC
+        """)
+        dist = [dict(r) for r in cur.fetchall()]
+    return {"total_rows": row["total_rows"], "domains": row["domains"], "distribution": dist}
