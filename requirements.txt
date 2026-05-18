@@ -4,6 +4,10 @@ uvicorn[standard]
 python-multipart
 jinja2
 
+# ── Auth / Security ───────────────────────────────────────────────────────────
+python-jose[cryptography]
+bcrypt==4.0.1
+
 # ── Oracle Intent Engine ─────────────────────────────────────────────────────
 requests
 beautifulsoup4

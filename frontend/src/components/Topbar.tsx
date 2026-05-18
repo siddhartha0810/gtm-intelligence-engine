@@ -23,15 +23,24 @@ function Dropdown({ onClose, children, anchorRef }: { onClose: () => void; child
   )
 }
 
-interface TopbarProps { onCmdK: () => void }
+interface TopbarProps {
+  onCmdK: () => void
+  user?: any
+  onLogout?: () => void
+}
 
-export default function Topbar({ onCmdK }: TopbarProps) {
+export default function Topbar({ onCmdK, user, onLogout }: TopbarProps) {
   const [notifOpen, setNotifOpen] = useState(false)
-  const [userOpen, setUserOpen] = useState(false)
-  const [unread, setUnread] = useState(3)
+  const [userOpen, setUserOpen]   = useState(false)
+  const [unread, setUnread]       = useState(3)
   const notifRef = useRef<HTMLButtonElement>(null)
-  const userRef = useRef<HTMLButtonElement>(null)
+  const userRef  = useRef<HTMLButtonElement>(null)
   const navigate = useNavigate()
+
+  const displayName  = user?.name  || user?.email || 'User'
+  const displayShort = displayName.charAt(0).toUpperCase()
+  const displayRole  = user?.role  ? user.role.charAt(0).toUpperCase() + user.role.slice(1) : 'User'
+  const displayEmail = user?.email || ''
 
   return (
     <header style={{ height: 56, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 24px', background: '#111827', borderBottom: '1px solid #1f2d45', flexShrink: 0, position: 'relative', zIndex: 100 }}>
@@ -94,10 +103,10 @@ export default function Topbar({ onCmdK }: TopbarProps) {
           onMouseEnter={e => { if (!userOpen) e.currentTarget.style.background = 'rgba(255,255,255,0.06)' }}
           onMouseLeave={e => { if (!userOpen) e.currentTarget.style.background = 'transparent' }}
         >
-          <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'linear-gradient(135deg, #3b82f6, #6366f1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: 'white' }}>S</div>
+          <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'linear-gradient(135deg, #3b82f6, #6366f1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: 'white' }}>{displayShort}</div>
           <div style={{ textAlign: 'left' }}>
-            <div style={{ fontSize: 12, fontWeight: 500, color: '#e2e8f0', lineHeight: 1 }}>Sid</div>
-            <div style={{ fontSize: 11, color: '#475569', marginTop: 2 }}>Admin</div>
+            <div style={{ fontSize: 12, fontWeight: 500, color: '#e2e8f0', lineHeight: 1 }}>{displayName.split(' ')[0]}</div>
+            <div style={{ fontSize: 11, color: '#475569', marginTop: 2 }}>{displayRole}</div>
           </div>
           <ChevronDown size={12} color="#475569" style={{ transition: 'transform 0.2s', transform: userOpen ? 'rotate(180deg)' : 'rotate(0deg)' }} />
         </button>
@@ -105,9 +114,9 @@ export default function Topbar({ onCmdK }: TopbarProps) {
         {userOpen && (
           <Dropdown onClose={() => setUserOpen(false)} anchorRef={userRef}>
             <div style={{ padding: '14px 16px', borderBottom: '1px solid #253047' }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: 'white' }}>Sidhartha</div>
-              <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>siddharthakothi@gmail.com</div>
-              <span style={{ display: 'inline-block', marginTop: 6, fontSize: 11, padding: '2px 8px', borderRadius: 999, background: 'rgba(59,130,246,0.15)', color: '#60a5fa' }}>Admin</span>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'white' }}>{displayName}</div>
+              <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>{displayEmail}</div>
+              <span style={{ display: 'inline-block', marginTop: 6, fontSize: 11, padding: '2px 8px', borderRadius: 999, background: 'rgba(59,130,246,0.15)', color: '#60a5fa' }}>{displayRole}</span>
             </div>
             {[
               { icon: User, label: 'My Profile', action: () => {} },
@@ -120,7 +129,9 @@ export default function Topbar({ onCmdK }: TopbarProps) {
               </button>
             ))}
             <div style={{ borderTop: '1px solid #253047', marginTop: 4 }}>
-              <button style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', fontSize: 13, textAlign: 'left' }}
+              <button
+                onClick={() => { setUserOpen(false); onLogout?.() }}
+                style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', fontSize: 13, textAlign: 'left' }}
                 onMouseEnter={e => e.currentTarget.style.background = 'rgba(239,68,68,0.08)'}
                 onMouseLeave={e => e.currentTarget.style.background = 'none'}>
                 <LogOut size={14} /> Sign out

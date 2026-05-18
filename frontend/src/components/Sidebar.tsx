@@ -2,29 +2,41 @@ import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, Building2, Users, Cpu, ClipboardCheck,
   BarChart3, Settings, ChevronLeft, ChevronRight,
-  Zap, Target
+  Zap, Target, Layers, Upload, CalendarDays, Factory,
+  ScrollText, UserCog, Shield
 } from 'lucide-react'
 
 interface SidebarProps {
   collapsed: boolean
   onToggle: () => void
+  user?: any
+  isAdmin?: boolean
 }
 
-const NAV = [
+const NAV_STATIC = [
   {
     label: 'OVERVIEW',
     items: [
-      { to: '/dashboard', icon: LayoutDashboard, label: 'Control Panel' },
-      { to: '/review', icon: ClipboardCheck, label: 'Review Queue', badge: '12' },
+      { to: '/dashboard',   icon: LayoutDashboard, label: 'Control Panel' },
+      { to: '/review',      icon: ClipboardCheck,  label: 'Review Queue', badge: '12' },
     ]
   },
   {
     label: 'DATA MODULES',
     items: [
-      { to: '/companies', icon: Building2, label: 'Companies' },
-      { to: '/contacts', icon: Users, label: 'Contacts' },
-      { to: '/intent', icon: Target, label: 'Intent Data' },
-      { to: '/engine', icon: Cpu, label: 'Engine Control' },
+      { to: '/companies',         icon: Building2,   label: 'Companies' },
+      { to: '/contacts',          icon: Users,        label: 'Contacts' },
+      { to: '/intent',            icon: Target,       label: 'Intent Data' },
+      { to: '/list-import',       icon: Upload,       label: 'List Import' },
+      { to: '/events',            icon: CalendarDays, label: 'Events' },
+      { to: '/manufacturer-intel',icon: Factory,      label: 'Manufacturer Intel' },
+      { to: '/engine',            icon: Cpu,          label: 'Engine Control' },
+    ]
+  },
+  {
+    label: 'CONFIGURATION',
+    items: [
+      { to: '/technology-profiles', icon: Layers, label: 'Technology Profiles' },
     ]
   },
   {
@@ -38,11 +50,21 @@ const NAV = [
     items: [
       { to: '/settings', icon: Settings, label: 'Settings & API' },
     ]
-  }
+  },
 ]
 
-export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
+const ADMIN_GROUP = {
+  label: 'ADMIN',
+  items: [
+    { to: '/audit-logs',      icon: ScrollText, label: 'Audit Logs' },
+    { to: '/user-management', icon: UserCog,    label: 'User Management' },
+  ]
+}
+
+export default function Sidebar({ collapsed, onToggle, user, isAdmin }: SidebarProps) {
   const w = collapsed ? 64 : 240
+
+  const groups = isAdmin ? [...NAV_STATIC, ADMIN_GROUP] : NAV_STATIC
 
   return (
     <aside style={{
@@ -79,10 +101,11 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
 
       {/* Nav */}
       <nav style={{ flex: 1, overflowY: 'auto', padding: '16px 8px' }}>
-        {NAV.map(group => (
+        {groups.map(group => (
           <div key={group.label} style={{ marginBottom: 20 }}>
             {!collapsed && (
-              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: '#374151', padding: '0 8px', marginBottom: 6 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: group.label === 'ADMIN' ? '#7c3aed' : '#374151', padding: '0 8px', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 4 }}>
+                {group.label === 'ADMIN' && <Shield size={9} color="#7c3aed" />}
                 {group.label}
               </div>
             )}
@@ -116,9 +139,9 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
                     {!collapsed && (
                       <span style={{ fontSize: 13, fontWeight: 500, flex: 1 }}>{item.label}</span>
                     )}
-                    {!collapsed && item.badge && (
+                    {!collapsed && (item as any).badge && (
                       <span style={{ fontSize: 11, fontWeight: 600, padding: '1px 6px', borderRadius: 999, background: 'rgba(59,130,246,0.2)', color: '#93c5fd' }}>
-                        {item.badge}
+                        {(item as any).badge}
                       </span>
                     )}
                   </>

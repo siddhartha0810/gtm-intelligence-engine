@@ -34,7 +34,7 @@ ENRICH_DIR  = BASE_DIR / "lead_enrichment_engine"
 if str(ORACLE_DIR) not in sys.path:
     sys.path.insert(0, str(ORACLE_DIR))
 
-from fastapi import FastAPI, File, Form, Request, UploadFile
+from fastapi import FastAPI, File, Form, Request, UploadFile, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -46,6 +46,13 @@ from src import exporter as oracle_exporter
 from src import contact_finder as oracle_contact_finder
 from src.utils import is_valid_company_name
 from src.phase_classifier import PHASE_LABELS, PHASE_COLORS
+from src import auth as oracle_auth
+from src.audit import log_audit, get_audit_logs
+from src import tech_profiles as tp_mod
+from src import events as events_mod
+from src import manufacturer as mfr_mod
+from src import list_import as import_mod
+from src import data_quality as dqe_mod
 
 # ── Dotenv for enrichment/prospect credentials ──────────────────────────────
 from dotenv import load_dotenv
@@ -1382,12 +1389,560 @@ async def enrich_stats():
 
 # ═══════════════════════════════════════════════════════════════════════════
 
+# ═══════════════════════════════════════════════════════════════════════════
+# AUTH / RBAC
+# ═══════════════════════════════════════════════════════════════════════════
+
+@app.post("/api/auth/register")
+async def auth_register(request: Request):
+    """Create a new user. First user ever becomes owner automatically."""
+    data = await request.json()
+    email    = (data.get("email") or "").strip().lower()
+    name     = (data.get("name")  or "").strip()
+    password = (data.get("password") or "").strip()
+    role     = (data.get("role") or "analyst").strip()
+    if not email or not password:
+        return JSONResponse({"error": "email and password are required"}, status_code=400)
+    if oracle_auth.get_user_by_email(email):
+        return JSONResponse({"error": "Email already registered"}, status_code=409)
+    user  = oracle_auth.create_user(email, name, password, role)
+    token = oracle_auth.create_token(user["id"], user["email"], user["role"])
+    return {"token": token, "user": {k: v for k, v in user.items() if k != "password_hash"}}
+
+
+@app.post("/api/auth/login")
+async def auth_login(request: Request):
+    data     = await request.json()
+    email    = (data.get("email") or "").strip().lower()
+    password = (data.get("password") or "").strip()
+    user = oracle_auth.get_user_by_email(email)
+    if not user or not oracle_auth.verify_password(password, user["password_hash"]):
+        return JSONResponse({"error": "Invalid email or password"}, status_code=401)
+    oracle_auth.update_last_login(user["id"])
+    token = oracle_auth.create_token(user["id"], user["email"], user["role"])
+    safe  = {k: v for k, v in user.items() if k != "password_hash"}
+    return {"token": token, "user": safe}
+
+
+@app.get("/api/auth/me")
+async def auth_me(current_user: dict = Depends(oracle_auth.require_user)):
+    user = oracle_auth.get_user_by_id(current_user["id"])
+    if not user:
+        return JSONResponse({"error": "User not found"}, status_code=404)
+    return {k: v for k, v in user.items() if k != "password_hash"}
+
+
+@app.post("/api/auth/change-password")
+async def auth_change_password(request: Request,
+                                current_user: dict = Depends(oracle_auth.require_user)):
+    data = await request.json()
+    old  = data.get("old_password", "")
+    new  = data.get("new_password", "")
+    user = oracle_auth.get_user_by_id(current_user["id"])
+    if not oracle_auth.verify_password(old, user["password_hash"]):
+        return JSONResponse({"error": "Current password incorrect"}, status_code=400)
+    if len(new) < 8:
+        return JSONResponse({"error": "New password must be at least 8 characters"}, status_code=400)
+    oracle_auth.change_password(current_user["id"], new)
+    log_audit(current_user, "change_password", "user", str(current_user["id"]))
+    return {"ok": True}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# USER MANAGEMENT  (admin / owner only)
+# ═══════════════════════════════════════════════════════════════════════════
+
+@app.get("/api/users")
+async def list_users(current_user: dict = Depends(oracle_auth.require_admin)):
+    return oracle_auth.list_users()
+
+
+@app.patch("/api/users/{user_id}")
+async def update_user(user_id: int, request: Request,
+                       current_user: dict = Depends(oracle_auth.require_admin)):
+    data    = await request.json()
+    updated = oracle_auth.update_user(user_id, data)
+    log_audit(current_user, "update_user", "user", str(user_id), new_value=data)
+    return updated
+
+
+@app.delete("/api/users/{user_id}")
+async def deactivate_user(user_id: int,
+                           current_user: dict = Depends(oracle_auth.require_admin)):
+    if user_id == current_user["id"]:
+        return JSONResponse({"error": "Cannot deactivate yourself"}, status_code=400)
+    oracle_auth.update_user(user_id, {"is_active": False})
+    log_audit(current_user, "deactivate_user", "user", str(user_id))
+    return {"ok": True}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# AUDIT LOGS
+# ═══════════════════════════════════════════════════════════════════════════
+
+@app.get("/api/audit-logs")
+async def api_audit_logs(
+    entity_type: str = "", entity_id: str = "",
+    user_email: str = "", action: str = "",
+    limit: int = 200, offset: int = 0,
+    current_user: dict = Depends(oracle_auth.require_user),
+):
+    return get_audit_logs(entity_type, entity_id, user_email, action, limit, offset)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# TECHNOLOGY PROFILES
+# ═══════════════════════════════════════════════════════════════════════════
+
+@app.get("/api/technology-profiles")
+async def api_list_profiles(active_only: int = 0):
+    return tp_mod.list_profiles(active_only=bool(active_only))
+
+
+@app.get("/api/technology-profiles/{profile_id}")
+async def api_get_profile(profile_id: int):
+    p = tp_mod.get_profile(profile_id)
+    if not p:
+        return JSONResponse({"error": "Not found"}, status_code=404)
+    return p
+
+
+@app.post("/api/technology-profiles")
+async def api_create_profile(request: Request,
+                               current_user: dict = Depends(oracle_auth.require_analyst)):
+    data    = await request.json()
+    profile = tp_mod.create_profile(**{k: v for k, v in data.items()
+                                        if k in ("name","description","keywords","target_websites",
+                                                  "competitor_domains","partner_domains",
+                                                  "manufacturer_domain","oracle_products")})
+    log_audit(current_user, "create", "technology_profile", str(profile["id"]), new_value=data)
+    return profile
+
+
+@app.patch("/api/technology-profiles/{profile_id}")
+async def api_update_profile(profile_id: int, request: Request,
+                               current_user: dict = Depends(oracle_auth.require_analyst)):
+    data    = await request.json()
+    updated = tp_mod.update_profile(profile_id, data)
+    log_audit(current_user, "update", "technology_profile", str(profile_id), new_value=data)
+    return updated
+
+
+@app.delete("/api/technology-profiles/{profile_id}")
+async def api_delete_profile(profile_id: int,
+                               current_user: dict = Depends(oracle_auth.require_admin)):
+    tp_mod.delete_profile(profile_id)
+    log_audit(current_user, "delete", "technology_profile", str(profile_id))
+    return {"ok": True}
+
+
+# ── Product Taxonomy ─────────────────────────────────────────────────────────
+
+@app.get("/api/technology-profiles/{profile_id}/taxonomy")
+async def api_list_taxonomy(profile_id: int):
+    return tp_mod.list_taxonomy(profile_id)
+
+
+@app.post("/api/technology-profiles/{profile_id}/taxonomy")
+async def api_create_taxonomy(profile_id: int, request: Request,
+                               current_user: dict = Depends(oracle_auth.require_analyst)):
+    data = await request.json()
+    row  = tp_mod.create_taxonomy(
+        profile_id,
+        canonical_name    = data.get("canonical_name", ""),
+        aliases           = data.get("aliases", []),
+        category          = data.get("category", ""),
+        confidence_weight = float(data.get("confidence_weight", 1.0)),
+    )
+    log_audit(current_user, "create", "product_taxonomy", str(row["id"]), new_value=data)
+    return row
+
+
+@app.patch("/api/taxonomy/{taxonomy_id}")
+async def api_update_taxonomy(taxonomy_id: int, request: Request,
+                               current_user: dict = Depends(oracle_auth.require_analyst)):
+    data    = await request.json()
+    updated = tp_mod.update_taxonomy(taxonomy_id, data)
+    log_audit(current_user, "update", "product_taxonomy", str(taxonomy_id), new_value=data)
+    return updated
+
+
+@app.delete("/api/taxonomy/{taxonomy_id}")
+async def api_delete_taxonomy(taxonomy_id: int,
+                               current_user: dict = Depends(oracle_auth.require_admin)):
+    tp_mod.delete_taxonomy(taxonomy_id)
+    log_audit(current_user, "delete", "product_taxonomy", str(taxonomy_id))
+    return {"ok": True}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# EVENTS INTELLIGENCE
+# ═══════════════════════════════════════════════════════════════════════════
+
+@app.get("/api/events")
+async def api_list_events(profile_id: int = 0, limit: int = 100):
+    return events_mod.list_events(profile_id or None, limit)
+
+
+@app.post("/api/events")
+async def api_create_event(request: Request,
+                            current_user: dict = Depends(oracle_auth.require_analyst)):
+    data  = await request.json()
+    event = events_mod.create_event(**{k: v for k, v in data.items()
+                                        if k in ("name","event_type","technology_profile_id",
+                                                  "location","event_date","description","attendee_count")})
+    log_audit(current_user, "create", "event", str(event["id"]), new_value=data)
+    return event
+
+
+@app.patch("/api/events/{event_id}")
+async def api_update_event(event_id: int, request: Request,
+                            current_user: dict = Depends(oracle_auth.require_analyst)):
+    data    = await request.json()
+    updated = events_mod.update_event(event_id, data)
+    log_audit(current_user, "update", "event", str(event_id), new_value=data)
+    return updated
+
+
+@app.delete("/api/events/{event_id}")
+async def api_delete_event(event_id: int,
+                            current_user: dict = Depends(oracle_auth.require_admin)):
+    events_mod.delete_event(event_id)
+    log_audit(current_user, "delete", "event", str(event_id))
+    return {"ok": True}
+
+
+@app.get("/api/events/{event_id}/attendees")
+async def api_event_attendees(event_id: int):
+    return events_mod.list_attendees(event_id)
+
+
+@app.post("/api/events/{event_id}/attendees")
+async def api_add_attendee(event_id: int, request: Request,
+                            current_user: dict = Depends(oracle_auth.require_analyst)):
+    data = await request.json()
+    row  = events_mod.add_attendee(event_id, int(data["contact_id"]), data.get("role", "attendee"))
+    log_audit(current_user, "add_attendee", "event", str(event_id),
+              new_value={"contact_id": data["contact_id"]})
+    return row
+
+
+@app.delete("/api/events/{event_id}/attendees/{contact_id}")
+async def api_remove_attendee(event_id: int, contact_id: int,
+                               current_user: dict = Depends(oracle_auth.require_analyst)):
+    events_mod.remove_attendee(event_id, contact_id)
+    return {"ok": True}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# MANUFACTURER INTELLIGENCE
+# ═══════════════════════════════════════════════════════════════════════════
+
+@app.get("/api/manufacturer-contacts")
+async def api_list_mfr(profile_id: int = 0, limit: int = 200):
+    return mfr_mod.list_manufacturer_contacts(profile_id or None, limit)
+
+
+@app.post("/api/manufacturer-contacts")
+async def api_create_mfr(request: Request,
+                          current_user: dict = Depends(oracle_auth.require_analyst)):
+    data    = await request.json()
+    contact = mfr_mod.create_manufacturer_contact(data)
+    log_audit(current_user, "create", "manufacturer_contact", str(contact["id"]), new_value=data)
+    return contact
+
+
+@app.patch("/api/manufacturer-contacts/{contact_id}")
+async def api_update_mfr(contact_id: int, request: Request,
+                          current_user: dict = Depends(oracle_auth.require_analyst)):
+    data    = await request.json()
+    updated = mfr_mod.update_manufacturer_contact(contact_id, data)
+    log_audit(current_user, "update", "manufacturer_contact", str(contact_id), new_value=data)
+    return updated
+
+
+@app.delete("/api/manufacturer-contacts/{contact_id}")
+async def api_delete_mfr(contact_id: int,
+                          current_user: dict = Depends(oracle_auth.require_admin)):
+    mfr_mod.delete_manufacturer_contact(contact_id)
+    log_audit(current_user, "delete", "manufacturer_contact", str(contact_id))
+    return {"ok": True}
+
+
+@app.post("/api/manufacturer-contacts/{contact_id}/link/{company_id}")
+async def api_link_mfr(contact_id: int, company_id: int, request: Request,
+                        current_user: dict = Depends(oracle_auth.require_analyst)):
+    data = await request.json()
+    return mfr_mod.link_to_company(contact_id, company_id, data.get("link_type", "partner"))
+
+
+@app.delete("/api/manufacturer-contacts/{contact_id}/link/{company_id}")
+async def api_unlink_mfr(contact_id: int, company_id: int,
+                          current_user: dict = Depends(oracle_auth.require_analyst)):
+    mfr_mod.unlink_from_company(contact_id, company_id)
+    return {"ok": True}
+
+
+@app.get("/api/companies/{company_id}/manufacturer-contacts")
+async def api_company_mfr(company_id: int):
+    return mfr_mod.get_company_manufacturer_contacts(company_id)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# LIST IMPORT
+# ═══════════════════════════════════════════════════════════════════════════
+
+@app.get("/api/import/fields/{entity_type}")
+async def api_import_fields(entity_type: str):
+    fields = import_mod._FIELD_LISTS.get(entity_type, [])
+    return {"fields": fields}
+
+
+@app.post("/api/import/parse-headers")
+async def api_parse_headers(
+    file: UploadFile = File(...),
+    entity_type: str = Form("company"),
+):
+    content = await file.read()
+    return import_mod.parse_csv_headers(content, entity_type)
+
+
+@app.post("/api/import/upload")
+async def api_import_upload(
+    file: UploadFile = File(...),
+    entity_type: str = Form("company"),
+    mappings: str = Form("{}"),
+    template_name: str = Form(""),
+    template_id: int = Form(0),
+):
+    content  = await file.read()
+    mappings_dict = json.loads(mappings)
+    row_count = content.count(b"\n")
+
+    batch = import_mod.create_batch(
+        file_name    = file.filename,
+        entity_type  = entity_type,
+        record_count = row_count,
+        template_id  = template_id or None,
+    )
+
+    # Save template if requested
+    if template_name and mappings_dict:
+        import_mod.save_template(template_name, entity_type, mappings_dict)
+
+    result = import_mod.process_import(content, entity_type, mappings_dict, batch["id"])
+    return {"batch_id": batch["id"], **result}
+
+
+@app.get("/api/import/batches")
+async def api_import_batches(limit: int = 50):
+    return import_mod.list_batches(limit)
+
+
+@app.get("/api/import/templates")
+async def api_import_templates(entity_type: str = ""):
+    return import_mod.list_templates(entity_type)
+
+
+@app.post("/api/import/templates")
+async def api_save_template(request: Request,
+                             current_user: dict = Depends(oracle_auth.require_analyst)):
+    data = await request.json()
+    return import_mod.save_template(
+        data["name"], data["entity_type"], data["mappings"], current_user["id"]
+    )
+
+
+@app.delete("/api/import/templates/{template_id}")
+async def api_delete_template(template_id: int,
+                               current_user: dict = Depends(oracle_auth.require_analyst)):
+    import_mod.delete_template(template_id)
+    return {"ok": True}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# DATA QUALITY ENGINE
+# ═══════════════════════════════════════════════════════════════════════════
+
+@app.post("/api/dqe/check/company")
+async def api_dqe_company(request: Request):
+    data   = await request.json()
+    issues = dqe_mod.run_dqe_on_company(data)
+    return {"issues": issues, "has_critical": any(i["severity"] == "critical" for i in issues)}
+
+
+@app.post("/api/dqe/check/contact")
+async def api_dqe_contact(request: Request):
+    data   = await request.json()
+    issues = dqe_mod.run_dqe_on_contact(data)
+    return {"issues": issues, "has_critical": any(i["severity"] == "critical" for i in issues)}
+
+
+@app.post("/api/dqe/promote-staged")
+async def api_promote_staged(
+    request: Request,
+    current_user: dict = Depends(oracle_auth.require_analyst),
+):
+    data   = await request.json()
+    limit  = int(data.get("limit", 100))
+    result = dqe_mod.promote_staged_companies(limit)
+    log_audit(current_user, "dqe_promote_staged", "company", "", new_value=result)
+    return result
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# COMPANY STATUS LIFECYCLE
+# ═══════════════════════════════════════════════════════════════════════════
+
+@app.patch("/api/companies/{company_id}/status")
+async def api_company_status(
+    company_id: int,
+    request: Request,
+    current_user: dict = Depends(oracle_auth.require_analyst),
+):
+    data       = await request.json()
+    new_status = data.get("status", "")
+    valid      = {"staged", "pending_review", "approved", "pushed_to_hubspot", "rejected"}
+    if new_status not in valid:
+        return JSONResponse({"error": f"Invalid status. Must be one of: {valid}"}, status_code=400)
+
+    with oracle_db.db_cursor() as cur:
+        cur.execute(
+            "UPDATE companies SET status=%s, last_updated=NOW() WHERE id=%s RETURNING id, name, status",
+            (new_status, company_id),
+        )
+        row = cur.fetchone()
+
+    if not row:
+        return JSONResponse({"error": "Company not found"}, status_code=404)
+
+    log_audit(current_user, f"status_{new_status}", "company", str(company_id),
+              new_value={"status": new_status})
+    return dict(row)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# HUBSPOT SYNC PULL (two-way)
+# ═══════════════════════════════════════════════════════════════════════════
+
+@app.post("/api/hubspot/sync-pull")
+async def api_hubspot_sync_pull(
+    request: Request,
+    current_user: dict = Depends(oracle_auth.require_admin),
+):
+    """Pull contacts and companies from HubSpot into the local DB."""
+    import urllib.request as _urllib
+    data     = await request.json()
+    hs_key   = data.get("hubspot_key") or os.getenv("HUBSPOT_API_KEY", "")
+    if not hs_key:
+        return JSONResponse({"error": "HubSpot API key required"}, status_code=400)
+
+    pulled_companies = 0
+    pulled_contacts  = 0
+    errors: list     = []
+
+    def _hs_get(path: str) -> dict:
+        req = _urllib.Request(
+            f"https://api.hubapi.com{path}",
+            headers={"Authorization": f"Bearer {hs_key}", "Content-Type": "application/json"},
+        )
+        with _urllib.urlopen(req, timeout=30) as resp:
+            return json.loads(resp.read())
+
+    # Pull companies
+    try:
+        after = None
+        while True:
+            url  = "/crm/v3/objects/companies?limit=100&properties=name,domain,industry,phone,numberofemployees"
+            url += f"&after={after}" if after else ""
+            data_resp = _hs_get(url)
+            for obj in data_resp.get("results", []):
+                props = obj.get("properties", {})
+                name  = (props.get("name") or "").strip()
+                if not name:
+                    continue
+                with oracle_db.db_cursor() as cur:
+                    cur.execute(
+                        """INSERT INTO companies
+                               (name, domain, industry, phone, number_of_employees,
+                                hubspot_id, hubspot_synced_at, source, status)
+                           VALUES (%s,%s,%s,%s,%s,%s,NOW(),'hubspot_pull','approved')
+                           ON CONFLICT (name) DO UPDATE SET
+                               hubspot_id = EXCLUDED.hubspot_id,
+                               domain = COALESCE(EXCLUDED.domain, companies.domain),
+                               hubspot_synced_at = NOW()""",
+                        (
+                            name,
+                            props.get("domain"), props.get("industry"),
+                            props.get("phone"),
+                            int(props["numberofemployees"]) if props.get("numberofemployees") else None,
+                            str(obj["id"]),
+                        ),
+                    )
+                pulled_companies += 1
+            paging = data_resp.get("paging", {})
+            after  = paging.get("next", {}).get("after")
+            if not after:
+                break
+    except Exception as e:
+        errors.append(f"companies pull: {e}")
+
+    # Pull contacts
+    try:
+        after = None
+        while True:
+            url = ("/crm/v3/objects/contacts?limit=100"
+                   "&properties=firstname,lastname,email,jobtitle,phone,hs_object_id")
+            url += f"&after={after}" if after else ""
+            data_resp = _hs_get(url)
+            for obj in data_resp.get("results", []):
+                props = obj.get("properties", {})
+                first = (props.get("firstname") or "").strip()
+                last  = (props.get("lastname")  or "").strip()
+                if not first and not last:
+                    continue
+                with oracle_db.db_cursor() as cur:
+                    cur.execute(
+                        """INSERT INTO company_contacts
+                               (first_name, last_name, title, email, phone,
+                                hubspot_id, hubspot_synced_at, source, status)
+                           VALUES (%s,%s,%s,%s,%s,%s,NOW(),'hubspot_pull','approved')
+                           ON CONFLICT DO NOTHING""",
+                        (
+                            first, last,
+                            props.get("jobtitle"), props.get("email"), props.get("phone"),
+                            str(obj["id"]),
+                        ),
+                    )
+                pulled_contacts += 1
+            paging = data_resp.get("paging", {})
+            after  = paging.get("next", {}).get("after")
+            if not after:
+                break
+    except Exception as e:
+        errors.append(f"contacts pull: {e}")
+
+    log_audit(current_user, "hubspot_sync_pull", "system", "",
+              new_value={"companies": pulled_companies, "contacts": pulled_contacts})
+
+    return {
+        "pulled_companies": pulled_companies,
+        "pulled_contacts":  pulled_contacts,
+        "errors":           errors,
+    }
+
+
 @app.on_event("startup")
 async def startup():
     try:
         oracle_db.init_db()
     except Exception as e:
         print(f"[startup] Oracle DB init warning: {e}")
+    # Seed Oracle/JDE default technology profile if none exists
+    try:
+        tp_mod.seed_default_profile()
+    except Exception as e:
+        print(f"[startup] Tech profile seed warning: {e}")
     # Ensure output dirs exist
     (ENRICH_DIR / "input").mkdir(exist_ok=True)
     (ENRICH_DIR / "output").mkdir(exist_ok=True)

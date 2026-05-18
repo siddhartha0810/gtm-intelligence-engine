@@ -210,6 +210,269 @@ _DDL = [
         ON company_contacts(company_id, linkedin_url)
         WHERE linkedin_url IS NOT NULL AND linkedin_url != ''
     """,
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # NEW TABLES — Unified Platform Expansion (Phase 1-4)
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    # ── Users & RBAC ────────────────────────────────────────────────────────
+    """
+    CREATE TABLE IF NOT EXISTS users (
+        id            BIGSERIAL PRIMARY KEY,
+        email         TEXT NOT NULL UNIQUE,
+        name          TEXT NOT NULL DEFAULT '',
+        password_hash TEXT NOT NULL DEFAULT '',
+        role          TEXT NOT NULL DEFAULT 'analyst'
+                          CHECK (role IN ('owner','admin','analyst','viewer','recruitment')),
+        is_active     BOOLEAN NOT NULL DEFAULT TRUE,
+        last_login    TIMESTAMPTZ,
+        created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_users_email  ON users(email)",
+    "CREATE INDEX IF NOT EXISTS idx_users_role   ON users(role)",
+
+    # ── Technology Profiles ─────────────────────────────────────────────────
+    """
+    CREATE TABLE IF NOT EXISTS technology_profiles (
+        id                   BIGSERIAL PRIMARY KEY,
+        name                 TEXT NOT NULL UNIQUE,
+        description          TEXT NOT NULL DEFAULT '',
+        keywords             TEXT[] NOT NULL DEFAULT '{}',
+        target_websites      TEXT[] NOT NULL DEFAULT '{}',
+        competitor_domains   TEXT[] NOT NULL DEFAULT '{}',
+        partner_domains      TEXT[] NOT NULL DEFAULT '{}',
+        manufacturer_domain  TEXT NOT NULL DEFAULT '',
+        oracle_products      TEXT[] NOT NULL DEFAULT '{}',
+        is_active            BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_tp_active ON technology_profiles(is_active)",
+
+    # ── Product Taxonomy ────────────────────────────────────────────────────
+    """
+    CREATE TABLE IF NOT EXISTS product_taxonomy (
+        id                    BIGSERIAL PRIMARY KEY,
+        technology_profile_id BIGINT REFERENCES technology_profiles(id) ON DELETE CASCADE,
+        canonical_name        TEXT NOT NULL,
+        aliases               TEXT[] NOT NULL DEFAULT '{}',
+        category              TEXT NOT NULL DEFAULT '',
+        confidence_weight     REAL NOT NULL DEFAULT 1.0,
+        is_active             BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE (technology_profile_id, canonical_name)
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_pt_profile ON product_taxonomy(technology_profile_id)",
+
+    # ── Audit Logs ──────────────────────────────────────────────────────────
+    """
+    CREATE TABLE IF NOT EXISTS audit_logs (
+        id           BIGSERIAL PRIMARY KEY,
+        user_id      BIGINT REFERENCES users(id) ON DELETE SET NULL,
+        user_email   TEXT NOT NULL DEFAULT '',
+        action       TEXT NOT NULL,
+        entity_type  TEXT NOT NULL,
+        entity_id    TEXT NOT NULL DEFAULT '',
+        old_value    JSONB,
+        new_value    JSONB,
+        ip_address   TEXT NOT NULL DEFAULT '',
+        created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_al_entity    ON audit_logs(entity_type, entity_id)",
+    "CREATE INDEX IF NOT EXISTS idx_al_user      ON audit_logs(user_id)",
+    "CREATE INDEX IF NOT EXISTS idx_al_created   ON audit_logs(created_at DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_al_action    ON audit_logs(action)",
+
+    # ── Events Intelligence ─────────────────────────────────────────────────
+    """
+    CREATE TABLE IF NOT EXISTS events (
+        id                    BIGSERIAL PRIMARY KEY,
+        name                  TEXT NOT NULL,
+        event_type            TEXT NOT NULL DEFAULT 'conference'
+                                  CHECK (event_type IN
+                                    ('conference','webinar','workshop','roundtable',
+                                     'trade_show','summit','other')),
+        technology_profile_id BIGINT REFERENCES technology_profiles(id) ON DELETE SET NULL,
+        location              TEXT NOT NULL DEFAULT '',
+        event_date            DATE,
+        description           TEXT NOT NULL DEFAULT '',
+        attendee_count        INTEGER NOT NULL DEFAULT 0,
+        created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_events_date    ON events(event_date DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_events_profile ON events(technology_profile_id)",
+    """
+    CREATE TABLE IF NOT EXISTS event_attendees (
+        id         BIGSERIAL PRIMARY KEY,
+        event_id   BIGINT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+        contact_id BIGINT NOT NULL REFERENCES company_contacts(id) ON DELETE CASCADE,
+        role       TEXT NOT NULL DEFAULT 'attendee'
+                       CHECK (role IN ('attendee','speaker','organiser','sponsor')),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE (event_id, contact_id)
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_ea_event   ON event_attendees(event_id)",
+    "CREATE INDEX IF NOT EXISTS idx_ea_contact ON event_attendees(contact_id)",
+
+    # ── Manufacturer Intelligence ───────────────────────────────────────────
+    """
+    CREATE TABLE IF NOT EXISTS manufacturer_contacts (
+        id                    BIGSERIAL PRIMARY KEY,
+        first_name            TEXT NOT NULL DEFAULT '',
+        last_name             TEXT NOT NULL DEFAULT '',
+        email                 TEXT NOT NULL DEFAULT '',
+        phone                 TEXT NOT NULL DEFAULT '',
+        company               TEXT NOT NULL DEFAULT '',
+        job_title             TEXT NOT NULL DEFAULT '',
+        technology_profile_id BIGINT REFERENCES technology_profiles(id) ON DELETE SET NULL,
+        oracle_alignment      TEXT NOT NULL DEFAULT '',
+        oracle_department     TEXT NOT NULL DEFAULT '',
+        oracle_team           TEXT NOT NULL DEFAULT '',
+        linkedin_url          TEXT NOT NULL DEFAULT '',
+        hubspot_id            TEXT NOT NULL DEFAULT '',
+        source                TEXT NOT NULL DEFAULT '',
+        created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_mc_company  ON manufacturer_contacts(company)",
+    "CREATE INDEX IF NOT EXISTS idx_mc_email    ON manufacturer_contacts(email)",
+    "CREATE INDEX IF NOT EXISTS idx_mc_profile  ON manufacturer_contacts(technology_profile_id)",
+    """
+    CREATE TABLE IF NOT EXISTS manufacturer_links (
+        id                      BIGSERIAL PRIMARY KEY,
+        manufacturer_contact_id BIGINT NOT NULL REFERENCES manufacturer_contacts(id) ON DELETE CASCADE,
+        company_id              BIGINT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        link_type               TEXT NOT NULL DEFAULT 'partner'
+                                    CHECK (link_type IN ('partner','reseller','implementer','support','other')),
+        created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE (manufacturer_contact_id, company_id)
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_ml2_company ON manufacturer_links(company_id)",
+    "CREATE INDEX IF NOT EXISTS idx_ml2_mfr     ON manufacturer_links(manufacturer_contact_id)",
+
+    # ── List Import ─────────────────────────────────────────────────────────
+    """
+    CREATE TABLE IF NOT EXISTS import_mapping_templates (
+        id          BIGSERIAL PRIMARY KEY,
+        name        TEXT NOT NULL,
+        entity_type TEXT NOT NULL CHECK (entity_type IN ('contact','company','event','manufacturer')),
+        mappings    JSONB NOT NULL DEFAULT '{}',
+        created_by  BIGINT REFERENCES users(id) ON DELETE SET NULL,
+        created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE (name, entity_type)
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_imt_type ON import_mapping_templates(entity_type)",
+    """
+    CREATE TABLE IF NOT EXISTS import_batches (
+        id                  BIGSERIAL PRIMARY KEY,
+        file_name           TEXT NOT NULL,
+        entity_type         TEXT NOT NULL CHECK (entity_type IN ('contact','company','event','manufacturer')),
+        mapping_template_id BIGINT REFERENCES import_mapping_templates(id) ON DELETE SET NULL,
+        status              TEXT NOT NULL DEFAULT 'pending'
+                                CHECK (status IN ('pending','processing','completed','failed')),
+        record_count        INTEGER NOT NULL DEFAULT 0,
+        success_count       INTEGER NOT NULL DEFAULT 0,
+        error_count         INTEGER NOT NULL DEFAULT 0,
+        error_log           JSONB NOT NULL DEFAULT '[]',
+        s3_key              TEXT NOT NULL DEFAULT '',
+        created_by          BIGINT REFERENCES users(id) ON DELETE SET NULL,
+        created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        completed_at        TIMESTAMPTZ
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_ib_status ON import_batches(status)",
+    "CREATE INDEX IF NOT EXISTS idx_ib_type   ON import_batches(entity_type)",
+    "CREATE INDEX IF NOT EXISTS idx_ib_user   ON import_batches(created_by)",
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # MIGRATIONS — Expand existing tables with new columns
+    # All use ADD COLUMN IF NOT EXISTS — safe to run on existing DBs
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    # ── companies: add 27 HubSpot MVP fields + lifecycle + profile link ──────
+    "ALTER TABLE companies ADD COLUMN IF NOT EXISTS technology_profile_id  BIGINT REFERENCES technology_profiles(id) ON DELETE SET NULL",
+    "ALTER TABLE companies ADD COLUMN IF NOT EXISTS status                 TEXT NOT NULL DEFAULT 'staged' CHECK (status IN ('staged','pending_review','approved','pushed_to_hubspot','rejected'))",
+    "ALTER TABLE companies ADD COLUMN IF NOT EXISTS unique_key             TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE companies ADD COLUMN IF NOT EXISTS hubspot_id             TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE companies ADD COLUMN IF NOT EXISTS hubspot_synced_at      TIMESTAMPTZ",
+    "ALTER TABLE companies ADD COLUMN IF NOT EXISTS source                 TEXT NOT NULL DEFAULT 'scan'",
+    "ALTER TABLE companies ADD COLUMN IF NOT EXISTS company_type           TEXT NOT NULL DEFAULT 'prospect'",
+    # HubSpot Company Information
+    "ALTER TABLE companies ADD COLUMN IF NOT EXISTS phone                  TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE companies ADD COLUMN IF NOT EXISTS number_of_employees    INTEGER",
+    "ALTER TABLE companies ADD COLUMN IF NOT EXISTS about_us               TEXT NOT NULL DEFAULT ''",
+    # HubSpot Billing Address
+    "ALTER TABLE companies ADD COLUMN IF NOT EXISTS billing_street         TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE companies ADD COLUMN IF NOT EXISTS billing_city           TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE companies ADD COLUMN IF NOT EXISTS billing_state          TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE companies ADD COLUMN IF NOT EXISTS billing_postal_code    TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE companies ADD COLUMN IF NOT EXISTS billing_country        TEXT NOT NULL DEFAULT ''",
+    # HubSpot Company Information (Custom)
+    "ALTER TABLE companies ADD COLUMN IF NOT EXISTS duns_number            TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE companies ADD COLUMN IF NOT EXISTS holding_type           TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE companies ADD COLUMN IF NOT EXISTS number_of_locations    INTEGER",
+    # HubSpot Oracle / Products
+    "ALTER TABLE companies ADD COLUMN IF NOT EXISTS oracle_solutions_summary     TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE companies ADD COLUMN IF NOT EXISTS oracle_cloud_solutions       TEXT[] NOT NULL DEFAULT '{}'",
+    "ALTER TABLE companies ADD COLUMN IF NOT EXISTS oracle_on_premise_solutions  TEXT[] NOT NULL DEFAULT '{}'",
+    "ALTER TABLE companies ADD COLUMN IF NOT EXISTS oracle_relationship_type     TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE companies ADD COLUMN IF NOT EXISTS oracle_support_end_date      DATE",
+    "ALTER TABLE companies ADD COLUMN IF NOT EXISTS oracle_version               TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE companies ADD COLUMN IF NOT EXISTS number_of_oracle_users       INTEGER",
+    # HubSpot Inoapps Relationship
+    "ALTER TABLE companies ADD COLUMN IF NOT EXISTS inoapps_account_manager      TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE companies ADD COLUMN IF NOT EXISTS inoapps_account_tier         TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE companies ADD COLUMN IF NOT EXISTS inoapps_relationship_type    TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE companies ADD COLUMN IF NOT EXISTS inoapps_services_summary     TEXT NOT NULL DEFAULT ''",
+    # Internal computed/enrichment fields
+    "ALTER TABLE companies ADD COLUMN IF NOT EXISTS detected_products            TEXT[] NOT NULL DEFAULT '{}'",
+    "ALTER TABLE companies ADD COLUMN IF NOT EXISTS product_confidence_scores    JSONB NOT NULL DEFAULT '{}'",
+    "ALTER TABLE companies ADD COLUMN IF NOT EXISTS enrichment_data              JSONB NOT NULL DEFAULT '{}'",
+
+    # ── company_contacts: add 22 HubSpot MVP fields + lifecycle ─────────────
+    "ALTER TABLE company_contacts ADD COLUMN IF NOT EXISTS salutation           TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE company_contacts ADD COLUMN IF NOT EXISTS suffix               TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE company_contacts ADD COLUMN IF NOT EXISTS phone                TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE company_contacts ADD COLUMN IF NOT EXISTS mobile_phone         TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE company_contacts ADD COLUMN IF NOT EXISTS job_function         TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE company_contacts ADD COLUMN IF NOT EXISTS level                TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE company_contacts ADD COLUMN IF NOT EXISTS city                 TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE company_contacts ADD COLUMN IF NOT EXISTS state                TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE company_contacts ADD COLUMN IF NOT EXISTS country              TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE company_contacts ADD COLUMN IF NOT EXISTS do_not_call          BOOLEAN NOT NULL DEFAULT FALSE",
+    "ALTER TABLE company_contacts ADD COLUMN IF NOT EXISTS do_not_email         BOOLEAN NOT NULL DEFAULT FALSE",
+    "ALTER TABLE company_contacts ADD COLUMN IF NOT EXISTS creation_source      TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE company_contacts ADD COLUMN IF NOT EXISTS person_has_moved     BOOLEAN NOT NULL DEFAULT FALSE",
+    "ALTER TABLE company_contacts ADD COLUMN IF NOT EXISTS oracle_alignment      TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE company_contacts ADD COLUMN IF NOT EXISTS oracle_department     TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE company_contacts ADD COLUMN IF NOT EXISTS oracle_team          TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE company_contacts ADD COLUMN IF NOT EXISTS hubspot_id           TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE company_contacts ADD COLUMN IF NOT EXISTS unique_key           TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE company_contacts ADD COLUMN IF NOT EXISTS status               TEXT NOT NULL DEFAULT 'staged' CHECK (status IN ('staged','pending_review','approved','pushed_to_hubspot','rejected'))",
+    "ALTER TABLE company_contacts ADD COLUMN IF NOT EXISTS hubspot_synced_at    TIMESTAMPTZ",
+
+    # ── scan_runs: link to technology profile ────────────────────────────────
+    "ALTER TABLE scan_runs ADD COLUMN IF NOT EXISTS technology_profile_id BIGINT REFERENCES technology_profiles(id) ON DELETE SET NULL",
+
+    # ── Indexes on new columns ───────────────────────────────────────────────
+    "CREATE INDEX IF NOT EXISTS idx_companies_status    ON companies(status)",
+    "CREATE INDEX IF NOT EXISTS idx_companies_profile   ON companies(technology_profile_id)",
+    "CREATE INDEX IF NOT EXISTS idx_companies_hubspot   ON companies(hubspot_id) WHERE hubspot_id != ''",
+    "CREATE INDEX IF NOT EXISTS idx_contacts_status     ON company_contacts(status)",
+    "CREATE INDEX IF NOT EXISTS idx_contacts_hubspot    ON company_contacts(hubspot_id) WHERE hubspot_id != ''",
 ]
 
 
