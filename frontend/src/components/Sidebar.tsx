@@ -17,28 +17,29 @@ const NAV_STATIC = [
   {
     label: 'OVERVIEW',
     items: [
-      { to: '/dashboard',   icon: LayoutDashboard, label: 'Control Panel' },
+      { to: '/dashboard',    icon: LayoutDashboard, label: 'Control Panel' },
       { to: '/review-queue', icon: ClipboardCheck,  label: 'Review Queue', badge: '12' },
-    ]
-  },
-  {
-    label: 'DATA MODULES',
-    items: [
-      { to: '/companies',         icon: Building2,   label: 'Companies' },
-      { to: '/contacts',          icon: Users,        label: 'Contacts' },
-      { to: '/intent-data',       icon: Target,       label: 'Intent Data' },
-      { to: '/list-import',       icon: Upload,       label: 'List Import' },
-      { to: '/events',            icon: CalendarDays, label: 'Events' },
-      { to: '/manufacturer-intel',icon: Factory,      label: 'Manufacturer Intel' },
-      { to: '/engine-control',    icon: Cpu,          label: 'Engine Control' },
-      { to: '/product-intelligence', icon: PackageSearch, label: 'Product Intel' },
+      { to: '/audit-logs',   icon: ScrollText,      label: 'Audit Logs' },
     ]
   },
   {
     label: 'CONFIGURATION',
     items: [
-      { to: '/technology-profiles', icon: Layers, label: 'Technology Profiles' },
-      { to: '/hubspot-sync', icon: RefreshCw, label: 'HubSpot Sync' },
+      { to: '/technology-profiles', icon: Layers,    label: 'Technology Profiles' },
+      { to: '/hubspot-sync',        icon: RefreshCw, label: 'HubSpot Sync' },
+      { to: '/engine-control',      icon: Cpu,       label: 'Engine Control' },
+    ]
+  },
+  {
+    label: 'DATA MODULES',
+    items: [
+      { to: '/companies',                icon: Building2,    label: 'Companies' },
+      { to: '/contacts',                 icon: Users,        label: 'Contacts' },
+      { to: '/product-intelligence',     icon: PackageSearch,label: 'Product Intel' },
+      { to: '/list-import',              icon: Upload,       label: 'List Import' },
+      { to: '/intent-data',              icon: Target,       label: 'Intent Data' },
+      { to: '/events',                   icon: CalendarDays, label: 'Events' },
+      { to: '/manufacturer-intelligence',icon: Factory,      label: 'Manufacturer Intel' },
     ]
   },
   {
@@ -58,8 +59,7 @@ const NAV_STATIC = [
 const ADMIN_GROUP = {
   label: 'ADMIN',
   items: [
-    { to: '/audit-logs',      icon: ScrollText, label: 'Audit Logs' },
-    { to: '/user-management', icon: UserCog,    label: 'User Management' },
+    { to: '/user-management', icon: UserCog, label: 'User Management' },
   ]
 }
 

@@ -95,7 +95,8 @@ export default function App() {
               <Route path="/technology-profiles"    element={<TechnologyProfiles />} />
               <Route path="/list-import"            element={<ListImport />} />
               <Route path="/events"                 element={<Events />} />
-              <Route path="/manufacturer-intel"     element={<ManufacturerIntel />} />
+              <Route path="/manufacturer-intel"          element={<ManufacturerIntel />} />
+              <Route path="/manufacturer-intelligence"  element={<ManufacturerIntel />} />
               <Route path="/audit-logs"             element={<AuditLogs />} />
               {isAdmin && <Route path="/user-management" element={<UserManagement />} />}
               <Route path="/hubspot-sync"           element={<HubSpotSync />} />
