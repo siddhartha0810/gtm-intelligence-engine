@@ -1,0 +1,1024 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Oracle Intent Engine</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"/>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <style>
+    :root {
+      --bg:        #07090F;
+      --surface:   #0C0F1A;
+      --card:      #0F1320;
+      --card-hi:   #141928;
+      --border:    #1A2438;
+      --border-hi: #253550;
+      --red:       #C74634;
+      --red-dim:   rgba(199,70,52,.08);
+      --red-glow:  rgba(199,70,52,.18);
+      --txt:       #D4DCEE;
+      --txt-2:     #556280;
+      --txt-3:     #283044;
+      --green:     #0EA472;
+      --blue:      #3B7DD8;
+      --amber:     #D97706;
+      --font:      'Inter', system-ui, sans-serif;
+      --mono:      'JetBrains Mono', monospace;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; }
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      font-family: var(--font);
+      color: var(--txt);
+      min-height: 100vh;
+      background-image:
+        radial-gradient(ellipse 70% 50% at 50% -5%, rgba(199,70,52,.06) 0%, transparent 60%),
+        radial-gradient(circle at 1px 1px, rgba(59,130,246,.07) 1px, transparent 0);
+      background-size: 100% 100%, 32px 32px;
+    }
+
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: var(--surface); }
+    ::-webkit-scrollbar-thumb { background: var(--border-hi); border-radius: 3px; }
+
+    /* ── Topbar ── */
+    .topbar {
+      background: rgba(7,9,15,.92);
+      backdrop-filter: blur(14px);
+      border-bottom: 1px solid var(--border);
+      height: 54px; padding: 0 1.75rem;
+      display: flex; align-items: center; justify-content: space-between;
+      position: sticky; top: 0; z-index: 100;
+    }
+    .brand {
+      display: flex; align-items: center; gap: .5rem;
+      font-size: .92rem; font-weight: 600; letter-spacing: -.01em;
+    }
+    .brand-icon {
+      width: 26px; height: 26px; background: var(--red); border-radius: 5px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: .72rem; color: #fff; flex-shrink: 0;
+      box-shadow: 0 0 12px var(--red-glow);
+    }
+    .brand-sub { color: var(--txt-2); font-weight: 400; font-size: .8rem; }
+    .topbar-right { display: flex; align-items: center; gap: .6rem; }
+
+    .pill-btn {
+      font-size: .72rem; font-family: var(--mono);
+      padding: 4px 11px; border-radius: 5px;
+      background: transparent; border: 1px solid var(--border-hi);
+      color: var(--txt-2); cursor: pointer; transition: all .15s; text-decoration: none;
+      display: inline-flex; align-items: center; gap: .3rem;
+    }
+    .pill-btn:hover { border-color: var(--red); color: var(--txt); background: var(--red-dim); }
+    .db-ok  { border-color: rgba(14,164,114,.3); color: var(--green); background: rgba(14,164,114,.06); }
+    .db-err { border-color: rgba(199,70,52,.3);  color: var(--red);   background: var(--red-dim); }
+
+    /* ── Layout ── */
+    .main { padding: 1.75rem; max-width: 1640px; margin: 0 auto; }
+    .sec-label {
+      font-family: var(--mono); font-size: .6rem; letter-spacing: .14em;
+      text-transform: uppercase; color: var(--txt-3); margin-bottom: .7rem; padding-left: 1px;
+    }
+
+    /* ── Stat cards ── */
+    .stat-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: .9rem; margin-bottom: 1.5rem; }
+    @media(max-width:860px){ .stat-grid { grid-template-columns: repeat(2,1fr); } }
+
+    .stat-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--s-accent, var(--border));
+      border-radius: 8px; padding: 1.1rem 1.25rem;
+      transition: border-color .2s;
+    }
+    .stat-card:hover { border-color: var(--border-hi); }
+    .s-label {
+      font-size: .67rem; font-family: var(--mono); letter-spacing: .08em;
+      text-transform: uppercase; color: var(--txt-2); margin-bottom: .55rem;
+    }
+    .s-value {
+      font-size: 2rem; font-weight: 700; line-height: 1;
+      font-variant-numeric: tabular-nums;
+      font-feature-settings: "tnum";
+      color: var(--s-color, var(--txt));
+      letter-spacing: -.02em;
+    }
+    .s-meta { font-size: .7rem; color: var(--txt-3); margin-top: .4rem; font-family: var(--mono); }
+
+    /* ── Scan control panel ── */
+    .scan-panel {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      margin-bottom: 1.5rem;
+      overflow: hidden;
+    }
+    .scan-config {
+      padding: 1rem 1.25rem;
+      display: flex; align-items: flex-end; gap: 1rem; flex-wrap: wrap;
+      border-bottom: 1px solid var(--border);
+    }
+    .scan-field { display: flex; flex-direction: column; gap: .35rem; }
+    .scan-field label {
+      font-size: .63rem; font-family: var(--mono); letter-spacing: .09em;
+      text-transform: uppercase; color: var(--txt-2);
+    }
+    .ctrl {
+      background: var(--surface) !important;
+      border: 1px solid var(--border) !important;
+      color: var(--txt) !important;
+      border-radius: 5px !important;
+      font-size: .8rem !important;
+      font-family: var(--font) !important;
+      height: 34px;
+      padding: 0 .7rem !important;
+      transition: border-color .15s !important;
+    }
+    .ctrl:focus { outline: none !important; box-shadow: none !important; border-color: var(--red) !important; }
+    .ctrl option { background: var(--surface); }
+    input.ctrl { height: 34px; }
+
+    .scan-actions { display: flex; gap: .5rem; align-items: flex-end; margin-left: auto; }
+    .btn-run {
+      height: 34px; padding: 0 18px;
+      background: var(--red); border: none; color: #fff;
+      font-family: var(--font); font-weight: 600; font-size: .8rem;
+      border-radius: 5px; cursor: pointer;
+      box-shadow: 0 0 16px var(--red-glow);
+      transition: all .15s; white-space: nowrap;
+      display: inline-flex; align-items: center; gap: .35rem;
+    }
+    .btn-run:hover:not(:disabled) { background: #B03C2C; box-shadow: 0 0 24px rgba(199,70,52,.3); }
+    .btn-run:disabled { opacity: .45; cursor: not-allowed; box-shadow: none; }
+    .btn-stop {
+      height: 34px; padding: 0 13px;
+      background: transparent; border: 1px solid rgba(199,70,52,.35);
+      color: var(--red); border-radius: 5px; cursor: pointer; transition: all .15s;
+      display: inline-flex; align-items: center;
+    }
+    .btn-stop:hover { background: var(--red-dim); border-color: var(--red); }
+
+    /* Sources grid */
+    .sources-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0;
+    }
+    .source-group {
+      padding: .9rem 1.25rem;
+      border-right: 1px solid var(--border);
+    }
+    .source-group:last-child { border-right: none; }
+    .source-group-label {
+      font-size: .6rem; font-family: var(--mono); letter-spacing: .12em;
+      text-transform: uppercase; color: var(--txt-3); margin-bottom: .65rem;
+      display: block;
+    }
+    .source-chips { display: flex; flex-wrap: wrap; gap: .4rem; }
+
+    /* Pill toggle checkboxes */
+    .src-pill { cursor: pointer; }
+    .src-pill input[type=checkbox] { display: none; }
+    .src-pill span {
+      display: inline-block;
+      padding: 3px 11px; border-radius: 4px;
+      border: 1px solid var(--border);
+      color: var(--txt-2); font-family: var(--mono); font-size: .7rem;
+      transition: all .15s; user-select: none; white-space: nowrap;
+    }
+    .src-pill input:checked + span {
+      background: rgba(59,125,216,.1);
+      border-color: rgba(59,125,216,.35);
+      color: var(--txt);
+    }
+    .src-pill:hover span { border-color: var(--border-hi); }
+
+    /* Progress / log */
+    .scan-bottom { padding: .9rem 1.25rem; border-top: 1px solid var(--border); }
+    .scan-bar-wrap { background: var(--surface); border-radius: 2px; height: 2px; overflow: hidden; margin-top: .5rem; }
+    .scan-bar {
+      height: 100%; width: 100%;
+      background: linear-gradient(90deg, var(--red), var(--amber), var(--red));
+      background-size: 200% 100%;
+      animation: barslide 1.4s linear infinite;
+    }
+    @keyframes barslide { 0%{background-position:100% 0} 100%{background-position:-100% 0} }
+
+    #logContainer {
+      background: #040608; border: 1px solid var(--border);
+      border-radius: 6px; height: 190px; overflow-y: auto;
+      padding: 8px 12px; font-family: var(--mono); font-size: .7rem; line-height: 1.65;
+      margin-top: .75rem;
+    }
+
+    /* ── Panel ── */
+    .panel {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 8px; margin-bottom: 1.5rem; overflow: hidden;
+    }
+    .panel-header {
+      padding: .75rem 1.25rem; border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: .5rem;
+    }
+    .panel-title { font-size: .85rem; font-weight: 600; letter-spacing: -.01em; }
+
+    /* ── Filter bar ── */
+    .filter-bar { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+    .filter-select {
+      height: 30px; padding: 0 .6rem;
+      background: var(--surface) !important;
+      border: 1px solid var(--border) !important;
+      border-radius: 5px !important;
+      color: var(--txt-2) !important;
+      font-size: .72rem !important; font-family: var(--mono) !important;
+      cursor: pointer; transition: border-color .15s !important;
+    }
+    .filter-select:focus { outline: none !important; border-color: var(--border-hi) !important; box-shadow: none !important; }
+    .filter-input {
+      height: 30px; padding: 0 .6rem;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 5px; color: var(--txt); font-size: .72rem;
+      transition: border-color .15s;
+    }
+    .filter-input:focus { outline: none; border-color: var(--border-hi); }
+    .btn-new-only {
+      height: 30px; padding: 0 11px;
+      background: transparent; border: 1px solid rgba(14,164,114,.3);
+      color: var(--txt-2); font-family: var(--mono); font-size: .7rem;
+      border-radius: 5px; cursor: pointer; transition: all .15s;
+      display: inline-flex; align-items: center; gap: .3rem;
+    }
+    .btn-new-only.active, .btn-new-only:hover {
+      background: rgba(14,164,114,.1); border-color: var(--green); color: var(--green);
+    }
+
+    /* ── Table ── */
+    #companyTable { border-collapse: collapse; width: 100%; }
+    #companyTable thead th {
+      background: var(--surface); color: var(--txt-2);
+      font-family: var(--mono); font-size: .6rem; letter-spacing: .1em;
+      text-transform: uppercase; font-weight: 500;
+      padding: .6rem 1rem; border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+    #companyTable thead th:first-child { padding-left: 1.25rem; }
+
+    #companyTable tbody tr {
+      border-bottom: 1px solid rgba(26,36,56,.6);
+      transition: background .1s;
+    }
+    #companyTable tbody tr:last-child { border-bottom: none; }
+    #companyTable tbody tr:hover { background: var(--card-hi); }
+
+    /* High-intent row accent */
+    #companyTable tbody tr.intent-high { border-left: 2px solid rgba(199,70,52,.5); }
+    #companyTable tbody tr.intent-mid  { border-left: 2px solid rgba(217,119,6,.35); }
+
+    #companyTable td {
+      padding: .65rem 1rem; font-size: .8rem;
+      vertical-align: middle; color: var(--txt);
+    }
+    #companyTable td:first-child { padding-left: 1.25rem; }
+
+    .co-name { font-weight: 600; font-size: .85rem; letter-spacing: -.01em; }
+    .badge-new {
+      font-size: .52rem; font-family: var(--mono); letter-spacing: .06em;
+      padding: 1px 5px; border-radius: 3px; margin-left: 5px;
+      background: rgba(14,164,114,.12); color: var(--green);
+      border: 1px solid rgba(14,164,114,.25); vertical-align: middle;
+    }
+
+    /* Intent score — numeric only, no label */
+    .intent-score {
+      font-family: var(--mono); font-size: .9rem; font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      display: inline-flex; align-items: center; gap: .4rem;
+    }
+    .intent-dot {
+      width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
+    }
+
+    .tag {
+      display: inline-block; font-size: .62rem; font-family: var(--mono);
+      padding: 2px 7px; border-radius: 4px; margin: 1px 2px 1px 0;
+      background: rgba(59,125,216,.07); color: #5580BE;
+      border: 1px solid rgba(59,125,216,.15);
+    }
+    .tag.oracle { background: var(--red-dim); color: #B05545; border-color: rgba(199,70,52,.18); }
+
+    .phase-tag {
+      font-size: .65rem; font-family: var(--mono); font-weight: 500;
+      padding: 2px 8px; border-radius: 12px; white-space: nowrap;
+    }
+    .sig-count { font-family: var(--mono); font-size: .82rem; font-weight: 500; }
+
+    .size-tag {
+      font-size: .62rem; font-family: var(--mono);
+      color: var(--txt-2); white-space: nowrap;
+    }
+
+    .btn-eye {
+      background: transparent; border: 1px solid var(--border);
+      color: var(--txt-2); border-radius: 5px; padding: 3px 8px;
+      font-size: .72rem; cursor: pointer; transition: all .12s;
+    }
+    .btn-eye:hover { border-color: var(--red); color: var(--red); background: var(--red-dim); }
+
+    /* ── History table ── */
+    .run-table { width: 100%; border-collapse: collapse; }
+    .run-table th {
+      background: var(--surface); color: var(--txt-2);
+      font-family: var(--mono); font-size: .6rem; letter-spacing: .09em;
+      text-transform: uppercase; font-weight: 500;
+      padding: .55rem 1rem; border-bottom: 1px solid var(--border);
+    }
+    .run-table th:first-child { padding-left: 1.25rem; }
+    .run-table td {
+      padding: .5rem 1rem; font-size: .77rem;
+      border-bottom: 1px solid rgba(26,36,56,.5); color: var(--txt);
+    }
+    .run-table td:first-child { padding-left: 1.25rem; font-family: var(--mono); color: var(--txt-2); }
+    .run-table tr:last-child td { border-bottom: none; }
+
+    .status-pill {
+      font-size: .62rem; font-family: var(--mono); letter-spacing: .05em;
+      padding: 2px 8px; border-radius: 10px; border: 1px solid;
+    }
+    .status-pill.completed { color: var(--green); border-color: rgba(14,164,114,.3); background: rgba(14,164,114,.07); }
+    .status-pill.failed    { color: var(--red);   border-color: rgba(199,70,52,.3);  background: var(--red-dim); }
+    .status-pill.running, .status-pill.stopped {
+      color: var(--amber); border-color: rgba(217,119,6,.3); background: rgba(217,119,6,.07);
+    }
+
+    /* ── Modal ── */
+    .modal-content { background: var(--card) !important; border: 1px solid var(--border-hi) !important; border-radius: 10px !important; color: var(--txt) !important; }
+    .modal-header { border-bottom: 1px solid var(--border) !important; padding: .9rem 1.25rem !important; }
+    .modal-title { font-size: .9rem !important; font-weight: 600 !important; }
+    .btn-close { filter: invert(1) !important; opacity: .45 !important; }
+    .modal-body { padding: 1rem 1.25rem !important; max-height: 440px; overflow-y: auto; }
+
+    .modal-tab {
+      background: none; border: none; color: var(--txt-2);
+      font-family: var(--mono); font-size: .7rem;
+      padding: .4rem .8rem; border-radius: 4px 4px 0 0;
+      cursor: pointer; transition: color .12s, background .12s;
+    }
+    .modal-tab:hover { color: var(--txt); }
+    .modal-tab.active { color: var(--txt); background: var(--card); border-bottom: 2px solid var(--red); }
+
+    .signal-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 7px; padding: .85rem 1rem; margin-bottom: .5rem;
+    }
+    .signal-card .sig-title { font-weight: 600; font-size: .82rem; }
+    .signal-card .sig-meta  { font-size: .7rem; font-family: var(--mono); color: var(--txt-2); margin-top: .25rem; }
+    .signal-card .sig-desc  { font-size: .73rem; color: var(--txt-2); margin-top: .3rem; line-height: 1.5; }
+    .signal-card .sig-link  { font-size: .7rem; font-family: var(--mono); color: var(--blue); margin-top: .3rem; display: block; text-decoration: none; }
+    .signal-card .sig-link:hover { text-decoration: underline; }
+    .signal-src { font-size: .6rem; font-family: var(--mono); padding: 2px 7px; border-radius: 3px; background: rgba(59,125,216,.08); color: #5580BE; border: 1px solid rgba(59,125,216,.18); }
+
+    .contact-card { background: var(--surface); border: 1px solid var(--border); border-radius: 7px; padding: .8rem 1rem; margin-bottom: .5rem; display: flex; gap: .85rem; }
+    .contact-card.is-target { border-left: 3px solid var(--red); }
+    .contact-avatar { width: 36px; height: 36px; border-radius: 50%; background: var(--red-dim); border: 1px solid var(--red-glow); display: flex; align-items: center; justify-content: center; font-size: .88rem; color: var(--red); font-weight: 600; flex-shrink: 0; }
+    .contact-name  { font-weight: 600; font-size: .83rem; }
+    .contact-title { font-size: .73rem; color: var(--txt-2); margin-top: .12rem; }
+    .contact-email { font-family: var(--mono); font-size: .7rem; color: var(--blue); margin-top: .25rem; }
+    .contact-meta  { font-size: .68rem; color: var(--txt-3); margin-top: .18rem; font-family: var(--mono); }
+    .enrich-btn { background: var(--surface); border: 1px solid var(--border); color: var(--txt-2); font-family: var(--mono); font-size: .7rem; padding: .3rem .75rem; border-radius: 4px; cursor: pointer; transition: all .12s; }
+    .enrich-btn:hover { border-color: var(--red); color: var(--red); }
+
+    /* ── Toast ── */
+    #toastContainer { position: fixed; bottom: 1.25rem; right: 1.25rem; z-index: 9999; display: flex; flex-direction: column; gap: .4rem; }
+    .toast-item { background: var(--card); border: 1px solid var(--border-hi); border-radius: 7px; padding: .65rem .9rem; font-size: .78rem; color: var(--txt); display: flex; align-items: center; gap: .55rem; animation: toast-in .18s ease; min-width: 260px; }
+    .toast-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+    @keyframes toast-in { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:none; } }
+  </style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <div class="brand-icon"><i class="bi bi-database-fill-gear"></i></div>
+    Oracle Intent Engine
+    <span class="brand-sub ms-1">/ Intelligence</span>
+  </div>
+  <div class="topbar-right">
+    {% if not db_ok %}
+    <span class="pill-btn db-err"><i class="bi bi-dot"></i>DB Offline</span>
+    {% else %}
+    <span class="pill-btn db-ok"><i class="bi bi-dot"></i>DB Connected</span>
+    {% endif %}
+    {% if show_all %}
+    <a href="/" class="pill-btn" style="color:var(--amber);border-color:rgba(217,119,6,.35)"><i class="bi bi-clock-history"></i>All History</a>
+    {% else %}
+    <a href="/?show_all=1" class="pill-btn"><i class="bi bi-clock-history"></i>All History</a>
+    {% endif %}
+    <button onclick="purgeInvalid()" class="pill-btn" title="Remove garbage company names from database"><i class="bi bi-funnel"></i>Purge Invalid</button>
+    <button onclick="confirmReset()" class="pill-btn" style="color:var(--red);border-color:rgba(199,70,52,.3)" title="Wipe all data and start fresh"><i class="bi bi-trash"></i>Reset Data</button>
+    <button onclick="downloadAndRefresh('/export/csv')" class="pill-btn"><i class="bi bi-filetype-csv"></i>CSV</button>
+    <button onclick="downloadAndRefresh('/export/excel')" class="pill-btn"><i class="bi bi-file-earmark-excel"></i>Excel</button>
+    <button onclick="downloadAndRefresh('/export/excel/all')" class="pill-btn" title="Download every company found across ALL scan runs" style="border-color:rgba(99,179,99,.5);color:#4caf50"><i class="bi bi-file-earmark-excel-fill"></i>Export All-Time</button>
+    <div style="width:1px;height:18px;background:var(--border-hi);margin:0 4px"></div>
+    <button onclick="openBridgeModal()" class="pill-btn" style="border-color:rgba(77,127,255,.4);color:#7aa3ff;background:rgba(77,127,255,.07)" title="Send Oracle leads to Lead Enrichment Engine"><i class="bi bi-arrow-right-circle"></i>Send to Enrichment</button>
+    <a href="/enrichment/" target="_blank" class="pill-btn" style="border-color:rgba(77,127,255,.3);color:#6b8fc7" title="Open Lead Enrichment Engine"><i class="bi bi-box-arrow-up-right"></i>Enrichment</a>
+  </div>
+</header>
+
+<!-- ══ BRIDGE MODAL ══════════════════════════════════════════════════════ -->
+<div id="bridgeOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.72);backdrop-filter:blur(5px);z-index:500;align-items:center;justify-content:center">
+  <div style="background:#0c0f1a;border:1px solid #1e2a50;border-radius:14px;width:420px;max-width:94vw;padding:28px;box-shadow:0 24px 60px rgba(0,0,0,.7)">
+    <div style="font-size:16px;font-weight:700;color:#d4dcee;margin-bottom:6px">⚡ Send Leads to Enrichment</div>
+    <div style="font-size:12px;color:#8492b4;margin-bottom:20px;line-height:1.55">Select which Oracle leads to push into the Lead Enrichment Engine's queue, then run the enrichment pipeline.</div>
+    <div style="font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:#3d4a6a;margin-bottom:8px">Filter</div>
+    <div style="display:flex;flex-direction:column;gap:7px;margin-bottom:20px">
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px 12px;background:#0f1528;border:1px solid #182040;border-radius:8px">
+        <input type="radio" name="bridgeFilter" value="hot_warm" checked style="accent-color:#4d7fff"> <span style="font-size:13px;color:#dde4f0">HOT + WARM <span style="font-size:11px;color:#8492b4">(recommended)</span></span>
+      </label>
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px 12px;background:#0f1528;border:1px solid #182040;border-radius:8px">
+        <input type="radio" name="bridgeFilter" value="hot" style="accent-color:#4d7fff"> <span style="font-size:13px;color:#dde4f0">HOT only</span>
+      </label>
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px 12px;background:#0f1528;border:1px solid #182040;border-radius:8px">
+        <input type="radio" name="bridgeFilter" value="all" style="accent-color:#4d7fff"> <span style="font-size:13px;color:#dde4f0">All companies</span>
+      </label>
+    </div>
+    <div id="bridgeResult" style="display:none;padding:10px 14px;background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.25);border-radius:8px;font-size:12px;color:#22c55e;margin-bottom:16px"></div>
+    <div style="display:flex;gap:8px">
+      <button onclick="closeBridgeModal()" style="flex:1;padding:10px;border:1px solid #1e2a50;border-radius:8px;background:#0f1528;color:#8492b4;font-size:13px;cursor:pointer">Cancel</button>
+      <button onclick="runBridge()" id="bridgeBtn" style="flex:1;padding:10px;border:none;border-radius:8px;background:linear-gradient(135deg,#1638b0,#3b6af0 60%,#5b8fff);color:#fff;font-size:13px;font-weight:600;cursor:pointer">⚡ Send Leads</button>
+    </div>
+  </div>
+</div>
+<script>
+function openBridgeModal() {
+  document.getElementById('bridgeOverlay').style.display = 'flex';
+  document.getElementById('bridgeResult').style.display = 'none';
+}
+function closeBridgeModal() {
+  document.getElementById('bridgeOverlay').style.display = 'none';
+}
+async function runBridge() {
+  const filter = document.querySelector('input[name="bridgeFilter"]:checked').value;
+  const btn = document.getElementById('bridgeBtn');
+  btn.disabled = true; btn.textContent = 'Sending…';
+  try {
+    const r = await fetch('/bridge/enrich', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ filter })
+    });
+    const d = await r.json();
+    const res = document.getElementById('bridgeResult');
+    res.style.display = 'block';
+    if (r.ok) {
+      res.style.background = 'rgba(34,197,94,.08)';
+      res.style.borderColor = 'rgba(34,197,94,.25)';
+      res.style.color = '#22c55e';
+      res.textContent = d.message;
+      btn.textContent = '✓ Done — open Enrichment tab';
+      btn.onclick = () => window.open('/enrichment/', '_blank');
+    } else {
+      res.style.background = 'rgba(248,113,113,.08)';
+      res.style.borderColor = 'rgba(248,113,113,.25)';
+      res.style.color = '#f87171';
+      res.textContent = d.error || 'Unknown error';
+      btn.disabled = false; btn.textContent = '⚡ Send Leads';
+    }
+  } catch(e) {
+    btn.disabled = false; btn.textContent = '⚡ Send Leads';
+  }
+}
+</script>
+
+<div class="main">
+
+  <!-- Overview -->
+  <div class="sec-label">// overview</div>
+  <div class="stat-grid" style="margin-bottom:1.5rem">
+    <div class="stat-card" style="--s-accent:var(--blue); --s-color:var(--blue)">
+      <div class="s-label">Companies Detected</div>
+      <div class="s-value">{{ stats.total_companies }}</div>
+      <div class="s-meta">active prospects</div>
+    </div>
+    <div class="stat-card" style="--s-accent:var(--green); --s-color:var(--green)">
+      <div class="s-label">Total Signals</div>
+      <div class="s-value">{{ stats.total_signals }}</div>
+      <div class="s-meta">across all sources</div>
+    </div>
+    <div class="stat-card" style="--s-accent:var(--red); --s-color:var(--red)">
+      <div class="s-label">Implementing Now</div>
+      <div class="s-value">{{ stats.phases.get('implementing', 0) }}</div>
+      <div class="s-meta">active deployments</div>
+    </div>
+    <div class="stat-card" style="--s-accent:var(--amber); --s-color:var(--amber)">
+      <div class="s-label">Hiring for Oracle</div>
+      <div class="s-value">{{ stats.phases.get('hiring', 0) }}</div>
+      <div class="s-meta">open requisitions</div>
+    </div>
+  </div>
+
+  <!-- Scan Control -->
+  <div class="sec-label">// scan control</div>
+  <div class="scan-panel">
+
+    <!-- Config row -->
+    <div class="scan-config">
+      <div class="scan-field">
+        <label>Location</label>
+        <input id="scanLocation" type="text" class="ctrl" style="width:200px" placeholder="e.g. United Kingdom">
+      </div>
+      <div class="scan-field">
+        <label>Depth</label>
+        <select id="maxPages" class="ctrl" style="width:130px">
+          <option value="1">1 page — fast</option>
+          <option value="2">2 pages</option>
+          <option value="3" selected>3 pages — default</option>
+          <option value="5">5 pages — thorough</option>
+        </select>
+      </div>
+      <div class="scan-field">
+        <label>Size Filter</label>
+        <select id="sizeFilter" class="ctrl" style="width:140px">
+          <option value="">All Sizes</option>
+          <option value="1–50">1–50 employees</option>
+          <option value="51–200">51–200</option>
+          <option value="201–1K">201–1K</option>
+          <option value="1K–5K">1K–5K</option>
+          <option value="5K–10K">5K–10K</option>
+          <option value="10K+">10K+ (Enterprise)</option>
+        </select>
+      </div>
+      <div class="scan-actions">
+        <button id="scanBtn" class="btn-run" onclick="startScan()">
+          <i class="bi bi-play-fill"></i>Run Scan
+        </button>
+        <button id="stopBtn" class="btn-stop d-none" onclick="stopScan()">
+          <i class="bi bi-stop-fill"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- Sources row -->
+    <div class="sources-grid">
+      <div class="source-group">
+        <span class="source-group-label">Jobs</span>
+        <div class="source-chips">
+          <label class="src-pill"><input class="source-check" type="checkbox" value="linkedin" checked><span>linkedin</span></label>
+        </div>
+      </div>
+      <div class="source-group">
+        <span class="source-group-label">News &amp; Oracle</span>
+        <div class="source-chips">
+          <label class="src-pill"><input class="source-check" type="checkbox" value="news" checked><span>news</span></label>
+          <label class="src-pill"><input class="source-check" type="checkbox" value="oracle_website" checked><span>oracle.com</span></label>
+          <label class="src-pill"><input class="source-check" type="checkbox" value="erp_today" checked><span>erp today</span></label>
+          <label class="src-pill"><input class="source-check" type="checkbox" value="oracle_community" checked><span>oracle community</span></label>
+          <label class="src-pill"><input class="source-check" type="checkbox" value="oracle_event" checked><span>oracle events</span></label>
+        </div>
+      </div>
+      <div class="source-group">
+        <span class="source-group-label">Case Studies</span>
+        <div class="source-chips">
+          <label class="src-pill"><input class="source-check" type="checkbox" value="si_casestudy" checked><span>si case studies</span></label>
+          <label class="src-pill"><input class="source-check" type="checkbox" value="partner_casestudy" checked><span>partner case studies</span></label>
+          <label class="src-pill"><input class="source-check" type="checkbox" value="company_pages" checked><span>company pages</span></label>
+        </div>
+      </div>
+    </div>
+
+    <!-- Progress / log -->
+    <div id="scanProgress" class="scan-bottom d-none">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="font-size:.72rem;color:var(--txt-2);font-family:var(--mono)" id="scanProgressText">Initialising…</span>
+        <span style="font-size:.7rem;color:var(--red);font-family:var(--mono)" id="scanCounters"></span>
+      </div>
+      <div class="scan-bar-wrap"><div class="scan-bar"></div></div>
+    </div>
+
+    <div id="logPanel" class="scan-bottom d-none" style="border-top:1px solid var(--border)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.4rem">
+        <span style="font-size:.6rem;color:var(--txt-3);font-family:var(--mono);letter-spacing:.1em">LIVE LOG</span>
+        <button style="background:none;border:none;color:var(--txt-2);font-size:.7rem;cursor:pointer;font-family:var(--mono)" onclick="clearLog()">clear</button>
+      </div>
+      <div id="logContainer"><div id="logLines"></div></div>
+    </div>
+  </div>
+
+  <!-- Companies table -->
+  <div class="sec-label">// detected companies</div>
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">Lead Intelligence Feed</span>
+      <div class="filter-bar">
+        <button id="newOnlyBtn" class="btn-new-only" onclick="toggleNewOnly()">
+          <i class="bi bi-star-fill"></i>New Only
+        </button>
+        <select id="filterPhase" class="filter-select" onchange="filterTable()">
+          <option value="">All Phases</option>
+          {% for key, label in phase_labels.items() %}
+          <option value="{{ key }}">{{ label }}</option>
+          {% endfor %}
+        </select>
+        <select id="filterSource" class="filter-select" onchange="filterTable()">
+          <option value="">All Sources</option>
+          <option value="indeed">Indeed</option>
+          <option value="linkedin">LinkedIn</option>
+          <option value="ziprecruiter">ZipRecruiter</option>
+          <option value="news">News</option>
+          <option value="oracle_website">Oracle.com</option>
+          <option value="erp_today">ERP Today</option>
+          <option value="si_casestudy">SI Case Study</option>
+          <option value="partner_casestudy">Partner Case Study</option>
+          <option value="procurement">Procurement</option>
+          <option value="sec_filing">SEC Filing</option>
+        </select>
+        <select id="filterSize" class="filter-select" onchange="filterTable()">
+          <option value="">All Sizes</option>
+          <option value="1–50">1–50</option>
+          <option value="51–200">51–200</option>
+          <option value="201–1K">201–1K</option>
+          <option value="1K–5K">1K–5K</option>
+          <option value="5K–10K">5K–10K</option>
+          <option value="10K+">10K+</option>
+        </select>
+        <input id="filterSearch" type="text" class="filter-input" placeholder="Search company…" style="width:170px" oninput="filterTable()">
+      </div>
+    </div>
+
+    <div style="overflow-x:auto">
+      <table id="companyTable">
+        <thead>
+          <tr>
+            <th>Company</th>
+            <th class="text-center" style="width:70px">Score</th>
+            <th>Products</th>
+            <th>Phase</th>
+            <th>Sources</th>
+            <th>Size</th>
+            <th>Location</th>
+            <th class="text-center" style="width:60px">Signals</th>
+            <th style="width:40px"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% if companies %}
+            {% for c in companies %}
+            {% set score = c.priority_score or 0 %}
+            {% set color = '#C74634' if score >= 70 else ('#D97706' if score >= 45 else '#556280') %}
+            {% set size_val = c.size or '' %}
+            <tr class="company-row {% if score >= 70 %}intent-high{% elif score >= 45 %}intent-mid{% endif %}"
+                data-phase="{{ (c.phases or [''])[0] }}"
+                data-name="{{ c.name | lower }}"
+                data-isnew="{{ 'true' if c.first_scan_run_id == current_run_id else 'false' }}"
+                data-sources="{{ (c.sources or []) | join(',') | lower }}"
+                data-size="{{ size_val }}"
+                data-score="{{ score }}">
+
+              <td>
+                <span class="co-name">{{ c.name }}</span>
+                {% if c.first_scan_run_id == current_run_id %}
+                <span class="badge-new">NEW</span>
+                {% endif %}
+              </td>
+
+              <td class="text-center">
+                <span class="intent-score">
+                  <span class="intent-dot" style="background:{{ color }}"></span>
+                  <span style="color:{{ color }}">{{ score }}</span>
+                </span>
+              </td>
+
+              <td>
+                {% for p in (c.products or []) %}
+                  {% if p %}<span class="tag oracle">{{ p }}</span>{% endif %}
+                {% endfor %}
+              </td>
+
+              <td>
+                {% set phase = (c.phases or ['hiring'])[0] %}
+                {% set pcolor = phase_colors.get(phase, '#556280') %}
+                <span class="phase-tag" style="background:{{ pcolor }}14; color:{{ pcolor }}; border:1px solid {{ pcolor }}30">
+                  {{ phase_labels.get(phase, phase) }}
+                </span>
+              </td>
+
+              <td>
+                {% for s in (c.sources or []) %}
+                  {% if s %}<span class="tag">{{ s }}</span>{% endif %}
+                {% endfor %}
+              </td>
+
+              <td>
+                {% if c.size %}
+                <span class="size-tag">{{ c.size }}</span>
+                {% else %}
+                <span style="color:var(--txt-3);font-size:.72rem">—</span>
+                {% endif %}
+              </td>
+
+              <td style="color:var(--txt-2);font-size:.77rem">{{ c.location or '—' }}</td>
+
+              <td class="text-center">
+                <span class="sig-count">{{ c.signal_count }}</span>
+              </td>
+
+              <td>
+                <button class="btn-eye" onclick="viewSignals({{ c.id }}, '{{ c.name | replace("'","") }}')">
+                  <i class="bi bi-eye"></i>
+                </button>
+              </td>
+            </tr>
+            {% endfor %}
+          {% else %}
+            <tr><td colspan="9" style="text-align:center;padding:3rem;color:var(--txt-2);font-size:.8rem;font-family:var(--mono)">
+              No companies found — run a scan to populate the feed.
+            </td></tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Scan history -->
+  {% if scan_runs %}
+  <div class="sec-label">// scan history</div>
+  <div class="panel">
+    <div style="overflow-x:auto">
+      <table class="run-table">
+        <thead><tr>
+          <th>Run</th><th>Started</th><th>Completed</th>
+          <th>Status</th><th>Signals</th><th>Companies</th>
+        </tr></thead>
+        <tbody>
+          {% for run in scan_runs %}
+          <tr>
+            <td>#{{ run.id }}</td>
+            <td style="font-size:.72rem;color:var(--txt-2)">{{ run.started_at }}</td>
+            <td style="font-size:.72rem;color:var(--txt-2)">{{ run.completed_at or '—' }}</td>
+            <td><span class="status-pill {{ run.status }}">{{ run.status }}</span></td>
+            <td style="font-family:var(--mono)">{{ run.total_signals }}</td>
+            <td style="font-family:var(--mono)">{{ run.total_companies }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+
+<!-- Signal / Contact modal -->
+<div class="modal fade" id="signalModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="signalModalTitle">Signals</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div style="background:var(--surface);border-bottom:1px solid var(--border);padding:.45rem 1.25rem 0">
+        <ul class="nav" style="gap:.2rem">
+          <li><button class="modal-tab active" id="tabSignals" onclick="switchModalTab('signals')"><i class="bi bi-activity me-1"></i>Signals</button></li>
+          <li><button class="modal-tab" id="tabContacts" onclick="switchModalTab('contacts')"><i class="bi bi-person-lines-fill me-1"></i>Contacts</button></li>
+        </ul>
+      </div>
+      <div class="modal-body" id="signalModalBody">
+        <div style="text-align:center;padding:2rem;color:var(--txt-2);font-family:var(--mono);font-size:.78rem">Loading…</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toastContainer"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+const phaseColors = {{ phase_colors | tojson }};
+const phaseLabels = {{ phase_labels | tojson }};
+let pollInterval = null, logInterval = null;
+
+function startScan() {
+  const sources = [...document.querySelectorAll('.source-check:checked')].map(el => el.value);
+  if (!sources.length) { showToast('Select at least one source.', 'warn'); return; }
+
+  document.getElementById('scanBtn').disabled = true;
+  document.getElementById('stopBtn').classList.remove('d-none');
+  document.getElementById('scanProgress').classList.remove('d-none');
+  document.getElementById('logPanel').classList.remove('d-none');
+  document.getElementById('logLines').innerHTML = '';
+
+  fetch('/scan/start', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      sources,
+      location: document.getElementById('scanLocation').value,
+      max_pages: parseInt(document.getElementById('maxPages').value),
+    })
+  })
+  .then(r => r.json())
+  .then(d => {
+    if (d.error) { showToast(d.error, 'danger'); resetScanUI(); return; }
+    showToast('Scan started — this may take several minutes.', 'info');
+    pollInterval = setInterval(pollScanStatus, 3000);
+    logInterval  = setInterval(pollLog, 2000);
+  })
+  .catch(() => { showToast('Failed to start scan.', 'danger'); resetScanUI(); });
+}
+
+function stopScan() {
+  fetch('/scan/stop', { method: 'POST' }).then(() => {
+    showToast('Stop signal sent…', 'warn');
+    document.getElementById('stopBtn').disabled = true;
+  });
+}
+
+function pollScanStatus() {
+  fetch('/scan/status').then(r => r.json()).then(d => {
+    document.getElementById('scanProgressText').textContent = d.progress || 'Running…';
+    const parts = [];
+    if (d.raw_signals)     parts.push(`${d.raw_signals} signals`);
+    if (d.companies_found) parts.push(`${d.companies_found} companies`);
+    document.getElementById('scanCounters').textContent = parts.join(' · ');
+    if (d.status !== 'running') {
+      clearInterval(pollInterval); clearInterval(logInterval);
+      pollLog(); resetScanUI();
+      showToast('Scan complete — refreshing…', 'success');
+      setTimeout(() => location.reload(), 2500);
+    }
+  });
+}
+
+let _lastLog = 0;
+function pollLog() {
+  fetch('/scan/log').then(r => r.json()).then(lines => {
+    if (lines.length === _lastLog) return;
+    _lastLog = lines.length;
+    const el = document.getElementById('logLines');
+    el.innerHTML = lines.map(l => {
+      let c = '#4ade80';
+      if (l.includes('ERROR') || l.includes('✗'))   c = '#f87171';
+      if (l.includes('⛔') || l.includes('stopped')) c = '#fbbf24';
+      if (l.includes('▶'))  c = '#60a5fa';
+      if (l.includes('───')) c = '#283044';
+      return `<div style="color:${c};margin-bottom:1px">${esc(l)}</div>`;
+    }).join('');
+    const box = document.getElementById('logContainer');
+    box.scrollTop = box.scrollHeight;
+  });
+}
+
+function clearLog() { document.getElementById('logLines').innerHTML = ''; _lastLog = 0; }
+function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function resetScanUI() {
+  document.getElementById('scanBtn').disabled = false;
+  document.getElementById('stopBtn').classList.add('d-none');
+  document.getElementById('stopBtn').disabled = false;
+  document.getElementById('scanProgress').classList.add('d-none');
+  document.getElementById('scanCounters').textContent = '';
+  _lastLog = 0;
+}
+
+let showNewOnly = false;
+function toggleNewOnly() {
+  showNewOnly = !showNewOnly;
+  document.getElementById('newOnlyBtn').classList.toggle('active', showNewOnly);
+  filterTable();
+}
+
+function filterTable() {
+  const phase  = document.getElementById('filterPhase').value;
+  const source = document.getElementById('filterSource').value.toLowerCase();
+  const size   = document.getElementById('filterSize').value;
+  const search = document.getElementById('filterSearch').value.toLowerCase();
+
+  document.querySelectorAll('#companyTable tbody tr').forEach(row => {
+    const matchPhase  = !phase  || (row.dataset.phase   || '').includes(phase);
+    const matchSource = !source || (row.dataset.sources || '').includes(source);
+    const matchSize   = !size   || (row.dataset.size    || '') === size;
+    const matchSearch = !search || (row.dataset.name    || '').includes(search);
+    const matchNew    = !showNewOnly || row.dataset.isnew === 'true';
+    row.style.display = (matchPhase && matchSource && matchSize && matchSearch && matchNew) ? '' : 'none';
+  });
+}
+
+// Wire size filter in scan control to filter the table too
+document.getElementById('sizeFilter').addEventListener('change', function() {
+  document.getElementById('filterSize').value = this.value;
+  filterTable();
+});
+
+let _modalId = null, _modalName = '';
+function viewSignals(id, name) {
+  _modalId = id; _modalName = name;
+  document.getElementById('signalModalTitle').textContent = name;
+  switchModalTab('signals');
+  new bootstrap.Modal(document.getElementById('signalModal')).show();
+}
+
+function switchModalTab(tab) {
+  document.querySelectorAll('.modal-tab').forEach(b => b.classList.remove('active'));
+  document.getElementById(tab === 'signals' ? 'tabSignals' : 'tabContacts').classList.add('active');
+  tab === 'signals' ? loadSignals(_modalId) : loadContacts(_modalId);
+}
+
+function loadSignals(id) {
+  document.getElementById('signalModalBody').innerHTML = '<div style="text-align:center;padding:2rem;color:var(--txt-2);font-family:var(--mono);font-size:.78rem">Loading…</div>';
+  fetch(`/api/company/${id}/signals`).then(r => r.json()).then(sigs => {
+    if (!sigs.length) { document.getElementById('signalModalBody').innerHTML = '<p style="text-align:center;padding:2rem;color:var(--txt-2);font-family:var(--mono);font-size:.78rem">No signals found.</p>'; return; }
+    document.getElementById('signalModalBody').innerHTML = sigs.map(s => {
+      const c = phaseColors[s.phase] || '#556280';
+      const l = phaseLabels[s.phase] || s.phase;
+      return `<div class="signal-card">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start">
+          <span class="sig-title">${esc(s.job_title||'—')}</span>
+          <span class="signal-src">${esc(s.source||'')}</span>
+        </div>
+        <div class="sig-meta"><span style="color:${c}">${l}</span>${s.oracle_product?` · <span style="color:var(--red)">${esc(s.oracle_product)}</span>`:''}</div>
+        ${s.evidence?`<div class="sig-desc">${esc(s.evidence.substring(0,220))}</div>`:''}
+        ${s.url&&!s.url.includes('news.google.com')?`<a href="${s.url}" target="_blank" class="sig-link"><i class="bi bi-box-arrow-up-right me-1"></i>${esc(s.url.substring(0,70))}…</a>`:''}
+      </div>`;
+    }).join('');
+  });
+}
+
+function loadContacts(id) {
+  document.getElementById('signalModalBody').innerHTML = '<div style="text-align:center;padding:2rem;color:var(--txt-2);font-family:var(--mono);font-size:.78rem">Loading contacts…</div>';
+  fetch(`/api/company/${id}/contacts`).then(r => r.json()).then(contacts => {
+    const btn = `<div style="display:flex;justify-content:flex-end;margin-bottom:.75rem"><button class="enrich-btn" onclick="enrichContacts(${id})"><i class="bi bi-search me-1"></i>Find contacts via Hunter.io</button></div>`;
+    if (!contacts.length) { document.getElementById('signalModalBody').innerHTML = btn + '<p style="text-align:center;padding:2rem;color:var(--txt-2);font-family:var(--mono);font-size:.78rem">No contacts yet.</p>'; return; }
+    document.getElementById('signalModalBody').innerHTML = btn + contacts.map(c => {
+      const ini = ((c.first_name||'?')[0]+(c.last_name||'?')[0]).toUpperCase();
+      return `<div class="contact-card ${c.is_target?'is-target':''}">
+        <div class="contact-avatar">${ini}</div>
+        <div style="flex:1;min-width:0">
+          <div class="contact-name">${esc(c.full_name||'—')}${c.is_target?'<span style="font-size:.6rem;color:var(--red);font-family:var(--mono);margin-left:.4rem">DECISION MAKER</span>':''}</div>
+          <div class="contact-title">${esc(c.title||'')}</div>
+          ${c.email?`<div class="contact-email"><i class="bi bi-envelope me-1"></i><a href="mailto:${esc(c.email)}" style="color:var(--blue)">${esc(c.email)}</a></div>`:''}
+          ${c.linkedin_url?`<div class="contact-email"><i class="bi bi-linkedin me-1"></i><a href="${c.linkedin_url}" target="_blank" style="color:var(--blue)">LinkedIn</a></div>`:''}
+          <div class="contact-meta">${esc(c.seniority||'')}${c.confidence?' · '+c.confidence+'% confidence':''}</div>
+        </div>
+      </div>`;
+    }).join('');
+  });
+}
+
+function enrichContacts(id) {
+  document.getElementById('signalModalBody').innerHTML = '<div style="text-align:center;padding:2rem;color:var(--txt-2);font-family:var(--mono);font-size:.78rem">Searching Hunter.io…</div>';
+  fetch(`/api/company/${id}/contacts/enrich`, {method:'POST'}).then(r => r.json()).then(d => {
+    if (d.error) { showToast(d.error, 'danger'); loadContacts(id); return; }
+    showToast(`Found ${d.count} contact${d.count!==1?'s':''}.`, 'success');
+    loadContacts(id);
+  }).catch(() => { showToast('Enrichment failed.', 'danger'); loadContacts(id); });
+}
+
+function purgeInvalid() {
+  fetch('/admin/purge-invalid', { method: 'POST' })
+    .then(r => r.json())
+    .then(d => {
+      showToast(d.message, d.deleted > 0 ? 'success' : 'info');
+      if (d.deleted > 0) setTimeout(() => location.reload(), 1500);
+    })
+    .catch(() => showToast('Purge failed.', 'danger'));
+}
+
+function confirmReset() {
+  if (!confirm('This will delete ALL companies, signals, and scan history. Are you sure?')) return;
+  fetch('/admin/reset-all', { method: 'POST' })
+    .then(r => r.json())
+    .then(d => { showToast(d.message, 'warn'); setTimeout(() => location.reload(), 1500); })
+    .catch(() => showToast('Reset failed.', 'danger'));
+}
+
+function downloadAndRefresh(url) {
+  const a = document.createElement('a'); a.href = url; a.download = '';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(() => location.reload(), 2500);
+}
+
+function showToast(msg, type = 'info') {
+  const cols = { success:'var(--green)', danger:'var(--red)', warn:'var(--amber)', info:'var(--blue)' };
+  const el = document.createElement('div');
+  el.className = 'toast-item';
+  el.innerHTML = `<span class="toast-dot" style="background:${cols[type]||cols.info}"></span>${msg}`;
+  document.getElementById('toastContainer').appendChild(el);
+  setTimeout(() => el.remove(), 5000);
+}
+
+{% if scan_status.status == 'running' %}
+document.getElementById('scanProgress').classList.remove('d-none');
+document.getElementById('logPanel').classList.remove('d-none');
+document.getElementById('scanBtn').disabled = true;
+document.getElementById('stopBtn').classList.remove('d-none');
+pollInterval = setInterval(pollScanStatus, 3000);
+logInterval  = setInterval(pollLog, 2000);
+pollLog();
+{% endif %}
+</script>
+</body>
+</html>

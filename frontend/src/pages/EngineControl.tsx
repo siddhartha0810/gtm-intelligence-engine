@@ -1,0 +1,526 @@
+import { useState, useEffect, useRef } from 'react'
+import { Play, Square, RotateCcw, Download, Trash2, Factory, Users, CheckCircle, Mail } from 'lucide-react'
+import { toast } from '../components/Toast'
+
+const ENGINES = [
+  { id: 'oracle',      label: 'Oracle Intent Engine',   desc: 'Scans job boards, oracle.com, news & case studies for Oracle/JDE signals', color: '#3b82f6', modules: 18 },
+  { id: 'enrichment',  label: 'Lead Enrichment Engine', desc: '7-stage: Apollo → ZeroBounce → LinkedIn → HubSpot push',                  color: '#6366f1', modules: 7 },
+  { id: 'hubspot',     label: 'HubSpot Sync Engine',    desc: 'Pushes approved contacts from Review Queue to CRM',                       color: '#f59e0b', modules: 1 },
+]
+
+const SOURCES: { label: string; id: string; desc: string }[] = [
+  { id: 'linkedin',          label: 'LinkedIn Jobs',          desc: 'Job postings (public search)' },
+  { id: 'oracle_website',    label: 'Oracle.com',             desc: 'Customer stories + press releases' },
+  { id: 'partner_casestudy', label: 'Partner Stories',        desc: 'Oracle Gold/Platinum SI case studies' },
+  { id: 'si_casestudy',      label: 'SI Case Studies',        desc: 'Accenture, Deloitte, PwC, KPMG client names' },
+  { id: 'oracle_community',  label: 'Oracle Community',       desc: 'Migration stories + oracle.com news' },
+  { id: 'oracle_event',      label: 'Oracle Events',          desc: 'CloudWorld / OpenWorld attendance signals' },
+  { id: 'news',              label: 'News Feeds',             desc: 'Bing RSS — go-live announcements' },
+  { id: 'erp_today',         label: 'ERP Today',              desc: 'ERP industry news RSS' },
+  { id: 'home_builders',     label: 'Home Builders',          desc: '1,000+ annual closings — JDE construction signals' },
+  { id: 'indeed',            label: 'Indeed',                 desc: 'Job postings' },
+  { id: 'company_pages',     label: 'Company Press Releases', desc: 'Company IR pages + announcements' },
+  { id: 'procurement',       label: 'Procurement Tenders',    desc: 'Contracts Finder, SAM.gov, TED EU' },
+]
+
+const DEFAULT_SOURCES = ['linkedin', 'oracle_website', 'partner_casestudy', 'si_casestudy', 'oracle_community', 'oracle_event', 'news', 'erp_today', 'home_builders']
+
+const card = { background: '#161b27', border: '1px solid #1f2d45', borderRadius: 12, padding: 20 }
+const now  = () => new Date().toLocaleTimeString('en-GB', { hour12: false })
+const levelColor = (l: string) =>
+  l === 'SUCCESS' ? '#10b981' : l === 'ERROR' ? '#ef4444' : l === 'WARN' ? '#f59e0b' : '#64748b'
+
+interface LogEntry { t: string; level: string; msg: string }
+interface EnrichStats {
+  total_companies?: number; enriched_companies?: number; pending_companies?: number;
+  total_contacts?: number; contacts_with_email?: number; contacts_valid_email?: number;
+  apollo_configured?: boolean; zerobounce_configured?: boolean;
+}
+interface EnrichStatus {
+  status?: string; progress?: string;
+  companies_processed?: number; companies_total?: number;
+  contacts_found?: number; contacts_validated?: number;
+}
+
+export default function EngineControl() {
+  const [oracleState,      setOracleState]      = useState<'idle' | 'running' | 'stopping'>('idle')
+  const [enrichState,      setEnrichState]      = useState<'idle' | 'running'>('idle')
+  const [logs,             setLogs]             = useState<LogEntry[]>([{ t: now(), level: 'INFO', msg: 'System ready. Fetching engine status...' }])
+  const [enrichLogs,       setEnrichLogs]       = useState<LogEntry[]>([])
+  const [selectedSources,  setSelectedSources]  = useState<string[]>(DEFAULT_SOURCES)
+  const [depth,            setDepth]            = useState('medium')
+  const [jdeMfg,           setJdeMfg]           = useState(false)
+  const [enrichLimit,      setEnrichLimit]      = useState(50)
+  const [enrichPerCo,      setEnrichPerCo]      = useState(10)
+  const [enrichStats,      setEnrichStats]      = useState<EnrichStats>({})
+  const [enrichStatus,     setEnrichStatus]     = useState<EnrichStatus>({})
+  const [showEnrichLog,    setShowEnrichLog]    = useState(false)
+  const logRef       = useRef<HTMLDivElement>(null)
+  const enrichLogRef = useRef<HTMLDivElement>(null)
+  const pollRef      = useRef<ReturnType<typeof setInterval> | null>(null)
+  const enrichPoll   = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  const addLog = (level: string, msg: string) =>
+    setLogs(l => [...l.slice(-200), { t: now(), level, msg }])
+
+  const parseLine = (line: string): LogEntry => {
+    const m = line.match(/^\[(\d{2}:\d{2}:\d{2})\]\s+\[(\w+)\]\s+(.+)$/)
+    if (m) return { t: m[1], level: m[2], msg: m[3] }
+    const m2 = line.match(/^\[(\w+)\]\s+(.+)$/)
+    if (m2) return { t: now(), level: m2[1], msg: m2[2] }
+    return { t: now(), level: 'INFO', msg: line }
+  }
+
+  const fetchStatus = async () => {
+    try {
+      const r = await fetch('/scan/status')
+      if (!r.ok) return
+      const d = await r.json()
+      if (d.status === 'running') setOracleState('running')
+      else if (oracleState === 'running') setOracleState('idle')
+    } catch { /* silent */ }
+  }
+
+  const fetchLog = async () => {
+    try {
+      const r = await fetch('/scan/log')
+      if (!r.ok) return
+      const d = await r.json()
+      const entries: LogEntry[] = (d.log || d || []).map((line: string) => parseLine(line))
+      if (entries.length > 0) setLogs(entries.slice(-100))
+    } catch { /* silent */ }
+  }
+
+  const fetchEnrichStats = async () => {
+    try {
+      const r = await fetch('/api/enrich/stats')
+      if (r.ok) setEnrichStats(await r.json())
+    } catch { /* silent */ }
+  }
+
+  const fetchEnrichLog = async () => {
+    try {
+      const r = await fetch('/api/enrich/log')
+      if (!r.ok) return
+      const lines: string[] = await r.json()
+      if (lines.length > 0) setEnrichLogs(lines.map(parseLine).slice(-100))
+    } catch { /* silent */ }
+  }
+
+  const fetchEnrichStatus = async () => {
+    try {
+      const r = await fetch('/api/enrich/status')
+      if (!r.ok) return
+      const d = await r.json()
+      setEnrichStatus(d)
+      if (d.status === 'running') {
+        setEnrichState('running')
+      } else if (enrichState === 'running') {
+        setEnrichState('idle')
+        fetchEnrichStats()
+      }
+    } catch { /* silent */ }
+  }
+
+  const startEngine = async () => {
+    const maxPages = depth === 'shallow' ? 1 : depth === 'deep' ? 5 : 3
+    try {
+      const res = await fetch('/scan/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sources: selectedSources, max_pages: maxPages, jde_manufacturing: jdeMfg }),
+      })
+      if (!res.ok) { toast.error((await res.json()).error || 'Failed to start scan'); return }
+      setOracleState('running')
+      addLog('INFO', `Oracle Intent Engine starting... sources: ${selectedSources.join(', ')}${jdeMfg ? ' [JDE Mfg Focus]' : ''}`)
+      toast.success('Oracle Intent scan started')
+      if (pollRef.current) clearInterval(pollRef.current)
+      pollRef.current = setInterval(async () => {
+        await fetchLog()
+        const s = await fetch('/scan/status').then(r => r.json()).catch(() => null)
+        if (s && s.status !== 'running') {
+          setOracleState('idle')
+          addLog('SUCCESS', 'Oracle Intent scan completed.')
+          toast.success('Oracle Intent scan completed')
+          clearInterval(pollRef.current!)
+          fetchEnrichStats()
+        }
+      }, 3000)
+    } catch { toast.error('Cannot connect to backend.') }
+  }
+
+  const stopEngine = async () => {
+    try {
+      await fetch('/scan/stop', { method: 'POST' })
+      setOracleState('stopping')
+      addLog('INFO', 'Stop signal sent. Engine winding down...')
+      toast.info('Oracle scan stopping...')
+      setTimeout(() => { setOracleState('idle'); addLog('INFO', 'Engine stopped.'); if (pollRef.current) clearInterval(pollRef.current) }, 2000)
+    } catch { toast.error('Failed to send stop signal') }
+  }
+
+  const startEnrichment = async () => {
+    try {
+      const res = await fetch('/api/enrich/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ limit: enrichLimit, max_per_company: enrichPerCo }),
+      })
+      if (!res.ok) { toast.error((await res.json()).error || 'Failed to start enrichment'); return }
+      setEnrichState('running')
+      setShowEnrichLog(true)
+      toast.success('Contact enrichment started')
+      if (enrichPoll.current) clearInterval(enrichPoll.current)
+      enrichPoll.current = setInterval(async () => {
+        await fetchEnrichLog()
+        await fetchEnrichStatus()
+        const s = await fetch('/api/enrich/status').then(r => r.json()).catch(() => null)
+        if (s && s.status !== 'running') {
+          setEnrichState('idle')
+          clearInterval(enrichPoll.current!)
+          fetchEnrichStats()
+          toast.success(`Enrichment done — ${s.contacts_found || 0} contacts, ${s.contacts_validated || 0} valid emails`)
+        }
+      }, 3000)
+    } catch { toast.error('Cannot connect to backend.') }
+  }
+
+  const stopEnrichment = async () => {
+    try {
+      await fetch('/api/enrich/stop', { method: 'POST' })
+      setEnrichState('idle')
+      if (enrichPoll.current) clearInterval(enrichPoll.current)
+      toast.info('Enrichment stopped')
+    } catch { toast.error('Failed to stop enrichment') }
+  }
+
+  const resetEngine = () => {
+    if (oracleState === 'running') stopEngine()
+    setTimeout(() => { setOracleState('idle'); toast.info('Engine reset') }, oracleState === 'running' ? 2500 : 0)
+  }
+
+  useEffect(() => {
+    fetchStatus(); fetchLog(); fetchEnrichStats(); fetchEnrichStatus()
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current)
+      if (enrichPoll.current) clearInterval(enrichPoll.current)
+    }
+  }, [])
+
+  useEffect(() => { if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight }, [logs])
+  useEffect(() => { if (enrichLogRef.current) enrichLogRef.current.scrollTop = enrichLogRef.current.scrollHeight }, [enrichLogs])
+
+  const toggleSource = (id: string) =>
+    setSelectedSources(ss => ss.includes(id) ? ss.filter(x => x !== id) : [...ss, id])
+
+  const exportLog = () => {
+    navigator.clipboard.writeText(logs.map(l => `[${l.t}] [${l.level}] ${l.msg}`).join('\n'))
+      .then(() => toast.success('Log copied to clipboard'))
+  }
+
+  const clearLog = () => { setLogs([{ t: now(), level: 'INFO', msg: 'Log cleared.' }]); toast.info('Log cleared') }
+
+  const pending   = enrichStats.pending_companies ?? 0
+  const enriched  = enrichStats.enriched_companies ?? 0
+  const totalCo   = enrichStats.total_companies ?? 0
+  const totalCt   = enrichStats.total_contacts ?? 0
+  const validCt   = enrichStats.contacts_valid_email ?? 0
+  const pctDone   = totalCo > 0 ? Math.round((enriched / totalCo) * 100) : 0
+  const apolloOk  = enrichStats.apollo_configured
+  const zbOk      = enrichStats.zerobounce_configured
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20, width: '100%' }}>
+      <div>
+        <h1 style={{ fontSize: 20, fontWeight: 600, color: 'white', margin: 0 }}>Engine Control</h1>
+        <p style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>Start, stop, and monitor intelligence engines in real time</p>
+      </div>
+
+      {/* Engine cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
+        {ENGINES.map(engine => {
+          const isOracle = engine.id === 'oracle'
+          const state    = isOracle ? oracleState : 'idle'
+          const running  = state === 'running'
+          return (
+            <div key={engine.id} style={card}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 12 }}>
+                <div style={{ flex: 1, paddingRight: 12 }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: 'white' }}>{engine.label}</div>
+                  <div style={{ fontSize: 12, color: '#475569', marginTop: 4, lineHeight: 1.5 }}>{engine.desc}</div>
+                </div>
+                <div style={{ width: 10, height: 10, borderRadius: '50%', flexShrink: 0, marginTop: 4, background: running ? engine.color : '#374151', boxShadow: running ? `0 0 8px ${engine.color}` : 'none' }} />
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+                <span style={{ fontSize: 12, padding: '2px 10px', borderRadius: 999, fontWeight: 500, background: running ? `${engine.color}18` : state === 'stopping' ? 'rgba(245,158,11,0.12)' : 'rgba(55,65,81,0.4)', color: running ? engine.color : state === 'stopping' ? '#f59e0b' : '#6b7280' }}>
+                  {running ? 'Running' : state === 'stopping' ? 'Stopping...' : 'Idle'}
+                </span>
+                {engine.modules > 1 && <span style={{ fontSize: 12, color: '#374151' }}>{engine.modules} modules</span>}
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {isOracle ? (
+                  state === 'idle' ? (
+                    <button onClick={startEngine} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '9px 0', borderRadius: 8, border: 'none', background: engine.color, color: 'white', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
+                      <Play size={13} /> Start Scan
+                    </button>
+                  ) : (
+                    <button onClick={stopEngine} disabled={state === 'stopping'} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '9px 0', borderRadius: 8, border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.1)', color: '#ef4444', fontSize: 13, fontWeight: 500, cursor: 'pointer', opacity: state === 'stopping' ? 0.5 : 1 }}>
+                      <Square size={13} /> Stop
+                    </button>
+                  )
+                ) : (
+                  <button disabled style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '9px 0', borderRadius: 8, border: 'none', background: 'rgba(55,65,81,0.4)', color: '#6b7280', fontSize: 13, cursor: 'default' }}>
+                    <Play size={13} /> Start
+                  </button>
+                )}
+                <button onClick={isOracle ? resetEngine : undefined} style={{ width: 36, height: 36, borderRadius: 8, border: '1px solid #1f2d45', background: 'transparent', cursor: isOracle ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#475569', opacity: isOracle ? 1 : 0.3 }}>
+                  <RotateCcw size={13} />
+                </button>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Config + Scan Log */}
+      <div style={{ display: 'grid', gridTemplateColumns: '360px 1fr', gap: 16 }}>
+        {/* Scan config */}
+        <div style={card}>
+          <div style={{ fontSize: 14, fontWeight: 600, color: 'white', marginBottom: 16 }}>Scan Configuration</div>
+
+          {/* JDE Manufacturing Focus */}
+          <div style={{ marginBottom: 16, padding: '12px 14px', background: jdeMfg ? 'rgba(16,185,129,0.08)' : '#0d1117', border: `1px solid ${jdeMfg ? 'rgba(16,185,129,0.3)' : '#253047'}`, borderRadius: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <button
+                onClick={() => setJdeMfg(v => !v)}
+                style={{ width: 36, height: 20, borderRadius: 10, border: 'none', cursor: 'pointer', background: jdeMfg ? '#10b981' : '#374151', position: 'relative', flexShrink: 0, transition: 'background 0.2s' }}
+              >
+                <span style={{ position: 'absolute', top: 2, left: jdeMfg ? 18 : 2, width: 16, height: 16, borderRadius: '50%', background: 'white', transition: 'left 0.2s' }} />
+              </button>
+              <Factory size={14} color={jdeMfg ? '#10b981' : '#475569'} />
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: jdeMfg ? '#10b981' : '#94a3b8' }}>JDE Manufacturing Focus</div>
+                <div style={{ fontSize: 11, color: '#475569', marginTop: 2 }}>Manufacturing queries + LinkedIn industry filter</div>
+              </div>
+            </div>
+            {jdeMfg && (
+              <div style={{ marginTop: 10, fontSize: 11, color: '#64748b', lineHeight: 1.6 }}>
+                ✓ 29 manufacturing-specific JDE queries<br/>
+                ✓ LinkedIn: Manufacturing, Automotive, Industrial Eng, Construction, Energy, Food & Bev<br/>
+                ✓ Home Builders: 36 companies ≥1,000 annual closings
+              </div>
+            )}
+          </div>
+
+          {/* Data Sources */}
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 12, fontWeight: 500, color: '#94a3b8', marginBottom: 10 }}>Data Sources</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {SOURCES.map(s => {
+                const active = selectedSources.includes(s.id)
+                return (
+                  <button key={s.id} onClick={() => toggleSource(s.id)}
+                    style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 8, cursor: 'pointer', background: active ? 'rgba(59,130,246,0.1)' : 'rgba(255,255,255,0.02)', color: active ? '#93c5fd' : '#475569', border: active ? '1px solid rgba(59,130,246,0.25)' : '1px solid #1f2d45', textAlign: 'left', transition: 'all 0.15s' }}>
+                    <div style={{ width: 6, height: 6, borderRadius: '50%', background: active ? '#3b82f6' : '#374151', flexShrink: 0 }} />
+                    <div style={{ flex: 1 }}>
+                      <span style={{ fontSize: 12, fontWeight: 500 }}>{s.label}</span>
+                      <span style={{ fontSize: 11, color: '#374151', marginLeft: 6 }}>{s.desc}</span>
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Scan Depth */}
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 12, fontWeight: 500, color: '#94a3b8', marginBottom: 8 }}>Scan Depth</div>
+            <select value={depth} onChange={e => setDepth(e.target.value)} style={{ width: '100%', padding: '8px 12px', borderRadius: 8, background: '#0d1117', color: '#e2e8f0', border: '1px solid #253047', fontSize: 13, cursor: 'pointer' }}>
+              <option value="shallow">Shallow — fast, 1 page per source</option>
+              <option value="medium">Medium — balanced, 3 pages</option>
+              <option value="deep">Deep — thorough, 5 pages</option>
+            </select>
+          </div>
+
+          <div style={{ padding: '10px 12px', background: '#0d1117', border: '1px solid #253047', borderRadius: 8, fontSize: 11, color: '#374151' }}>
+            {selectedSources.length} sources selected · depth: {depth}
+            {jdeMfg && <span style={{ color: '#10b981', marginLeft: 8 }}>· JDE Mfg focus ON</span>}
+          </div>
+        </div>
+
+        {/* Scan live log */}
+        <div style={{ background: '#080c14', border: '1px solid #1f2d45', borderRadius: 12, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', borderBottom: '1px solid #1f2d45' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#ef4444' }} />
+              <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#f59e0b' }} />
+              <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#10b981' }} />
+              <span style={{ marginLeft: 8, fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: '#475569' }}>scan.log — {logs.length} events</span>
+            </div>
+            <div style={{ display: 'flex', gap: 12 }}>
+              <button onClick={exportLog} style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4, color: '#475569', background: 'none', border: 'none', cursor: 'pointer' }}><Download size={11} /> Export</button>
+              <button onClick={clearLog} style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4, color: '#475569', background: 'none', border: 'none', cursor: 'pointer' }}><Trash2 size={11} /> Clear</button>
+            </div>
+          </div>
+          <div ref={logRef} style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12, padding: 16, flex: 1, minHeight: 260, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {logs.map((log, i) => (
+              <div key={i} style={{ display: 'flex', gap: 12, lineHeight: '1.7' }}>
+                <span style={{ color: '#374151', flexShrink: 0 }}>[{log.t}]</span>
+                <span style={{ color: levelColor(log.level), flexShrink: 0, minWidth: 72 }}>[{log.level}]</span>
+                <span style={{ color: '#94a3b8' }}>{log.msg}</span>
+              </div>
+            ))}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span style={{ color: '#374151' }}>›</span>
+              <span style={{ display: 'inline-block', width: 7, height: 14, background: '#3b82f6', opacity: 0.7 }} />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Contact Enrichment Pipeline ────────────────────────────────────── */}
+      <div style={card}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: 'white' }}>Contact Enrichment Pipeline</div>
+            <div style={{ fontSize: 12, color: '#475569', marginTop: 3 }}>
+              For each new company: check DB → Apollo people search → validate emails → store contacts
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <span style={{ fontSize: 11, padding: '3px 8px', borderRadius: 6, background: apolloOk ? 'rgba(59,130,246,0.15)' : 'rgba(239,68,68,0.1)', color: apolloOk ? '#60a5fa' : '#f87171', border: `1px solid ${apolloOk ? 'rgba(59,130,246,0.25)' : 'rgba(239,68,68,0.2)'}` }}>
+                Apollo {apolloOk ? '✓' : '✗'}
+              </span>
+              <span style={{ fontSize: 11, padding: '3px 8px', borderRadius: 6, background: zbOk ? 'rgba(16,185,129,0.12)' : 'rgba(100,116,139,0.1)', color: zbOk ? '#34d399' : '#64748b', border: `1px solid ${zbOk ? 'rgba(16,185,129,0.2)' : '#1f2d45'}` }}>
+                ZeroBounce {zbOk ? '✓' : 'optional'}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Stats row */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10, marginBottom: 20 }}>
+          {[
+            { icon: <Users size={14} />, label: 'Total Companies', value: totalCo, color: '#3b82f6' },
+            { icon: <CheckCircle size={14} />, label: 'Enriched', value: enriched, color: '#10b981' },
+            { icon: <Users size={14} />, label: 'Pending', value: pending, color: '#f59e0b' },
+            { icon: <Users size={14} />, label: 'Contacts Found', value: totalCt, color: '#8b5cf6' },
+            { icon: <Mail size={14} />, label: 'Valid Emails', value: validCt, color: '#06b6d4' },
+          ].map(({ icon, label, value, color }) => (
+            <div key={label} style={{ background: '#0d1117', border: '1px solid #1f2d45', borderRadius: 10, padding: '12px 14px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6, color }}>
+                {icon}
+                <span style={{ fontSize: 11, color: '#475569' }}>{label}</span>
+              </div>
+              <div style={{ fontSize: 22, fontWeight: 700, color: 'white' }}>{value.toLocaleString()}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Enrichment progress bar */}
+        {totalCo > 0 && (
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, fontSize: 12, color: '#64748b' }}>
+              <span>Enrichment coverage</span>
+              <span>{enriched} / {totalCo} companies ({pctDone}%)</span>
+            </div>
+            <div style={{ height: 6, background: '#1f2d45', borderRadius: 3, overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: `${pctDone}%`, background: 'linear-gradient(90deg, #3b82f6, #6366f1)', borderRadius: 3, transition: 'width 0.4s' }} />
+            </div>
+          </div>
+        )}
+
+        {/* Running progress */}
+        {enrichState === 'running' && (
+          <div style={{ marginBottom: 16, padding: '10px 14px', background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.25)', borderRadius: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+              <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#6366f1', boxShadow: '0 0 6px #6366f1', animation: 'pulse 1s infinite' }} />
+              <span style={{ fontSize: 13, color: '#a5b4fc', fontWeight: 500 }}>Enrichment running...</span>
+            </div>
+            <div style={{ fontSize: 12, color: '#64748b' }}>{enrichStatus.progress || 'Processing...'}</div>
+            <div style={{ display: 'flex', gap: 20, marginTop: 8, fontSize: 12, color: '#94a3b8' }}>
+              <span>{enrichStatus.companies_processed ?? 0} / {enrichStatus.companies_total ?? '?'} companies</span>
+              <span>{enrichStatus.contacts_found ?? 0} contacts found</span>
+              <span>{enrichStatus.contacts_validated ?? 0} valid emails</span>
+            </div>
+          </div>
+        )}
+
+        {/* Controls row */}
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 14, flexWrap: 'wrap' }}>
+          <div>
+            <div style={{ fontSize: 11, color: '#64748b', marginBottom: 5 }}>Companies per run</div>
+            <select value={enrichLimit} onChange={e => setEnrichLimit(+e.target.value)}
+              style={{ padding: '7px 10px', borderRadius: 8, background: '#0d1117', color: '#e2e8f0', border: '1px solid #253047', fontSize: 12 }}>
+              <option value={20}>20</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+              <option value={200}>200</option>
+            </select>
+          </div>
+          <div>
+            <div style={{ fontSize: 11, color: '#64748b', marginBottom: 5 }}>Contacts per company</div>
+            <select value={enrichPerCo} onChange={e => setEnrichPerCo(+e.target.value)}
+              style={{ padding: '7px 10px', borderRadius: 8, background: '#0d1117', color: '#e2e8f0', border: '1px solid #253047', fontSize: 12 }}>
+              <option value={5}>5</option>
+              <option value={10}>10</option>
+              <option value={15}>15</option>
+              <option value={25}>25</option>
+            </select>
+          </div>
+
+          {enrichState === 'idle' ? (
+            <button
+              onClick={startEnrichment}
+              disabled={!apolloOk}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 20px', borderRadius: 8, border: 'none', background: apolloOk ? '#6366f1' : 'rgba(55,65,81,0.4)', color: apolloOk ? 'white' : '#6b7280', fontSize: 13, fontWeight: 500, cursor: apolloOk ? 'pointer' : 'not-allowed' }}
+              title={!apolloOk ? 'Add APOLLO_API_KEY to oracle_intent_engine/.env' : ''}
+            >
+              <Play size={13} />
+              {pending > 0 ? `Enrich ${pending} companies` : 'Run Enrichment'}
+            </button>
+          ) : (
+            <button onClick={stopEnrichment}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 20px', borderRadius: 8, border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.1)', color: '#ef4444', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
+              <Square size={13} /> Stop Enrichment
+            </button>
+          )}
+
+          <button onClick={() => { setShowEnrichLog(v => !v); if (!showEnrichLog) fetchEnrichLog() }}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 14px', borderRadius: 8, border: '1px solid #1f2d45', background: 'transparent', color: '#64748b', fontSize: 12, cursor: 'pointer' }}>
+            {showEnrichLog ? 'Hide' : 'Show'} log
+          </button>
+
+          {!apolloOk && (
+            <div style={{ fontSize: 11, color: '#f87171', padding: '8px 12px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 8 }}>
+              Apollo API key not configured. Add <code style={{ background: 'rgba(239,68,68,0.15)', padding: '1px 4px', borderRadius: 3 }}>APOLLO_API_KEY</code> to <code style={{ background: 'rgba(239,68,68,0.15)', padding: '1px 4px', borderRadius: 3 }}>oracle_intent_engine/.env</code>
+            </div>
+          )}
+        </div>
+
+        {/* Enrichment log */}
+        {showEnrichLog && (
+          <div style={{ marginTop: 16, background: '#080c14', border: '1px solid #1f2d45', borderRadius: 10, overflow: 'hidden' }}>
+            <div style={{ padding: '8px 14px', borderBottom: '1px solid #1f2d45', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, color: '#475569' }}>enrich.log — {enrichLogs.length} entries</span>
+              <button onClick={() => setEnrichLogs([])} style={{ fontSize: 11, color: '#475569', background: 'none', border: 'none', cursor: 'pointer' }}>Clear</button>
+            </div>
+            <div ref={enrichLogRef} style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, padding: 14, maxHeight: 220, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 3 }}>
+              {enrichLogs.length === 0
+                ? <span style={{ color: '#374151' }}>No enrichment log yet. Start enrichment to see progress.</span>
+                : enrichLogs.map((log, i) => (
+                    <div key={i} style={{ display: 'flex', gap: 10, lineHeight: '1.6' }}>
+                      <span style={{ color: '#374151', flexShrink: 0 }}>[{log.t}]</span>
+                      <span style={{ color: levelColor(log.level), flexShrink: 0, minWidth: 64 }}>[{log.level}]</span>
+                      <span style={{ color: '#94a3b8' }}>{log.msg}</span>
+                    </div>
+                  ))
+              }
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}

@@ -1,0 +1,447 @@
+"""
+apollo_enrichment.py
+====================
+Post-scan contact enrichment pipeline for Oracle Intent Engine.
+
+Workflow (per company):
+  1. Check company_contacts — if contacts already exist, skip (free)
+  2. Apollo people search — filter by Oracle/JDE-relevant titles
+  3. Reveal locked emails via Apollo people/match endpoint
+  4. ZeroBounce batch email validation
+  5. Store validated contacts in company_contacts table
+
+Called by enrichment_worker.py as a subprocess.
+"""
+
+import json
+import re
+import time
+import urllib.error
+import urllib.request
+from typing import Callable, Optional
+
+from src import database as db
+from src.utils import get_logger
+
+logger = get_logger(__name__)
+
+APOLLO_SEARCH_URL = "https://api.apollo.io/api/v1/mixed_people/api_search"
+APOLLO_REVEAL_URL = "https://api.apollo.io/api/v1/people/match"
+ZB_BATCH_URL      = "https://bulkapi.zerobounce.net/v2/validatebatch"
+ZB_CREDITS_URL    = "https://api.zerobounce.net/v2/getcredits"
+
+RATE_LIMIT_DELAY = 1.2   # seconds between Apollo calls
+
+# Pass-1: exact Oracle/JDE/Finance/IT titles — very targeted
+ORACLE_JDE_TITLES = [
+    "JD Edwards", "JDE", "JDE EnterpriseOne",
+    "Oracle ERP", "Oracle Cloud", "Oracle Fusion", "Oracle EBS",
+    "Oracle HCM", "Oracle SCM", "Oracle EPM", "Oracle NetSuite",
+    "ERP Manager", "ERP Director", "ERP Consultant", "ERP Project Manager",
+    "Finance Director", "Financial Controller", "CFO", "VP Finance",
+    "IT Director", "CIO", "CTO", "VP IT", "IT Manager",
+    "Enterprise Applications Manager", "Business Systems Manager",
+    "Supply Chain Director", "Operations Director",
+    "Digital Transformation Manager", "Oracle Developer",
+]
+
+# Keywords used to score pass-2 (broad) contacts — any match → keep
+_RELEVANCE_KEYWORDS = [
+    "oracle", "jd edwards", "jde", "erp", "enterprise resource",
+    "finance", "financial", "controller", "accounting", "accounts",
+    "supply chain", "procurement", "operations",
+    "information technology", "it director", "it manager", "systems",
+    "cfo", "cio", "cto", "vp finance", "vp it",
+    "digital transformation", "business systems", "enterprise applications",
+]
+
+# ── Live status (read by enrichment_worker's status thread) ─────────────────
+_status: dict = {
+    "status": "idle",
+    "progress": "",
+    "companies_processed": 0,
+    "companies_total": 0,
+    "contacts_found": 0,
+    "contacts_validated": 0,
+}
+
+
+def current_status() -> dict:
+    return dict(_status)
+
+
+# ── Apollo helpers ───────────────────────────────────────────────────────────
+
+# Legal suffixes to strip before sending to Apollo
+_LEGAL_SUFFIXES = [
+    ", llc", ", inc.", ", inc", ", ltd.", ", ltd", ", corp.", ", corp",
+    ", l.l.c.", ", l.l.c", ", plc", ", llp", ", lp", ", gmbh", ", s.a.",
+    " llc", " inc.", " inc", " ltd.", " ltd", " corp.", " corp",
+    " limited", " l.l.c.", " l.l.c", " plc", " llp", " lp", " gmbh",
+    " s.a.", " s.a", " ag", " nv", " bv", " co.", " co",
+]
+
+
+def _clean_company_name(name: str) -> str:
+    """Return a clean company name suitable for Apollo search.
+
+    Strips parenthetical abbreviations, legal suffixes, and stray punctuation
+    that confuse Apollo's org-name matching.
+
+    Examples:
+      "Net2Source (N2S)"              -> "Net2Source"
+      "Plastpro,Inc"                  -> "Plastpro"
+      "G&W Electric Co."              -> "G&W Electric"
+      "Chugach Government Solutions, LLC" -> "Chugach Government Solutions"
+      "McDermott International, Ltd"  -> "McDermott International"
+    """
+    n = name.strip()
+    # Remove parenthetical parts like "(N2S)" or "(formerly XYZ)"
+    n = re.sub(r"\s*\(.*?\)", "", n).strip()
+    # Strip legal suffixes (case-insensitive comparison)
+    lower = n.lower()
+    for suf in _LEGAL_SUFFIXES:
+        if lower.endswith(suf):
+            n = n[: len(n) - len(suf)].strip()
+            lower = n.lower()
+            break
+    # Remove stray trailing punctuation
+    n = n.rstrip(".,;:-").strip()
+    return n or name  # fallback to original if cleaned name is empty
+
+
+def _is_relevant_contact(title: str) -> bool:
+    """Return True if the contact title contains any Oracle/finance/IT keyword."""
+    t = title.lower()
+    return any(kw in t for kw in _RELEVANCE_KEYWORDS)
+
+
+def _apollo_reveal(person_id: str, api_key: str) -> str:
+    """Reveal a locked Apollo email by person ID. Returns email or ''."""
+    if not person_id or not api_key:
+        return ""
+    try:
+        payload = json.dumps({
+            "id": person_id,
+            "reveal_personal_emails": True,
+        }).encode()
+        req = urllib.request.Request(
+            APOLLO_REVEAL_URL, data=payload,
+            headers={"Content-Type": "application/json", "X-Api-Key": api_key},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            data = json.loads(resp.read())
+        return str(data.get("person", {}).get("email") or "").strip().lower()
+    except Exception:
+        return ""
+
+
+def _apollo_call(org_name: str, api_key: str, max_per: int,
+                 with_titles: bool) -> list:
+    """Single Apollo API call. Returns raw parsed contacts list."""
+    payload_dict = {
+        "q_organization_name": org_name,
+        "per_page": min(max_per, 25),
+        "page": 1,
+    }
+    if with_titles:
+        payload_dict["person_titles"] = ORACLE_JDE_TITLES
+
+    try:
+        req = urllib.request.Request(
+            APOLLO_SEARCH_URL,
+            data=json.dumps(payload_dict).encode(),
+            headers={"Content-Type": "application/json", "X-Api-Key": api_key},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            data = json.loads(resp.read())
+    except urllib.error.HTTPError as e:
+        body = ""
+        try:
+            body = e.read().decode("utf-8", errors="replace")[:200]
+        except Exception:
+            pass
+        logger.error(f"Apollo HTTP {e.code} [{org_name}]: {body}")
+        return []
+    except Exception as e:
+        logger.error(f"Apollo API error [{org_name}]: {e}")
+        return []
+
+    if data.get("error"):
+        logger.warning(f"Apollo error [{org_name}]: {data['error']}")
+        return []
+
+    people = data.get("people") or data.get("contacts") or []
+    contacts = []
+    for p in people:
+        if not isinstance(p, dict):
+            continue
+        first = str(p.get("first_name") or "").strip()
+        if not first:
+            continue
+
+        email        = str(p.get("email") or "").strip().lower()
+        email_status = str(p.get("email_status") or "").lower()
+
+        if not email and p.get("has_email"):
+            email        = _apollo_reveal(str(p.get("id") or ""), api_key)
+            email_status = "revealed" if email else ""
+            time.sleep(0.3)
+
+        if email_status in ("unavailable", "bounced", "invalid"):
+            email = ""
+
+        org  = p.get("organization") or p.get("account") or {}
+        domain = ""
+        if isinstance(org, dict):
+            raw    = str(org.get("primary_domain") or org.get("domain") or org.get("website_url") or "")
+            domain = re.sub(r"^https?://", "", raw).lstrip("www.").split("/")[0].lower().strip()
+
+        last  = str(p.get("last_name") or "").strip()
+        title = str(p.get("title") or p.get("headline") or "").strip()
+        contacts.append({
+            "first_name":              first,
+            "last_name":               last,
+            "full_name":               f"{first} {last}".strip(),
+            "title":                   title,
+            "email":                   email or None,
+            "linkedin_url":            str(p.get("linkedin_url") or "").strip() or None,
+            "domain":                  domain,
+            "source":                  "apollo",
+            "confidence":              0.8,
+            "is_target":               1,
+            "email_validation_status": email_status if email else None,
+        })
+    return contacts
+
+
+def _apollo_search(company_name: str, api_key: str, max_per: int = 10) -> tuple:
+    """
+    Two-pass Apollo search.
+
+    Pass 1 — clean name + Oracle/JDE title filter (targeted, fast).
+    Pass 2 — if pass 1 returns nothing, retry without title filter and
+              keep only contacts whose title contains a relevance keyword.
+              If even after filtering nothing remains, keep all pass-2
+              contacts (company has oracle signals, any contact is useful).
+
+    Returns (contacts, pass_used) where pass_used is 1 or 2.
+    """
+    if not api_key:
+        return [], 0
+
+    clean = _clean_company_name(company_name)
+
+    # Pass 1 — targeted
+    contacts = _apollo_call(clean, api_key, max_per, with_titles=True)
+    if contacts:
+        return contacts, 1
+
+    time.sleep(RATE_LIMIT_DELAY)  # rate-limit gap between the two passes
+
+    # Pass 2 — broad search
+    contacts = _apollo_call(clean, api_key, max_per, with_titles=False)
+    if not contacts:
+        return [], 2
+
+    # Prefer contacts with relevant titles; fall back to all if none match
+    relevant = [c for c in contacts if _is_relevant_contact(c.get("title", ""))]
+    return (relevant if relevant else contacts), 2
+
+
+# ── ZeroBounce helpers ───────────────────────────────────────────────────────
+
+def _zb_credits(api_key: str) -> Optional[int]:
+    if not api_key:
+        return None
+    try:
+        url = f"{ZB_CREDITS_URL}?api_key={api_key}"
+        with urllib.request.urlopen(url, timeout=10) as resp:
+            data = json.loads(resp.read())
+        n = int(data.get("Credits", -1))
+        return None if n == -1 else n
+    except Exception:
+        return None
+
+
+def _zb_validate_batch(emails: list, api_key: str) -> dict:
+    """
+    Validate up to 200 emails via ZeroBounce batch API.
+    Returns {email_lower: {"status": "...", "sub_status": "..."}}
+
+    Statuses that are safe to send: valid
+    Do-not-send: invalid, spamtrap, abuse, do_not_mail
+    Uncertain: catch-all, unknown
+    """
+    if not api_key or not emails:
+        return {e: {"status": "not_validated", "sub_status": "no_key"} for e in emails}
+
+    CHUNK = 200
+    result: dict = {}
+    for i in range(0, len(emails), CHUNK):
+        batch = emails[i:i + CHUNK]
+        payload = json.dumps({
+            "api_key":     api_key,
+            "email_batch": [{"email_address": e} for e in batch],
+        }).encode()
+        try:
+            req = urllib.request.Request(
+                ZB_BATCH_URL, data=payload,
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=120) as resp:
+                data = json.loads(resp.read())
+        except Exception as e:
+            logger.warning(f"ZeroBounce batch error: {e}")
+            result.update({e: {"status": "unknown", "sub_status": "api_error"} for e in batch})
+            continue
+
+        for item in (data.get("email_batch") or []):
+            addr = (item.get("address") or item.get("email_address") or "").lower().strip()
+            if addr:
+                result[addr] = {
+                    "status":     item.get("status",     "unknown"),
+                    "sub_status": item.get("sub_status", ""),
+                }
+    return result
+
+
+# ── Main pipeline ─────────────────────────────────────────────────────────────
+
+def enrich_companies(
+    apollo_key: str,
+    zerobounce_key: str,
+    limit: int = 50,
+    max_per_company: int = 10,
+    log: Callable = None,
+) -> dict:
+    """
+    Enrich companies that have intent signals but no contacts yet.
+    Returns final status dict.
+    """
+    if log is None:
+        log = lambda msg: logger.info(msg)
+
+    _status.update({
+        "status": "running",
+        "progress": "Starting...",
+        "companies_processed": 0,
+        "companies_total": 0,
+        "contacts_found": 0,
+        "contacts_validated": 0,
+    })
+
+    if not apollo_key:
+        log("ERROR: No Apollo API key configured — cannot enrich contacts.")
+        _status["status"] = "error"
+        _status["progress"] = "Apollo API key not configured"
+        return current_status()
+
+    # Show ZeroBounce credit balance upfront
+    if zerobounce_key:
+        credits = _zb_credits(zerobounce_key)
+        log(f"ZeroBounce credits available: {credits if credits is not None else 'unknown'}")
+    else:
+        log("No ZeroBounce key — emails will NOT be validated (stored as 'not_validated')")
+
+    # Fetch companies needing enrichment
+    companies = db.get_companies_needing_enrichment(limit)
+    _status["companies_total"] = len(companies)
+
+    if not companies:
+        log("All companies already enriched — nothing to do.")
+        _status["status"] = "completed"
+        _status["progress"] = "Already up to date"
+        return current_status()
+
+    log(f"Found {len(companies)} companies needing enrichment")
+    total_contacts  = 0
+    total_validated = 0
+
+    for i, company in enumerate(companies):
+        name       = company["name"]
+        company_id = company["id"]
+        sig_count  = company.get("signal_count", "?")
+
+        _status["progress"] = f"({i+1}/{len(companies)}) {name}"
+        log(f"[{i+1}/{len(companies)}] {name}  ({sig_count} signals)")
+
+        # Check master_leads first — 221k pre-validated contacts, no API cost
+        master_rows = db.get_master_leads_by_company(name)
+        if master_rows:
+            to_save = [
+                {
+                    "full_name":               f"{c['first_name']} {c['last_name']}".strip(),
+                    "first_name":              c["first_name"],
+                    "last_name":               c["last_name"],
+                    "title":                   c.get("job_title") or "",
+                    "email":                   c.get("email") or None,
+                    "linkedin_url":            c.get("linkedin_url") or None,
+                    "domain":                  c.get("domain") or "",
+                    "source":                  "master_leads",
+                    "confidence":              0.9,
+                    "is_target":               1,
+                    "email_validation_status": c.get("email_validation_status") or None,
+                }
+                for c in master_rows
+            ]
+            db.save_contacts(company_id, to_save)
+            valid_from_master = sum(
+                1 for c in master_rows if c.get("email_validation_status") == "valid"
+            )
+            total_contacts  += len(to_save)
+            total_validated += valid_from_master
+            _status["contacts_found"]     = total_contacts
+            _status["contacts_validated"] = total_validated
+            _status["companies_processed"] += 1
+            log(f"  + {len(to_save)} contacts from master_leads "
+                f"({valid_from_master} valid) — skipped Apollo")
+            continue
+
+        contacts, pass_used = _apollo_search(name, apollo_key, max_per_company)
+
+        if not contacts:
+            log(f"  — no contacts found on Apollo (pass 1 + pass 2 tried)")
+            _status["companies_processed"] += 1
+            time.sleep(RATE_LIMIT_DELAY)
+            continue
+
+        pass_label = "targeted" if pass_used == 1 else "broad fallback"
+        log(f"  + {len(contacts)} contacts from Apollo ({pass_label})")
+
+        # Validate emails in batch
+        emails_to_validate = [c["email"] for c in contacts if c.get("email")]
+        if emails_to_validate and zerobounce_key:
+            log(f"  ~ validating {len(emails_to_validate)} email(s)...")
+            validation    = _zb_validate_batch(emails_to_validate, zerobounce_key)
+            valid_count   = 0
+            for c in contacts:
+                raw = (c.get("email") or "").lower()
+                if raw:
+                    zb = validation.get(raw, {})
+                    c["email_validation_status"] = zb.get("status", "not_validated")
+                    if c["email_validation_status"] == "valid":
+                        valid_count += 1
+            log(f"  ~ {valid_count}/{len(emails_to_validate)} valid")
+            total_validated += valid_count
+        elif emails_to_validate:
+            for c in contacts:
+                if c.get("email"):
+                    c["email_validation_status"] = "not_validated"
+
+        db.save_contacts(company_id, contacts)
+        total_contacts += len(contacts)
+        _status["contacts_found"]     = total_contacts
+        _status["contacts_validated"] = total_validated
+        _status["companies_processed"] += 1
+
+        time.sleep(RATE_LIMIT_DELAY)
+
+    log(f"Enrichment complete: {total_contacts} contacts across {len(companies)} companies, "
+        f"{total_validated} valid emails")
+    _status["status"]   = "completed"
+    _status["progress"] = f"Done — {total_contacts} contacts, {total_validated} valid emails"
+    return current_status()

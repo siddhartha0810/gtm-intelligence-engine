@@ -1,0 +1,96 @@
+# ── Secrets & environment ─────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+venv/
+.venv/
+env/
+.Python
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+htmlcov/
+
+# ── Node / Frontend ───────────────────────────────────────────────────────────
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/.next/
+frontend/build/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+*.tsbuildinfo
+
+# ── Output / generated files ──────────────────────────────────────────────────
+oracle_intent_engine/output/
+lead_enrichment_engine/output/
+lead_enrichment_engine/checkpoints/
+lead_enrichment_engine/uploads/
+*.csv
+*.xlsx
+*.xls
+!sample_data/**/*.csv
+
+# ── Runtime state files ───────────────────────────────────────────────────────
+_scan_log.txt
+_scan_status.json
+_enrich_log.txt
+_enrich_status.json
+
+# ── Logs ─────────────────────────────────────────────────────────────────────
+*.log
+logs/
+
+# ── Claude Code internal ──────────────────────────────────────────────────────
+.claude/
+
+# ── OS ────────────────────────────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# ── IDE ───────────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ── Database snapshots ────────────────────────────────────────────────────────
+*.sql
+*.dump
+*.sqlite
+*.db
+
+# ── Playwright / browser ─────────────────────────────────────────────────────
+playwright-report/
+test-results/
