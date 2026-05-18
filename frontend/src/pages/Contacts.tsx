@@ -12,7 +12,9 @@ interface Contact {
   confidence: number
   is_target: boolean
   source: string
+  email_source: string
   email_validation_status: string
+  email_prediction_pattern: string
   created_at: string
   company_name: string
   company_domain: string
@@ -264,9 +266,16 @@ export default function Contacts() {
                     </div>
                   </td>
                   <td style={{ padding: '12px 16px' }}>
-                    <span style={{ fontSize: 12, padding: '3px 10px', borderRadius: 999, whiteSpace: 'nowrap', background: c.email_validation_status === 'valid' ? 'rgba(16,185,129,0.1)' : c.email_validation_status === 'invalid' ? 'rgba(239,68,68,0.1)' : 'rgba(107,114,128,0.1)', color: c.email_validation_status === 'valid' ? '#34d399' : c.email_validation_status === 'invalid' ? '#f87171' : '#9ca3af' }}>
-                      {c.email_validation_status || 'not validated'}
-                    </span>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      <span style={{ fontSize: 12, padding: '3px 10px', borderRadius: 999, whiteSpace: 'nowrap', background: c.email_validation_status === 'valid' ? 'rgba(16,185,129,0.1)' : c.email_validation_status === 'invalid' ? 'rgba(239,68,68,0.1)' : 'rgba(107,114,128,0.1)', color: c.email_validation_status === 'valid' ? '#34d399' : c.email_validation_status === 'invalid' ? '#f87171' : '#9ca3af' }}>
+                        {c.email_validation_status || 'not validated'}
+                      </span>
+                      {c.email_source === 'predicted' && (
+                        <span title={`Pattern: ${c.email_prediction_pattern}`} style={{ fontSize: 11, padding: '2px 8px', borderRadius: 999, whiteSpace: 'nowrap', background: 'rgba(139,92,246,0.12)', color: '#a78bfa', letterSpacing: '0.02em' }}>
+                          ✦ predicted · {c.email_prediction_pattern}
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td style={{ padding: '12px 16px', fontSize: 12, color: '#64748b' }}>{c.source || '—'}</td>
                   <td style={{ padding: '12px 16px' }}>

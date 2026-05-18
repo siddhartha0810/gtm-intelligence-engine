@@ -125,8 +125,10 @@ _DDL = [
         fetched_at              TIMESTAMP DEFAULT NOW()
     )
     """,
-    # Migration: add column to existing DBs that were created before this column existed
+    # Migrations: add columns to existing DBs that were created before these columns existed
     "ALTER TABLE company_contacts ADD COLUMN IF NOT EXISTS email_validation_status TEXT",
+    "ALTER TABLE company_contacts ADD COLUMN IF NOT EXISTS email_source TEXT DEFAULT ''",
+    "ALTER TABLE company_contacts ADD COLUMN IF NOT EXISTS email_prediction_pattern TEXT DEFAULT ''",
     """
     CREATE TABLE IF NOT EXISTS master_leads (
         lead_id                     TEXT PRIMARY KEY,
@@ -370,8 +372,8 @@ def save_contacts(company_id: int, contacts: list):
                 INSERT INTO company_contacts
                     (company_id, full_name, first_name, last_name, title,
                      email, linkedin_url, seniority, confidence, is_target, source,
-                     email_validation_status)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                     email_validation_status, email_source, email_prediction_pattern)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 ON CONFLICT DO NOTHING
             """, (
                 company_id,
@@ -384,8 +386,10 @@ def save_contacts(company_id: int, contacts: list):
                 c.get("seniority", ""),
                 float(c.get("confidence", 0)),
                 int(bool(c.get("is_target", False))),
-                c.get("source", "hunter.io"),
+                c.get("source", "apollo"),
                 c.get("email_validation_status") or None,
+                c.get("email_source", "") or "",
+                c.get("email_prediction_pattern", "") or "",
             ))
 
 

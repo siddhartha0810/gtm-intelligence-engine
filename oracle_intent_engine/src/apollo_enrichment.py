@@ -7,8 +7,14 @@ Workflow (per company):
   1. Check company_contacts — if contacts already exist, skip (free)
   2. Apollo people search — filter by Oracle/JDE-relevant titles
   3. Reveal locked emails via Apollo people/match endpoint
-  4. ZeroBounce batch email validation
-  5. Store validated contacts in company_contacts table
+  4. ZeroBounce batch email validation (vendor emails)
+  5. Email pattern prediction — guess emails for contacts Apollo couldn't
+     supply an email for, using naming patterns learned from same-domain
+     contacts that already have validated emails (e.g. jsmith@acme.com,
+     john.smith@acme.com).  Falls back to 3 global patterns when no
+     domain evidence exists.
+  6. ZeroBounce validate predicted emails
+  7. Store validated contacts in company_contacts table
 
 Called by enrichment_worker.py as a subprocess.
 """
@@ -31,6 +37,174 @@ ZB_BATCH_URL      = "https://bulkapi.zerobounce.net/v2/validatebatch"
 ZB_CREDITS_URL    = "https://api.zerobounce.net/v2/getcredits"
 
 RATE_LIMIT_DELAY = 1.2   # seconds between Apollo calls
+
+# ── Email prediction patterns ────────────────────────────────────────────────
+# Self-contained — no pandas needed.  Mirrors lead_enrichment_engine/src/email_pattern_engine.py
+# so both engines produce identical predictions.
+
+_PREDICTION_PATTERNS = {
+    "first.last": lambda f, l: f"{f}.{l}",
+    "firstlast":  lambda f, l: f"{f}{l}",
+    "flast":      lambda f, l: f"{f[0]}{l}",
+    "first_last": lambda f, l: f"{f}_{l}",
+    "f.last":     lambda f, l: f"{f[0]}.{l}",
+    "first.l":    lambda f, l: f"{f}.{l[0]}",
+    "last.first": lambda f, l: f"{l}.{f}",
+    "first":      lambda f, l: f,
+    "lastf":      lambda f, l: f"{l}{f[0]}",
+    "last.f":     lambda f, l: f"{l}.{f[0]}",
+}
+
+# Industry-standard fallback when no domain-specific pattern is known.
+# Ordered by prevalence across enterprise B2B (flast ~40%, first.last ~30%)
+_DEFAULT_PREDICTION_ORDER = ["flast", "first.last", "first_last"]
+
+# How many global-fallback candidates to generate per unknown-domain contact.
+# Each is validated by ZeroBounce; the first valid hit wins.
+_TOP_N_CANDIDATES = 3
+
+
+def _pname(value: str) -> str:
+    """Normalise a name part for pattern matching — lowercase, strip spaces/hyphens."""
+    return str(value or "").lower().strip().replace(" ", "").replace("-", "")
+
+
+def _detect_email_pattern(first_name: str, last_name: str, email: str) -> str | None:
+    """
+    Return which naming pattern the given email follows, or None if no match.
+
+    Example:
+      _detect_email_pattern("John", "Smith", "jsmith@acme.com") → "flast"
+      _detect_email_pattern("John", "Smith", "info@acme.com")   → None
+    """
+    if not email or "@" not in str(email):
+        return None
+    first = _pname(first_name)
+    last  = _pname(last_name)
+    if not first or not last:
+        return None
+    local = str(email).split("@")[0].lower().strip()
+    for pattern, formatter in _PREDICTION_PATTERNS.items():
+        try:
+            if local == formatter(first, last):
+                return pattern
+        except Exception:
+            continue
+    return None
+
+
+def _build_predicted_email(first_name: str, last_name: str, domain: str, pattern: str) -> str:
+    """Construct a predicted email from name + domain + pattern."""
+    first  = _pname(first_name)
+    last   = _pname(last_name)
+    domain = str(domain or "").lower().strip()
+    if not first or not last or not domain or pattern not in _PREDICTION_PATTERNS:
+        return ""
+    try:
+        return f"{_PREDICTION_PATTERNS[pattern](first, last)}@{domain}"
+    except Exception:
+        return ""
+
+
+def _predict_and_fill_emails(
+    contacts: list,
+    zerobounce_key: str,
+    company_domain: str,
+    log: Callable,
+) -> tuple[list, int]:
+    """
+    Stage 5+6: Email prediction for contacts that still have no email.
+
+    Algorithm:
+      1. Learn domain patterns from contacts with validated emails in this batch.
+      2. For each no-email contact with a known domain:
+           - If domain pattern is known → generate TOP_N_COMPANY_PATTERNS candidates
+           - Otherwise → generate _DEFAULT_PREDICTION_ORDER candidates
+      3. Batch-validate all candidates with ZeroBounce.
+      4. For each contact, apply the first candidate whose status = 'valid'.
+      5. Mark email_source='predicted' and email_prediction_pattern=<pattern>.
+
+    Returns (updated_contacts, count_of_new_predictions).
+    """
+    if not zerobounce_key:
+        return contacts, 0
+
+    # Step 1: learn domain → [pattern, ...] from contacts with valid emails
+    domain_patterns: dict[str, list[str]] = {}  # domain → ordered list of patterns seen
+    for c in contacts:
+        if not c.get("email") or c.get("email_validation_status") != "valid":
+            continue
+        dom = (c.get("domain") or company_domain or "").lower().strip()
+        if not dom:
+            continue
+        pat = _detect_email_pattern(c.get("first_name", ""), c.get("last_name", ""), c["email"])
+        if pat:
+            domain_patterns.setdefault(dom, [])
+            if pat not in domain_patterns[dom]:
+                domain_patterns[dom].append(pat)
+
+    # Step 2: build candidate list for contacts with no email
+    # candidate_map: email_string → (contact_index, pattern_name)
+    candidate_map: dict[str, tuple[int, str]] = {}
+    # contact_candidates: contact_index → [email1, email2, ...]  (ordered preference)
+    contact_candidates: dict[int, list[str]] = {}
+
+    for idx, c in enumerate(contacts):
+        if c.get("email"):
+            continue  # already has an email
+        first = c.get("first_name", "")
+        last  = c.get("last_name", "")
+        if not first or not last:
+            continue  # can't predict without both name parts
+
+        dom = (c.get("domain") or company_domain or "").lower().strip()
+        if not dom:
+            continue  # can't predict without a domain
+
+        # Choose patterns to try for this domain
+        patterns_to_try = (domain_patterns.get(dom) or []) + [
+            p for p in _DEFAULT_PREDICTION_ORDER if p not in (domain_patterns.get(dom) or [])
+        ]
+        patterns_to_try = patterns_to_try[:_TOP_N_CANDIDATES]
+
+        candidates_for_this = []
+        for pat in patterns_to_try:
+            email = _build_predicted_email(first, last, dom, pat)
+            if email and email not in candidate_map:
+                candidate_map[email] = (idx, pat)
+                candidates_for_this.append(email)
+
+        if candidates_for_this:
+            contact_candidates[idx] = candidates_for_this
+
+    if not candidate_map:
+        return contacts, 0  # nothing to predict
+
+    # Step 3: ZeroBounce validate all candidates in one batch
+    all_candidates = list(candidate_map.keys())
+    log(f"  ~ predicting emails: {len(contact_candidates)} contacts, "
+        f"{len(all_candidates)} candidates → ZeroBounce")
+    validation = _zb_validate_batch(all_candidates, zerobounce_key)
+
+    # Step 4+5: apply the first valid prediction for each contact
+    filled = 0
+    contacts = [dict(c) for c in contacts]  # shallow-copy so we don't mutate in place
+
+    for idx, candidate_emails in contact_candidates.items():
+        for email in candidate_emails:
+            zb = validation.get(email.lower(), {})
+            status = zb.get("status", "unknown")
+            if status == "valid":
+                _, pat = candidate_map[email]
+                contacts[idx]["email"]                    = email
+                contacts[idx]["email_source"]             = "predicted"
+                contacts[idx]["email_prediction_pattern"] = pat
+                contacts[idx]["email_validation_status"]  = "valid"
+                filled += 1
+                break  # first valid hit wins; don't try other candidates
+
+    return contacts, filled
+
 
 # Pass-1: exact Oracle/JDE/Finance/IT titles — very targeted
 ORACLE_JDE_TITLES = [
@@ -412,7 +586,7 @@ def enrich_companies(
         pass_label = "targeted" if pass_used == 1 else "broad fallback"
         log(f"  + {len(contacts)} contacts from Apollo ({pass_label})")
 
-        # Validate emails in batch
+        # Stage 4: Validate Apollo emails in batch via ZeroBounce
         emails_to_validate = [c["email"] for c in contacts if c.get("email")]
         if emails_to_validate and zerobounce_key:
             log(f"  ~ validating {len(emails_to_validate)} email(s)...")
@@ -431,6 +605,22 @@ def enrich_companies(
             for c in contacts:
                 if c.get("email"):
                     c["email_validation_status"] = "not_validated"
+
+        # Stage 5+6: Email prediction for contacts Apollo couldn't supply an email for.
+        # Learns naming patterns from same-domain contacts with valid emails (e.g. the
+        # domain uses "flast" format → predict jsmith@acme.com for remaining contacts),
+        # then validates predictions with ZeroBounce before storing.
+        no_email_count = sum(1 for c in contacts if not c.get("email"))
+        if no_email_count and zerobounce_key:
+            contacts, pred_count = _predict_and_fill_emails(
+                contacts, zerobounce_key, company.get("domain", ""), log
+            )
+            if pred_count:
+                log(f"  ~ {pred_count} email(s) predicted and validated via pattern engine")
+                total_validated += pred_count
+        elif no_email_count:
+            log(f"  ~ {no_email_count} contact(s) have no email — "
+                "add ZeroBounce key to enable prediction")
 
         db.save_contacts(company_id, contacts)
         total_contacts += len(contacts)

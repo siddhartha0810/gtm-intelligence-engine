@@ -1185,7 +1185,8 @@ async def api_contacts(company: str = "", limit: int = 200):
                 cur.execute(
                     """SELECT cc.id, cc.first_name, cc.last_name, cc.title,
                               cc.email, cc.linkedin_url, cc.confidence,
-                              cc.is_target, cc.source, cc.email_validation_status,
+                              cc.is_target, cc.source, cc.email_source,
+                              cc.email_validation_status, cc.email_prediction_pattern,
                               cc.fetched_at::text AS created_at,
                               c.name AS company_name, c.domain AS company_domain
                        FROM company_contacts cc
@@ -1199,7 +1200,8 @@ async def api_contacts(company: str = "", limit: int = 200):
                 cur.execute(
                     """SELECT cc.id, cc.first_name, cc.last_name, cc.title,
                               cc.email, cc.linkedin_url, cc.confidence,
-                              cc.is_target, cc.source, cc.email_validation_status,
+                              cc.is_target, cc.source, cc.email_source,
+                              cc.email_validation_status, cc.email_prediction_pattern,
                               cc.fetched_at::text AS created_at,
                               c.name AS company_name, c.domain AS company_domain
                        FROM company_contacts cc
