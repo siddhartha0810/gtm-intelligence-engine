@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { TrendingUp, Users, Building2, CheckCircle2, RefreshCw } from 'lucide-react'
 
+const authH = () => ({ 'Authorization': `Bearer ${localStorage.getItem('token') || ''}` })
+
 interface ReportingData {
   total_companies: number
   total_signals: number
@@ -34,8 +36,8 @@ export default function Reporting() {
     setError('')
     try {
       const [rr, dr] = await Promise.all([
-        fetch('/api/reporting').then(r => { if (!r.ok) throw new Error(`Reporting: HTTP ${r.status}`); return r.json() }),
-        fetch('/api/dashboard').then(r => { if (!r.ok) throw new Error(`Dashboard: HTTP ${r.status}`); return r.json() }),
+        fetch('/api/reporting', { headers: authH() }).then(r => { if (!r.ok) throw new Error(`Reporting: HTTP ${r.status}`); return r.json() }),
+        fetch('/api/dashboard', { headers: authH() }).then(r => { if (!r.ok) throw new Error(`Dashboard: HTTP ${r.status}`); return r.json() }),
       ])
       setReport(rr)
       setDash(dr)

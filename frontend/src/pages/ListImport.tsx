@@ -48,7 +48,7 @@ export default function ListImport() {
   const loadHistory = async () => {
     setLoadingHistory(true)
     try {
-      const [bRes, tRes] = await Promise.all([fetch('/api/import/batches'), fetch('/api/import/templates')])
+      const [bRes, tRes] = await Promise.all([fetch('/api/import/batches', { headers: authH() }), fetch('/api/import/templates', { headers: authH() })])
       if (bRes.ok) setBatches(await bRes.json())
       if (tRes.ok) setTemplates(await tRes.json())
     } catch { } finally { setLoadingHistory(false) }
