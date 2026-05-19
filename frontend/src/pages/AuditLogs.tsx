@@ -73,7 +73,7 @@ export default function AuditLogs() {
   const load = useCallback(async (off = 0, append = false) => {
     setLoading(true)
     try {
-      const r = await fetch(buildUrl(off))
+      const r = await fetch(buildUrl(off), { headers: { 'Authorization': `Bearer ${localStorage.getItem('token') || ''}` } })
       if (!r.ok) throw new Error(`HTTP ${r.status}`)
       const data = await r.json()
       const items: AuditLog[] = data.logs ?? data
