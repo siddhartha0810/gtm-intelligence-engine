@@ -345,7 +345,7 @@ export default function EngineControl() {
 
   const fetchLog = async () => {
     try {
-      const r = await fetch('/scan/log')
+      const r = await fetch('/scan/log', { headers: authH() })
       if (!r.ok) return
       const d = await r.json()
       const entries: LogEntry[] = (d.log || d || []).map((line: string) => parseLine(line))
@@ -448,7 +448,7 @@ export default function EngineControl() {
     try {
       const res = await fetch('/scan/start', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { ...authH(), 'Content-Type': 'application/json' },
         body: JSON.stringify({ sources: selectedSources, max_pages: maxPages, jde_manufacturing: jdeMfg }),
       })
       if (!res.ok) { toast.error((await res.json()).error || 'Failed to start scan'); return }
@@ -484,7 +484,7 @@ export default function EngineControl() {
 
   const stopEngine = async () => {
     try {
-      await fetch('/scan/stop', { method: 'POST' })
+      await fetch('/scan/stop', { method: 'POST', headers: authH() })
       setOracleState('stopping')
       addLog('INFO', 'Stop signal sent. Engine winding down...')
       toast.info('Oracle scan stopping...')
