@@ -763,17 +763,21 @@ def save_contacts(company_id: int, contacts: list):
 
 
 def get_companies_needing_enrichment(limit: int = 50) -> list:
-    """Return companies that have signals but no contacts yet, highest signal count first."""
+    """Return companies without contacts yet — signal-backed first, then CSV imports."""
     with db_cursor(commit=False) as cur:
         cur.execute("""
-            SELECT c.id, c.name, c.domain, COUNT(s.id) AS signal_count
+            SELECT c.id, c.name, c.domain,
+                   COALESCE(sig.signal_count, 0) AS signal_count
             FROM companies c
-            JOIN oracle_signals s ON s.company_id = c.id
+            LEFT JOIN (
+                SELECT company_id, COUNT(*) AS signal_count
+                FROM oracle_signals
+                GROUP BY company_id
+            ) sig ON sig.company_id = c.id
             WHERE NOT EXISTS (
                 SELECT 1 FROM company_contacts cc WHERE cc.company_id = c.id
             )
-            GROUP BY c.id, c.name, c.domain
-            ORDER BY signal_count DESC
+            ORDER BY signal_count DESC, c.last_updated DESC
             LIMIT %s
         """, (limit,))
         return cur.fetchall()
