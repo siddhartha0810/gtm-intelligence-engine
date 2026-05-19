@@ -4,7 +4,7 @@ const authH = (): Record<string, string> => ({
   'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
   'Content-Type': 'application/json',
 })
-import { Search, Download, Mail, ExternalLink, MoreHorizontal, Filter, CheckCircle2, Trash2, Send, UserX, Loader, RefreshCw } from 'lucide-react'
+import { Search, Download, Mail, ExternalLink, MoreHorizontal, CheckCircle2, Trash2, Send, UserX, Loader, RefreshCw } from 'lucide-react'
 import { toast } from '../components/Toast'
 
 interface Contact {
@@ -97,7 +97,10 @@ export default function Contacts() {
   const [search, setSearch]     = useState('')
   const [selected, setSelected] = useState<number[]>([])
   const [openMenu, setOpenMenu] = useState<number | null>(null)
+  const [sourceFilter, setSourceFilter] = useState<'all' | 'apollo' | 'master_leads'>('all')
   const menuRefs = useRef<Map<number, HTMLButtonElement>>(new Map())
+
+  const isApollo = (src: string) => src === 'apollo' || src === 'apollo.io'
 
   const load = async () => {
     setLoading(true)
@@ -117,11 +120,24 @@ export default function Contacts() {
 
   useEffect(() => { load() }, [])
 
-  const filtered = contacts.filter(c =>
-    `${c.first_name} ${c.last_name}`.toLowerCase().includes(search.toLowerCase()) ||
-    (c.company_name || '').toLowerCase().includes(search.toLowerCase()) ||
-    (c.title || '').toLowerCase().includes(search.toLowerCase())
-  )
+  const filtered = contacts
+    .filter(c =>
+      (sourceFilter === 'all') ||
+      (sourceFilter === 'apollo' && isApollo(c.source || '')) ||
+      (sourceFilter === 'master_leads' && !isApollo(c.source || ''))
+    )
+    .filter(c =>
+      `${c.first_name} ${c.last_name}`.toLowerCase().includes(search.toLowerCase()) ||
+      (c.company_name || '').toLowerCase().includes(search.toLowerCase()) ||
+      (c.title || '').toLowerCase().includes(search.toLowerCase())
+    )
+    .sort((a, b) => {
+      // Apollo contacts (with role) first, then master_leads
+      const aScore = isApollo(a.source || '') ? 1 : 0
+      const bScore = isApollo(b.source || '') ? 1 : 0
+      if (bScore !== aScore) return bScore - aScore
+      return (b.confidence || 0) - (a.confidence || 0)
+    })
 
   const toggleSelect = (id: number) => setSelected(s => s.includes(id) ? s.filter(x => x !== id) : [...s, id])
   const allSelected = filtered.length > 0 && filtered.every(c => selected.includes(c.id))
@@ -169,7 +185,11 @@ export default function Contacts() {
         <div>
           <h1 style={{ fontSize: 20, fontWeight: 600, color: '#0f172a', margin: 0 }}>Contacts</h1>
           <p style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>
-            {loading ? 'Loading...' : `${contacts.length} enriched contacts · ${validCount} valid emails`}
+            {loading ? 'Loading...' : (() => {
+              const apolloCount = contacts.filter(c => isApollo(c.source || '')).length
+              const mlCount = contacts.length - apolloCount
+              return `${contacts.length} contacts · ${apolloCount} Apollo (with role) · ${mlCount} master leads (email only) · ${validCount} valid emails`
+            })()}
           </p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -208,12 +228,16 @@ export default function Contacts() {
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search contacts, roles, companies..."
             style={{ width: '100%', padding: '8px 12px 8px 36px', borderRadius: 8, background: '#ffffff', border: '1px solid #d1d5db', color: '#0f172a', fontSize: 13, outline: 'none', boxSizing: 'border-box' }} />
         </div>
-        <button onClick={() => toast.info('Advanced filters coming soon')}
-          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 8, border: '1px solid #e2e8f0', background: 'transparent', color: '#64748b', fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}
-          onMouseEnter={e => { e.currentTarget.style.borderColor = '#3b82f6'; e.currentTarget.style.color = '#0f172a' }}
-          onMouseLeave={e => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.color = '#64748b' }}>
-          <Filter size={13} /> Filter
-        </button>
+        <div style={{ display: 'flex', padding: 3, borderRadius: 8, background: '#f8fafc', border: '1px solid #e2e8f0', gap: 2 }}>
+          {([['all', 'All'], ['apollo', '🔵 Apollo (with role)'], ['master_leads', '📋 Master Leads']] as const).map(([val, label]) => (
+            <button key={val} onClick={() => setSourceFilter(val)}
+              style={{ padding: '5px 12px', borderRadius: 6, border: 'none', fontSize: 12, fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap',
+                background: sourceFilter === val ? (val === 'apollo' ? '#6366f1' : val === 'master_leads' ? '#0f172a' : '#3b82f6') : 'transparent',
+                color: sourceFilter === val ? 'white' : '#64748b', transition: 'all 0.15s' }}>
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Table */}
@@ -262,7 +286,14 @@ export default function Contacts() {
                     </div>
                   </td>
                   <td style={{ padding: '12px 16px', fontSize: 13, color: '#94a3b8', whiteSpace: 'nowrap' }}>{c.company_name || '—'}</td>
-                  <td style={{ padding: '12px 16px', fontSize: 13, color: '#94a3b8', whiteSpace: 'nowrap' }}>{c.title || '—'}</td>
+                  <td style={{ padding: '12px 16px', fontSize: 13, whiteSpace: 'nowrap' }}>
+                    {c.title
+                      ? <span style={{ color: '#0f172a', fontWeight: 500 }}>{c.title}</span>
+                      : isApollo(c.source || '')
+                        ? <span style={{ color: '#94a3b8' }}>—</span>
+                        : <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 999, background: 'rgba(107,114,128,0.08)', color: '#94a3b8', fontStyle: 'italic' }}>email only</span>
+                    }
+                  </td>
                   <td style={{ padding: '12px 16px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <span style={{ fontSize: 13, fontWeight: 700, padding: '2px 8px', borderRadius: 6, background: `${scoreColor(c.confidence)}18`, color: scoreColor(c.confidence), minWidth: 32, textAlign: 'center' }}>
@@ -282,7 +313,14 @@ export default function Contacts() {
                       )}
                     </div>
                   </td>
-                  <td style={{ padding: '12px 16px', fontSize: 12, color: '#64748b' }}>{c.source || '—'}</td>
+                  <td style={{ padding: '12px 16px' }}>
+                    {isApollo(c.source || '')
+                      ? <span style={{ fontSize: 11, padding: '3px 8px', borderRadius: 999, background: 'rgba(99,102,241,0.12)', color: '#818cf8', fontWeight: 600 }}>Apollo</span>
+                      : c.source === 'master_leads' || c.source === '280k_master_db'
+                        ? <span style={{ fontSize: 11, padding: '3px 8px', borderRadius: 999, background: 'rgba(107,114,128,0.1)', color: '#94a3b8', fontWeight: 500 }}>Master DB</span>
+                        : <span style={{ fontSize: 11, padding: '3px 8px', borderRadius: 999, background: 'rgba(245,158,11,0.1)', color: '#f59e0b', fontWeight: 500 }}>{c.source || '—'}</span>
+                    }
+                  </td>
                   <td style={{ padding: '12px 16px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                       {c.email && (
