@@ -7,39 +7,48 @@ Implements doc §6.2 — company push and contact push patterns.
 
 import json
 import os
+import secrets
 from typing import Optional
 import httpx
+
+
+def _gen_unique_key() -> str:
+    """64-char URL-safe unique key (doc §6.1 — nanoid equivalent)."""
+    return secrets.token_urlsafe(48)
 
 # ── Field maps (doc §6.1) ─────────────────────────────────────────────────────
 
 HS_COMPANY_FIELD_MAP = {
-    # Standard
+    # Standard (doc §6.1 Group 1 — 7 fields)
     "name":                      "name",
+    "website":                   "website",
     "domain":                    "domain",
     "phone":                     "phone",
     "industry":                  "industry",
     "number_of_employees":       "numberofemployees",
     "about_us":                  "about_us",
-    # Billing
+    # Billing (doc §6.1 Group 2 — 5 fields)
     "billing_street":            "address",
     "billing_city":              "city",
     "billing_state":             "state",
     "billing_postal_code":       "zip",
     "billing_country":           "country",
-    # Custom
+    # Custom (doc §6.1 Group 3 — 3 mapped fields; ultimateParentAccountId is display-only)
     "duns_number":               "duns_number",
     "holding_type":              "holding_type",
     "number_of_locations":       "number_of_locations",
-    # Oracle / Products
+    # Oracle / Products Intel (doc §6.1 Group 4)
     "oracle_cloud_solutions":    "oracle_cloud_solutions",
     "oracle_on_premise_solutions": "oracle_on_premise_solutions",
     "oracle_relationship_type":  "oracle_relationship_type",
     "oracle_support_end_date":   "oracle_support_end_date",
     "oracle_version":            "oracle_version",
     "number_of_oracle_users":    "number_of_oracle_users",
-    # Intel
+    # technology_profile resolved at push-time (see _build_company_payload)
+    "_technology_profile_name":  "technology_profile",
+    # Intel summary
     "inoapps_services_summary":  "inoapps_services_summary",
-    # Inoapps Relationship
+    # Inoapps Relationship (doc §6.1 Group 5 — 3 fields)
     "inoapps_account_manager":   "inoapps_account_manager",
     "inoapps_account_tier":      "inoapps_account_tier",
     "inoapps_relationship_type": "inoapps_relationship_type",
@@ -82,10 +91,31 @@ def _get_api_key() -> str:
     return key
 
 
+def _resolve_technology_profile_name(record: dict) -> Optional[str]:
+    """Look up the technology profile name from technology_profile_id if present."""
+    tp_id = record.get("technology_profile_id")
+    if not tp_id:
+        return None
+    try:
+        import oracle_intent_engine.src.database as db
+        with db.db_cursor(commit=False) as cur:
+            cur.execute("SELECT name FROM technology_profiles WHERE id = %s", (tp_id,))
+            row = cur.fetchone()
+            return row["name"] if row else None
+    except Exception:
+        return None
+
+
 def _build_company_payload(record: dict) -> dict:
+    # Inject resolved technology_profile_name so the field map can pick it up
+    enriched = dict(record)
+    tp_name = _resolve_technology_profile_name(record)
+    if tp_name:
+        enriched["_technology_profile_name"] = tp_name
+
     props = {}
     for db_col, hs_prop in HS_COMPANY_FIELD_MAP.items():
-        val = record.get(db_col)
+        val = enriched.get(db_col)
         if val is not None and str(val).strip():
             if isinstance(val, list):
                 props[hs_prop] = ";".join(str(v) for v in val)
@@ -285,7 +315,7 @@ async def sync_pull_from_hubspot(api_key: str) -> dict:
         try:
             after = None
             while True:
-                url = "/crm/v3/objects/companies?limit=100&properties=name,domain,industry,phone,numberofemployees,city,country,state"
+                url = "/crm/v3/objects/companies?limit=100&properties=name,domain,website,industry,phone,numberofemployees,city,country,state,address,zip"
                 if after:
                     url += f"&after={after}"
                 r = await client.get(f"https://api.hubapi.com{url}", headers=headers)
@@ -301,21 +331,28 @@ async def sync_pull_from_hubspot(api_key: str) -> dict:
                     with db.db_cursor() as cur:
                         cur.execute(
                             """INSERT INTO companies
-                                   (name, domain, industry, phone, number_of_employees,
-                                    billing_city, billing_country, billing_state,
-                                    hubspot_id, hubspot_synced_at, source, status)
-                               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW(),'hubspot_pull','approved')
+                                   (name, domain, website, industry, phone, number_of_employees,
+                                    billing_street, billing_city, billing_country, billing_state,
+                                    billing_postal_code,
+                                    hubspot_id, hubspot_synced_at, source, status, unique_key)
+                               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW(),'hubspot_pull','approved',%s)
                                ON CONFLICT (name) DO UPDATE SET
-                                   hubspot_id = EXCLUDED.hubspot_id,
-                                   domain = COALESCE(EXCLUDED.domain, companies.domain),
-                                   industry = COALESCE(EXCLUDED.industry, companies.industry),
+                                   hubspot_id    = EXCLUDED.hubspot_id,
+                                   domain        = COALESCE(EXCLUDED.domain,   companies.domain),
+                                   website       = COALESCE(EXCLUDED.website,  companies.website),
+                                   industry      = COALESCE(EXCLUDED.industry, companies.industry),
+                                   unique_key    = CASE
+                                       WHEN companies.unique_key = '' THEN EXCLUDED.unique_key
+                                       ELSE companies.unique_key
+                                   END,
                                    hubspot_synced_at = NOW(),
-                                   last_updated = NOW()""",
-                            (name, props.get("domain"), props.get("industry"),
-                             props.get("phone"),
+                                   last_updated  = NOW()""",
+                            (name, props.get("domain"), props.get("website"),
+                             props.get("industry"), props.get("phone"),
                              int(props["numberofemployees"]) if props.get("numberofemployees") else None,
-                             props.get("city"), props.get("country"), props.get("state"),
-                             str(obj["id"])),
+                             props.get("address"), props.get("city"), props.get("country"),
+                             props.get("state"), props.get("zip"),
+                             str(obj["id"]), _gen_unique_key()),
                         )
                     pulled_companies += 1
                 paging = data.get("paging", {})
@@ -348,13 +385,13 @@ async def sync_pull_from_hubspot(api_key: str) -> dict:
                             """INSERT INTO company_contacts
                                    (first_name, last_name, title, email, phone, mobile_phone,
                                     city, state, country,
-                                    hubspot_id, hubspot_synced_at, source, status)
-                               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW(),'hubspot_pull','approved')
+                                    hubspot_id, hubspot_synced_at, source, status, unique_key)
+                               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW(),'hubspot_pull','approved',%s)
                                ON CONFLICT DO NOTHING""",
                             (first, last, props.get("jobtitle"), props.get("email"),
                              props.get("phone"), props.get("mobilephone"),
                              props.get("city"), props.get("state"), props.get("country"),
-                             str(obj["id"])),
+                             str(obj["id"]), _gen_unique_key()),
                         )
                     pulled_contacts += 1
                 paging = data.get("paging", {})

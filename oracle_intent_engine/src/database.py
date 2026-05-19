@@ -6,10 +6,16 @@ can cleanly separate the oracle DB from the enrichment DB.
 """
 
 import os
+import secrets
 import threading
 from contextlib import contextmanager
 from typing import Optional
 from src.utils import get_logger
+
+
+def _gen_unique_key() -> str:
+    """64-char URL-safe unique key (doc §6.1 — nanoid equivalent)."""
+    return secrets.token_urlsafe(48)  # 48 bytes → 64-char base64url string
 
 import psycopg2
 import psycopg2.extras
@@ -559,6 +565,40 @@ def init_db():
         for stmt in _DDL:
             cur.execute(stmt)
     logger.info("PostgreSQL schema initialised")
+    _backfill_unique_keys()
+
+
+def _backfill_unique_keys():
+    """One-time backfill: assign unique_key to any existing rows that have an empty value."""
+    with db_cursor(commit=False) as cur:
+        cur.execute("SELECT COUNT(*) AS n FROM companies WHERE unique_key = ''")
+        co_missing = cur.fetchone()["n"]
+        cur.execute("SELECT COUNT(*) AS n FROM company_contacts WHERE unique_key = ''")
+        cc_missing = cur.fetchone()["n"]
+
+    if co_missing == 0 and cc_missing == 0:
+        return
+
+    with db_cursor() as cur:
+        if co_missing:
+            cur.execute("SELECT id FROM companies WHERE unique_key = ''")
+            ids = [r["id"] for r in cur.fetchall()]
+            for cid in ids:
+                cur.execute(
+                    "UPDATE companies SET unique_key = %s WHERE id = %s",
+                    (_gen_unique_key(), cid),
+                )
+            logger.info("Backfilled unique_key for %d companies", co_missing)
+
+        if cc_missing:
+            cur.execute("SELECT id FROM company_contacts WHERE unique_key = ''")
+            ids = [r["id"] for r in cur.fetchall()]
+            for cid in ids:
+                cur.execute(
+                    "UPDATE company_contacts SET unique_key = %s WHERE id = %s",
+                    (_gen_unique_key(), cid),
+                )
+            logger.info("Backfilled unique_key for %d contacts", cc_missing)
 
 
 # ── Company operations ───────────────────────────────────────────────────────
@@ -567,17 +607,23 @@ def upsert_company(name: str, domain: str = None, industry: str = None,
                    first_scan_run_id: int = None) -> int:
     with db_cursor() as cur:
         cur.execute("""
-            INSERT INTO companies (name, domain, industry, size, location, website, first_scan_run_id)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            INSERT INTO companies (name, domain, industry, size, location, website,
+                                   first_scan_run_id, unique_key)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (name) DO UPDATE SET
                 domain            = COALESCE(companies.domain,    EXCLUDED.domain),
                 industry          = COALESCE(companies.industry,  EXCLUDED.industry),
                 size              = COALESCE(companies.size,      EXCLUDED.size),
                 location          = COALESCE(companies.location,  EXCLUDED.location),
                 website           = COALESCE(companies.website,   EXCLUDED.website),
+                unique_key        = CASE
+                    WHEN companies.unique_key = '' THEN EXCLUDED.unique_key
+                    ELSE companies.unique_key
+                END,
                 last_updated      = NOW()
             RETURNING id
-        """, (name, domain, industry, size, location, website, first_scan_run_id))
+        """, (name, domain, industry, size, location, website,
+              first_scan_run_id, _gen_unique_key()))
         return cur.fetchone()["id"]
 
 
@@ -693,8 +739,9 @@ def save_contacts(company_id: int, contacts: list):
                 INSERT INTO company_contacts
                     (company_id, full_name, first_name, last_name, title,
                      email, linkedin_url, seniority, confidence, is_target, source,
-                     email_validation_status, email_source, email_prediction_pattern)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                     email_validation_status, email_source, email_prediction_pattern,
+                     unique_key)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 ON CONFLICT DO NOTHING
             """, (
                 company_id,
@@ -711,6 +758,7 @@ def save_contacts(company_id: int, contacts: list):
                 c.get("email_validation_status") or None,
                 c.get("email_source", "") or "",
                 c.get("email_prediction_pattern", "") or "",
+                _gen_unique_key(),
             ))
 
 
