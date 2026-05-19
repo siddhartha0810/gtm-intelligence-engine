@@ -110,6 +110,38 @@ STATIC_DIR   = ENRICH_DIR / "static"   # old unified.html (fallback)
 
 # SPA mount added at end of file after all API routes
 
+# ── PG Master contact count cache (remote host may be unreachable) ───────────
+_pg_master_cache: Dict[str, object] = {"contacts": 0, "ts": 0.0}
+_pg_master_lock = threading.Lock()
+
+def _cached_pg_master_contacts() -> int:
+    """Return enriched contact count, cached for 60 s to avoid blocking every poll."""
+    import time, psycopg2
+    now = time.monotonic()
+    with _pg_master_lock:
+        if now - _pg_master_cache["ts"] < 60:
+            return _pg_master_cache["contacts"]  # type: ignore[return-value]
+    # Refresh in a thread so we don't block the event loop
+    def _fetch():
+        try:
+            conn = psycopg2.connect(PG_MASTER_CONNECTION_STRING, connect_timeout=3)
+            with conn:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT COUNT(*) FROM contacts WHERE \"Validated_Email\" IS NOT NULL AND \"Validated_Email\" != ''")
+                    count = cur.fetchone()[0]
+            conn.close()
+            with _pg_master_lock:
+                _pg_master_cache["contacts"] = count
+                _pg_master_cache["ts"] = time.monotonic()
+        except Exception:
+            with _pg_master_lock:
+                _pg_master_cache["ts"] = time.monotonic()  # back-off 60 s on failure
+    import threading as _t
+    _t.Thread(target=_fetch, daemon=True).start()
+    # Return stale value immediately (0 on first call)
+    return _pg_master_cache["contacts"]  # type: ignore[return-value]
+
+
 # ── Oracle scan subprocess state ────────────────────────────────────────────
 _SCAN_STATUS_FILE = BASE_DIR / "_scan_status.json"
 _SCAN_LOG_FILE    = BASE_DIR / "_scan_log.txt"
@@ -1394,43 +1426,45 @@ async def prospect_download_excel(current_user: dict = Depends(oracle_auth.requi
 @app.get("/api/dashboard")
 async def api_dashboard(current_user: dict = Depends(oracle_auth.require_user)):
     """Single endpoint that powers the Dashboard page KPI cards."""
-    from collections import Counter
+    # Use fast aggregate queries instead of fetching all rows
+    companies_tracked = 0
+    total_signals     = 0
+    implementing      = 0
+    evaluating        = 0
+    researching       = 0
     try:
-        companies = list(oracle_db.get_all_companies_with_signals(run_id=0))
-        companies = _annotate_and_sort(companies)
-    except Exception:
-        companies = []
-
-    phase_counter: Counter = Counter()
-    total_signals = 0
-    for c in companies:
-        for p in (c.get("phases") or []):
-            if p: phase_counter[p] += 1
-        total_signals += int(c.get("signal_count") or 0)
-
-    # Count enriched contacts from PG master store
-    enriched_contacts = 0
-    pushed_to_hubspot = 0
-    try:
-        import psycopg2, psycopg2.extras
-        conn = psycopg2.connect(PG_MASTER_CONNECTION_STRING, connect_timeout=5)
-        with conn:
-            with conn.cursor() as cur:
-                cur.execute("SELECT COUNT(*) FROM contacts WHERE \"Validated_Email\" IS NOT NULL AND \"Validated_Email\" != ''")
-                enriched_contacts = cur.fetchone()[0]
-                cur.execute("SELECT COUNT(*) FROM contacts WHERE \"HubSpot_Pushed\" = true") if False else None
-        conn.close()
+        with oracle_db.db_cursor(commit=False) as cur:
+            cur.execute("""
+                SELECT
+                    COUNT(DISTINCT s.company_id)                                          AS companies_tracked,
+                    COUNT(s.id)                                                            AS total_signals,
+                    COUNT(DISTINCT CASE WHEN s.phase = 'implementing' THEN s.company_id END) AS implementing,
+                    COUNT(DISTINCT CASE WHEN s.phase = 'evaluating'   THEN s.company_id END) AS evaluating,
+                    COUNT(DISTINCT CASE WHEN s.phase = 'researching'  THEN s.company_id END) AS researching
+                FROM oracle_signals s
+            """)
+            row = cur.fetchone()
+            if row:
+                companies_tracked = row["companies_tracked"] or 0
+                total_signals     = row["total_signals"]     or 0
+                implementing      = row["implementing"]      or 0
+                evaluating        = row["evaluating"]        or 0
+                researching       = row["researching"]       or 0
     except Exception:
         pass
 
+    # Count enriched contacts — cached to avoid blocking on unreachable remote host
+    enriched_contacts = _cached_pg_master_contacts()
+    pushed_to_hubspot = 0
+
     return {
-        "companies_tracked":    len(companies),
+        "companies_tracked":    companies_tracked,
         "contacts_enriched":    enriched_contacts,
         "intent_signals":       total_signals,
         "pushed_to_hubspot":    pushed_to_hubspot,
-        "implementing":         phase_counter.get("implementing", 0),
-        "evaluating":           phase_counter.get("evaluating", 0),
-        "researching":          phase_counter.get("researching", 0),
+        "implementing":         implementing,
+        "evaluating":           evaluating,
+        "researching":          researching,
         "scan_status":          _scan_current_status(),
     }
 
