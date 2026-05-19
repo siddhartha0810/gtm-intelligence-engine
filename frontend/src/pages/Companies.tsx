@@ -1,8 +1,33 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Search, Download, ArrowUpRight, MoreHorizontal, Zap, Users, Filter, Send,
+import { Search, Download, ArrowUpRight, MoreHorizontal, Zap, Users, Send,
          Eye, UserX, Trash2, RefreshCw, X, Mail, ExternalLink, ChevronRight,
-         Building2, Loader2 } from 'lucide-react'
+         Building2, Loader2, Package } from 'lucide-react'
 import { toast } from '../components/Toast'
+
+const ORACLE_PRODUCTS = [
+  'JD Edwards', 'Oracle Cloud ERP', 'Oracle EBS', 'Oracle HCM',
+  'Oracle SCM', 'Oracle EPM', 'Oracle CX', 'Oracle Database',
+  'Oracle OCI', 'Oracle Integration', 'NetSuite', 'Oracle (General)',
+]
+
+const PRODUCT_COLORS: Record<string, { bg: string; color: string }> = {
+  'JD Edwards':         { bg: 'rgba(239,68,68,0.1)',   color: '#ef4444' },
+  'Oracle Cloud ERP':   { bg: 'rgba(59,130,246,0.12)', color: '#3b82f6' },
+  'Oracle EBS':         { bg: 'rgba(99,102,241,0.12)', color: '#6366f1' },
+  'Oracle HCM':         { bg: 'rgba(16,185,129,0.12)', color: '#10b981' },
+  'Oracle SCM':         { bg: 'rgba(245,158,11,0.12)', color: '#f59e0b' },
+  'Oracle EPM':         { bg: 'rgba(139,92,246,0.12)', color: '#8b5cf6' },
+  'Oracle CX':          { bg: 'rgba(236,72,153,0.12)', color: '#ec4899' },
+  'Oracle Database':    { bg: 'rgba(20,184,166,0.12)', color: '#14b8a6' },
+  'Oracle OCI':         { bg: 'rgba(249,115,22,0.12)', color: '#f97316' },
+  'Oracle Integration': { bg: 'rgba(34,197,94,0.12)',  color: '#22c55e' },
+  'NetSuite':           { bg: 'rgba(168,85,247,0.12)', color: '#a855f7' },
+  'Oracle (General)':   { bg: 'rgba(107,114,128,0.1)', color: '#6b7280' },
+}
+
+function productStyle(p: string) {
+  return PRODUCT_COLORS[p] ?? { bg: 'rgba(107,114,128,0.1)', color: '#6b7280' }
+}
 
 const authH = (): Record<string, string> => ({
   'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
@@ -21,6 +46,7 @@ interface Company {
   location: string
   source: string
   domain?: string
+  target_product: string
 }
 
 interface Contact {
@@ -370,7 +396,21 @@ export default function Companies() {
   const [sortDir, setSortDir]           = useState<'asc' | 'desc'>('desc')
   const [openMenu, setOpenMenu]         = useState<number | null>(null)
   const [contactsPanel, setContactsPanel] = useState<Company | null>(null)
+  const [productFilter, setProductFilter] = useState('All')
+  const [editingProduct, setEditingProduct] = useState<number | null>(null)
   const menuRefs = useRef<Map<number, HTMLButtonElement>>(new Map())
+
+  const setTargetProduct = async (companyId: number, product: string) => {
+    try {
+      await fetch(`/api/companies/${companyId}/product`, {
+        method: 'PATCH', headers: authH(),
+        body: JSON.stringify({ target_product: product }),
+      })
+      setCompanies(cs => cs.map(c => c.id === companyId ? { ...c, target_product: product } : c))
+      toast.success('Product updated')
+    } catch { toast.error('Failed to update product') }
+    setEditingProduct(null)
+  }
 
   const fetchCompanies = useCallback(async () => {
     setLoading(true)
@@ -385,11 +425,12 @@ export default function Companies() {
         size:     String(c.size || '—'),
         score:    Math.round(Number(c.priority_score ?? c.signal_count ?? 0)),
         phase:    normalisePhase(((c.phases as string[]) || [])[0] || String(c.phase || 'Researching')),
-        signals:  Number(c.signal_count ?? 0),
-        contacts: Number(c.contact_count ?? 0),
-        location: String(c.location || 'UK'),
-        source:   ((c.sources as string[]) || [])[0] || 'Oracle Scan',
-        domain:   String(c.domain || ''),
+        signals:       Number(c.signal_count ?? 0),
+        contacts:      Number(c.contact_count ?? 0),
+        location:      String(c.location || 'UK'),
+        source:        ((c.sources as string[]) || [])[0] || 'Oracle Scan',
+        domain:        String(c.domain || ''),
+        target_product: String(c.target_product || ''),
       }))
       setCompanies(mapped)
     } catch {
@@ -404,6 +445,7 @@ export default function Companies() {
 
   const filtered = companies
     .filter(c => phase === 'All' || c.phase === phase)
+    .filter(c => productFilter === 'All' || c.target_product === productFilter)
     .filter(c => c.name.toLowerCase().includes(search.toLowerCase()) || c.industry.toLowerCase().includes(search.toLowerCase()))
     .sort((a, b) => {
       const d = sortDir === 'desc' ? -1 : 1
@@ -487,12 +529,14 @@ export default function Companies() {
             </button>
           ))}
         </div>
-        <button onClick={() => toast.info('Advanced filters coming soon')}
-          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 8, border: '1px solid #e2e8f0', background: 'transparent', color: '#64748b', fontSize: 13, cursor: 'pointer' }}
-          onMouseEnter={e => { e.currentTarget.style.borderColor = '#3b82f6'; e.currentTarget.style.color = '#0f172a' }}
-          onMouseLeave={e => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.color = '#64748b' }}>
-          <Filter size={13} /> More filters
-        </button>
+        {/* Product filter */}
+        <select
+          value={productFilter}
+          onChange={e => setProductFilter(e.target.value)}
+          style={{ padding: '7px 12px', borderRadius: 8, border: '1px solid #e2e8f0', background: 'white', color: productFilter !== 'All' ? '#3b82f6' : '#64748b', fontSize: 13, cursor: 'pointer', fontWeight: productFilter !== 'All' ? 600 : 400 }}>
+          <option value="All">All Products</option>
+          {ORACLE_PRODUCTS.map(p => <option key={p} value={p}>{p}</option>)}
+        </select>
       </div>
 
       {/* Table */}
@@ -507,6 +551,7 @@ export default function Companies() {
                 Company {sortKey === 'name' ? (sortDir === 'desc' ? '↓' : '↑') : <span style={{ color: '#cbd5e1' }}>↕</span>}
               </th>
               <th style={{ ...thStyle, cursor: 'default' }}>Industry</th>
+              <th style={{ ...thStyle, cursor: 'default' }}>Target Product</th>
               <th style={{ ...thStyle, cursor: 'default' }}>Phase</th>
               <th style={thStyle} onClick={() => toggleSort('score')}>
                 Score {sortKey === 'score' ? (sortDir === 'desc' ? '↓' : '↑') : <span style={{ color: '#cbd5e1' }}>↕</span>}
@@ -522,12 +567,12 @@ export default function Companies() {
           </thead>
           <tbody>
             {loading && (
-              <tr><td colSpan={8} style={{ padding: '48px 0', textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>
+              <tr><td colSpan={9} style={{ padding: '48px 0', textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>
                 Loading companies…
               </td></tr>
             )}
             {!loading && filtered.length === 0 && (
-              <tr><td colSpan={8} style={{ padding: '48px 0', textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>
+              <tr><td colSpan={9} style={{ padding: '48px 0', textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>
                 No companies found. Run the Oracle Intent Engine to populate data.
               </td></tr>
             )}
@@ -555,6 +600,31 @@ export default function Companies() {
                 </td>
 
                 <td style={{ ...tdStyle, color: '#94a3b8', fontSize: 12 }}>{c.industry}</td>
+
+                {/* Target Product — inline editable */}
+                <td style={tdStyle} onClick={e => e.stopPropagation()}>
+                  {editingProduct === c.id ? (
+                    <select autoFocus
+                      defaultValue={c.target_product}
+                      onBlur={e => setTargetProduct(c.id, e.target.value)}
+                      onChange={e => setTargetProduct(c.id, e.target.value)}
+                      style={{ fontSize: 12, padding: '3px 8px', borderRadius: 6, border: '1px solid #3b82f6', background: 'white', color: '#0f172a', cursor: 'pointer' }}>
+                      <option value="">— unset —</option>
+                      {ORACLE_PRODUCTS.map(p => <option key={p} value={p}>{p}</option>)}
+                    </select>
+                  ) : (
+                    <span
+                      onClick={() => setEditingProduct(c.id)}
+                      title="Click to set Oracle product"
+                      style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 4,
+                        fontSize: 11, padding: '3px 8px', borderRadius: 6, fontWeight: 500, cursor: 'pointer',
+                        ...(c.target_product ? productStyle(c.target_product) : { background: '#f1f5f9', color: '#94a3b8' }),
+                      }}>
+                      {c.target_product ? <><Package size={10} />{c.target_product}</> : '+ set product'}
+                    </span>
+                  )}
+                </td>
 
                 {/* Phase */}
                 <td style={tdStyle}>

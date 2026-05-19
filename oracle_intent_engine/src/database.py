@@ -443,6 +443,8 @@ _DDL = [
     "ALTER TABLE companies ADD COLUMN IF NOT EXISTS inoapps_account_tier         TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE companies ADD COLUMN IF NOT EXISTS inoapps_relationship_type    TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE companies ADD COLUMN IF NOT EXISTS inoapps_services_summary     TEXT NOT NULL DEFAULT ''",
+    # Marketing product target — manually set or auto-derived from signals
+    "ALTER TABLE companies ADD COLUMN IF NOT EXISTS target_product               TEXT NOT NULL DEFAULT ''",
     # Internal computed/enrichment fields
     "ALTER TABLE companies ADD COLUMN IF NOT EXISTS detected_products            TEXT[] NOT NULL DEFAULT '{}'",
     "ALTER TABLE companies ADD COLUMN IF NOT EXISTS product_confidence_scores    JSONB NOT NULL DEFAULT '{}'",
@@ -880,6 +882,34 @@ def aggregate_product_intel() -> dict:
     return {"updated": updated, "companies_processed": len(company_products)}
 
 
+def backfill_target_product() -> int:
+    """Set target_product from the dominant oracle_signal product for companies that have none."""
+    with db_cursor() as cur:
+        cur.execute("""
+            UPDATE companies c
+            SET    target_product = sub.top_product
+            FROM (
+                SELECT company_id,
+                       oracle_product AS top_product
+                FROM   oracle_signals
+                WHERE  oracle_product IS NOT NULL AND oracle_product <> ''
+                GROUP  BY company_id, oracle_product
+                ORDER  BY company_id, COUNT(*) DESC
+            ) sub
+            WHERE sub.company_id = c.id
+              AND (c.target_product IS NULL OR c.target_product = '')
+        """)
+        return cur.rowcount
+
+
+def set_company_target_product(company_id: int, product: str) -> None:
+    with db_cursor() as cur:
+        cur.execute(
+            "UPDATE companies SET target_product = %s WHERE id = %s",
+            (product.strip(), company_id),
+        )
+
+
 def get_contacts_for_company(company_id: int) -> list:
     with db_cursor(commit=False) as cur:
         cur.execute("""
@@ -917,7 +947,8 @@ def get_all_companies_with_signals(run_id: int = None):
                 SELECT
                     c.id, c.name, c.domain, c.industry, c.size,
                     c.location, c.website, c.first_seen::text AS first_seen,
-                    c.first_scan_run_id,
+                    c.first_scan_run_id, c.source AS import_source,
+                    COALESCE(NULLIF(c.target_product,''), STRING_AGG(DISTINCT s.oracle_product, ',')) AS target_product,
                     COUNT(s.id)                                  AS signal_count,
                     STRING_AGG(DISTINCT s.oracle_product, ',')   AS products,
                     STRING_AGG(DISTINCT s.phase, ',')            AS phases,
@@ -942,7 +973,8 @@ def get_all_companies_with_signals(run_id: int = None):
                 SELECT
                     c.id, c.name, c.domain, c.industry, c.size,
                     c.location, c.website, c.first_seen::text AS first_seen,
-                    c.first_scan_run_id,
+                    c.first_scan_run_id, c.source AS import_source,
+                    COALESCE(NULLIF(c.target_product,''), STRING_AGG(DISTINCT s.oracle_product, ',')) AS target_product,
                     COUNT(s.id)                                  AS signal_count,
                     STRING_AGG(DISTINCT s.oracle_product, ',')   AS products,
                     STRING_AGG(DISTINCT s.phase, ',')            AS phases,

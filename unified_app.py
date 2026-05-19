@@ -2124,6 +2124,39 @@ async def api_promote_staged(
 # COMPANY STATUS LIFECYCLE
 # ═══════════════════════════════════════════════════════════════════════════
 
+ORACLE_PRODUCTS = [
+    "JD Edwards", "Oracle Cloud ERP", "Oracle EBS", "Oracle HCM",
+    "Oracle SCM", "Oracle EPM", "Oracle CX", "Oracle Database",
+    "Oracle OCI", "Oracle Integration", "NetSuite", "Oracle (General)",
+]
+
+@app.patch("/api/companies/{company_id}/product")
+async def api_company_product(
+    company_id: int,
+    request: Request,
+    current_user: dict = Depends(oracle_auth.require_analyst),
+):
+    data    = await request.json()
+    product = data.get("target_product", "").strip()
+    oracle_db.set_company_target_product(company_id, product)
+    log_audit(current_user, "set_target_product", "company", str(company_id),
+              new_value={"target_product": product})
+    return {"id": company_id, "target_product": product}
+
+
+@app.get("/api/companies/products")
+async def api_product_list(current_user: dict = Depends(oracle_auth.require_user)):
+    """Return the canonical list of Oracle products for dropdowns."""
+    return ORACLE_PRODUCTS
+
+
+@app.post("/api/companies/backfill-products")
+async def api_backfill_products(current_user: dict = Depends(oracle_auth.require_analyst)):
+    """Auto-populate target_product from dominant oracle_signal for companies without one."""
+    updated = oracle_db.backfill_target_product()
+    return {"updated": updated}
+
+
 @app.patch("/api/companies/{company_id}/status")
 async def api_company_status(
     company_id: int,

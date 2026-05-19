@@ -49,6 +49,7 @@ HS_COMPANY_FIELDS = [
     {"key": "inoapps_services_summary",   "label": "Inoapps Services Summary",   "required": False},
     {"key": "location",                   "label": "Location",                   "required": False},
     {"key": "size",                       "label": "Size / Revenue Band",        "required": False},
+    {"key": "target_product",             "label": "Target Oracle Product",      "required": False},
 ]
 
 HS_CONTACT_FIELDS = [
@@ -229,11 +230,12 @@ def _import_company(record: dict, user_id: int = None) -> None:
                     number_of_employees, billing_city, billing_country,
                     oracle_relationship_type, oracle_version,
                     inoapps_account_manager, inoapps_account_tier,
-                    source, status)
-               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'import','staged')
+                    target_product, source, status)
+               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'import','staged')
                ON CONFLICT (name) DO UPDATE SET
                    domain = COALESCE(EXCLUDED.domain, companies.domain),
                    industry = COALESCE(EXCLUDED.industry, companies.industry),
+                   target_product = CASE WHEN EXCLUDED.target_product <> '' THEN EXCLUDED.target_product ELSE companies.target_product END,
                    last_updated = NOW()""",
             (
                 name,
@@ -243,6 +245,7 @@ def _import_company(record: dict, user_id: int = None) -> None:
                 record.get("billing_city"), record.get("billing_country"),
                 record.get("oracle_relationship_type"), record.get("oracle_version"),
                 record.get("inoapps_account_manager"), record.get("inoapps_account_tier"),
+                record.get("target_product", ""),
             ),
         )
 
