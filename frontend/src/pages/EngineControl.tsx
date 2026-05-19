@@ -335,7 +335,7 @@ export default function EngineControl() {
 
   const fetchStatus = async () => {
     try {
-      const r = await fetch('/scan/status')
+      const r = await fetch('/scan/status', { headers: authH() })
       if (!r.ok) return
       const d = await r.json()
       if (d.status === 'running') setOracleState('running')
@@ -458,7 +458,7 @@ export default function EngineControl() {
       if (pollRef.current) clearInterval(pollRef.current)
       pollRef.current = setInterval(async () => {
         await fetchLog()
-        const s = await fetch('/scan/status').then(r => r.json()).catch(() => null)
+        const s = await fetch('/scan/status', { headers: authH() }).then(r => r.json()).catch(() => null)
         if (s && s.status !== 'running') {
           setOracleState('idle')
           addLog('SUCCESS', 'Oracle Intent scan completed.')

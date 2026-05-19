@@ -40,6 +40,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
+# ── Dotenv MUST load before oracle engine imports so JWT_SECRET and DB vars
+#    are in the environment when auth.py / database.py read them at import time.
+from dotenv import load_dotenv
+load_dotenv(BASE_DIR / "oracle_intent_engine"   / ".env")           # oracle DB vars + JWT_SECRET first
+load_dotenv(BASE_DIR / "lead_enrichment_engine" / ".env", override=False)  # enrichment vars
+
 # ── Oracle engine imports (after path setup) ────────────────────────────────
 from src import config as oracle_cfg
 from src import database as oracle_db
@@ -55,11 +61,6 @@ from src import events as events_mod
 from src import manufacturer as mfr_mod
 from src import list_import as import_mod
 from src import data_quality as dqe_mod
-
-# ── Dotenv for enrichment/prospect credentials ──────────────────────────────
-from dotenv import load_dotenv
-load_dotenv(BASE_DIR / "oracle_intent_engine"   / ".env")           # oracle DB vars first
-load_dotenv(BASE_DIR / "lead_enrichment_engine" / ".env", override=False)  # enrichment vars
 
 # Explicitly set oracle DB DSN so oracle database.py never picks up PG_MASTER_CONNECTION_STRING
 import os as _os
@@ -112,6 +113,7 @@ STATIC_DIR   = ENRICH_DIR / "static"   # old unified.html (fallback)
 # ── Oracle scan subprocess state ────────────────────────────────────────────
 _SCAN_STATUS_FILE = BASE_DIR / "_scan_status.json"
 _SCAN_LOG_FILE    = BASE_DIR / "_scan_log.txt"
+_SCAN_PID_FILE    = BASE_DIR / "_scan_worker.pid"
 _scan_proc: Optional[subprocess.Popen] = None
 _scan_proc_lock   = threading.Lock()
 
@@ -196,6 +198,7 @@ def _start_scan_subprocess(sources: list, location: str, max_pages: int,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
+        _SCAN_PID_FILE.write_text(str(_scan_proc.pid), encoding="utf-8")
         return True
 
 
@@ -209,10 +212,33 @@ def _stop_scan_subprocess() -> None:
             except subprocess.TimeoutExpired:
                 _scan_proc.kill()
 
+        if _SCAN_PID_FILE.exists():
+            try:
+                saved_pid = int(_SCAN_PID_FILE.read_text().strip())
+                subprocess.run(
+                    ["taskkill", "/F", "/T", "/PID", str(saved_pid)],
+                    capture_output=True,
+                )
+            except Exception:
+                pass
+            finally:
+                _SCAN_PID_FILE.unlink(missing_ok=True)
+
+    try:
+        if _SCAN_STATUS_FILE.exists():
+            st = json.loads(_SCAN_STATUS_FILE.read_text(encoding="utf-8"))
+            if st.get("status") == "running":
+                st["status"]   = "idle"
+                st["progress"] = "Stopped by user."
+                _SCAN_STATUS_FILE.write_text(json.dumps(st), encoding="utf-8")
+    except Exception:
+        pass
+
 
 # ── Oracle enrichment subprocess state ──────────────────────────────────────
 _ENRICH_STATUS_FILE = BASE_DIR / "_enrich_status.json"
 _ENRICH_LOG_FILE    = BASE_DIR / "_enrich_log.txt"
+_ENRICH_PID_FILE    = BASE_DIR / "_enrich_worker.pid"
 _enrich_proc: Optional[subprocess.Popen] = None
 _enrich_proc_lock   = threading.Lock()
 
@@ -295,18 +321,47 @@ def _start_enrich_subprocess(
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
+        # Persist PID so stop works even after a server restart
+        _ENRICH_PID_FILE.write_text(str(_enrich_proc.pid), encoding="utf-8")
         return True
 
 
 def _stop_enrich_subprocess() -> None:
     global _enrich_proc
+
     with _enrich_proc_lock:
+        # Kill the in-memory handle if available
         if _enrich_proc is not None and _enrich_proc.poll() is None:
             _enrich_proc.terminate()
             try:
                 _enrich_proc.wait(timeout=5)
             except subprocess.TimeoutExpired:
                 _enrich_proc.kill()
+
+        # Also kill by saved PID — works even after a server restart
+        if _ENRICH_PID_FILE.exists():
+            try:
+                saved_pid = int(_ENRICH_PID_FILE.read_text().strip())
+                # taskkill works on Windows and kills the whole process tree
+                subprocess.run(
+                    ["taskkill", "/F", "/T", "/PID", str(saved_pid)],
+                    capture_output=True,
+                )
+            except Exception:
+                pass
+            finally:
+                _ENRICH_PID_FILE.unlink(missing_ok=True)
+
+    # Mark status file as stopped so the UI updates immediately
+    try:
+        if _ENRICH_STATUS_FILE.exists():
+            st = json.loads(_ENRICH_STATUS_FILE.read_text(encoding="utf-8"))
+            if st.get("status") == "running":
+                st["status"]   = "idle"
+                st["progress"] = "Stopped by user."
+                _ENRICH_STATUS_FILE.write_text(json.dumps(st), encoding="utf-8")
+    except Exception:
+        pass
 
 
 # ── Shared job store (enrichment + prospect jobs) ───────────────────────────
@@ -1166,7 +1221,7 @@ async def prospect_db_search(request: Request, current_user: dict = Depends(orac
             try:
                 import psycopg2
                 import psycopg2.extras
-                conn = psycopg2.connect(PG_MASTER_CONNECTION_STRING)
+                conn = psycopg2.connect(PG_MASTER_CONNECTION_STRING, connect_timeout=5)
                 with conn:
                     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
                         cur.execute(
@@ -1340,8 +1395,11 @@ async def prospect_download_excel(current_user: dict = Depends(oracle_auth.requi
 async def api_dashboard(current_user: dict = Depends(oracle_auth.require_user)):
     """Single endpoint that powers the Dashboard page KPI cards."""
     from collections import Counter
-    companies = list(oracle_db.get_all_companies_with_signals(run_id=0))
-    companies = _annotate_and_sort(companies)
+    try:
+        companies = list(oracle_db.get_all_companies_with_signals(run_id=0))
+        companies = _annotate_and_sort(companies)
+    except Exception:
+        companies = []
 
     phase_counter: Counter = Counter()
     total_signals = 0
@@ -1355,7 +1413,7 @@ async def api_dashboard(current_user: dict = Depends(oracle_auth.require_user)):
     pushed_to_hubspot = 0
     try:
         import psycopg2, psycopg2.extras
-        conn = psycopg2.connect(PG_MASTER_CONNECTION_STRING)
+        conn = psycopg2.connect(PG_MASTER_CONNECTION_STRING, connect_timeout=5)
         with conn:
             with conn.cursor() as cur:
                 cur.execute("SELECT COUNT(*) FROM contacts WHERE \"Validated_Email\" IS NOT NULL AND \"Validated_Email\" != ''")
@@ -1733,8 +1791,8 @@ async def api_audit_logs(
 # ═══════════════════════════════════════════════════════════════════════════
 
 @app.get("/api/technology-profiles")
-async def api_list_profiles(active_only: int = 0):
-    return tp_mod.list_profiles(active_only=bool(active_only))
+async def api_list_profiles(active_only: bool = False):
+    return tp_mod.list_profiles(active_only=active_only)
 
 
 @app.get("/api/technology-profiles/{profile_id}")

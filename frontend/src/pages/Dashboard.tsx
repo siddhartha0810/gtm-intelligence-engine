@@ -1,20 +1,26 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { Building2, Users, Zap, CheckCircle2, Play, Square, RefreshCw, ChevronRight, Clock, TrendingUp } from 'lucide-react'
 import { toast } from '../components/Toast'
 import { useNavigate } from 'react-router-dom'
 
-const authH = () => ({ 'Authorization': `Bearer ${localStorage.getItem('token') || ''}` })
+const authH = () => ({ Authorization: `Bearer ${localStorage.getItem('token') || ''}` })
 
-const card = { background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 12, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }
+const card = {
+  background: '#ffffff',
+  border: '1px solid #e2e8f0',
+  borderRadius: 12,
+  padding: 20,
+  boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+}
 
 const logColor = (level: string) => {
   if (level === 'SUCCESS') return '#10b981'
-  if (level === 'ERROR') return '#ef4444'
-  if (level === 'WARN') return '#f59e0b'
+  if (level === 'ERROR')   return '#ef4444'
+  if (level === 'WARN')    return '#f59e0b'
   return '#64748b'
 }
 
-const now = () => new Date().toLocaleTimeString('en-GB', { hour12: false })
+const ts = () => new Date().toLocaleTimeString('en-GB', { hour12: false })
 
 interface DashboardStats {
   companies_tracked: number
@@ -24,108 +30,171 @@ interface DashboardStats {
   implementing: number
   evaluating: number
   researching: number
-  scan_status: { status: string; progress?: Record<string, unknown> }
+  scan_status: { status: string; progress?: string }
 }
 
 interface ScanLog { t: string; level: string; msg: string }
 
-export default function Dashboard() {
-  const [stats, setStats] = useState<DashboardStats | null>(null)
-  const [logs, setLogs] = useState<ScanLog[]>([{ t: now(), level: 'INFO', msg: 'Control panel loaded. Connecting to backend...' }])
-  const [refreshing, setRefreshing] = useState(false)
-  const [scanRunning, setScanRunning] = useState(false)
-  const [backendOk, setBackendOk] = useState<boolean | null>(null)
-  const logRef = useRef<HTMLDivElement>(null)
-  const navigate = useNavigate()
+type BackendState = 'loading' | 'online' | 'offline'
 
-  const fetchStats = async () => {
+export default function Dashboard() {
+  const [stats,        setStats]        = useState<DashboardStats | null>(null)
+  const [logs,         setLogs]         = useState<ScanLog[]>([{ t: ts(), level: 'INFO', msg: 'Control panel loaded — connecting to backend…' }])
+  const [refreshing,   setRefreshing]   = useState(false)
+  const [scanRunning,  setScanRunning]  = useState(false)
+  const [backendState, setBackendState] = useState<BackendState>('loading')
+  const [retryIn,      setRetryIn]      = useState(0)
+
+  const logRef      = useRef<HTMLDivElement>(null)
+  const failCount   = useRef(0)
+  const retryTimer  = useRef<ReturnType<typeof setInterval> | null>(null)
+  const navigate    = useNavigate()
+
+  // ── fetch helpers ──────────────────────────────────────────────────────────
+  const fetchStats = useCallback(async (silent = false) => {
     try {
       const res = await fetch('/api/dashboard', { headers: authH() })
+
+      if (res.status === 401) {
+        // Token expired — redirect to login
+        localStorage.removeItem('token')
+        navigate('/login')
+        return
+      }
+
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
+
       const data: DashboardStats = await res.json()
       setStats(data)
-      setBackendOk(true)
+      setBackendState('online')
       setScanRunning(data.scan_status?.status === 'running')
+      failCount.current = 0
+      setRetryIn(0)
+      if (retryTimer.current) { clearInterval(retryTimer.current); retryTimer.current = null }
+      if (!silent) setLogs(l => [...l.slice(-49), { t: ts(), level: 'SUCCESS', msg: `Dashboard refreshed — ${data.companies_tracked} companies, ${data.intent_signals} signals` }])
     } catch {
-      setBackendOk(false)
-      setLogs(l => [...l, { t: now(), level: 'ERROR', msg: 'Backend unreachable. Start: uvicorn unified_app:app --reload --port 8000' }])
+      failCount.current += 1
+      if (failCount.current >= 2) {
+        // Only show offline after 2 consecutive failures (avoids brief network hiccup flicker)
+        setBackendState('offline')
+        setLogs(l => [...l.slice(-49), { t: ts(), level: 'ERROR', msg: 'Backend unreachable — retrying every 5 s…' }])
+      }
     }
-  }
+  }, [navigate])
 
-  const fetchLog = async () => {
+  const fetchLog = useCallback(async () => {
     try {
       const res = await fetch('/scan/log', { headers: authH() })
       if (!res.ok) return
       const data = await res.json()
-      const rawLog: string[] = Array.isArray(data) ? data : (data.log || data.logs || [])
-      const entries: ScanLog[] = rawLog.map((line: string) => {
+      const raw: string[] = Array.isArray(data) ? data : (data.log || data.logs || [])
+      const entries: ScanLog[] = raw.map((line: string) => {
         const m = line.match(/^\[(\d{2}:\d{2}:\d{2})\]\s+\[(\w+)\]\s+(.+)$/)
-        return m ? { t: m[1], level: m[2], msg: m[3] } : { t: now(), level: 'INFO', msg: line }
+        return m ? { t: m[1], level: m[2], msg: m[3] } : { t: ts(), level: 'INFO', msg: line }
       })
       if (entries.length > 0) setLogs(entries.slice(-50))
     } catch { /* silent */ }
-  }
+  }, [])
 
   const refreshAll = async () => {
     setRefreshing(true)
-    toast.info('Refreshing all systems...')
-    await fetchStats()
+    toast.info('Refreshing…')
+    await fetchStats(false)
     await fetchLog()
-    setLogs(l => [...l, { t: now(), level: 'SUCCESS', msg: 'System refresh complete. All statuses updated.' }])
     setRefreshing(false)
-    toast.success('All systems refreshed')
+    toast.success('Refreshed')
   }
 
-  const toggleOracleScan = async () => {
+  const toggleScan = async () => {
     if (scanRunning) {
       try {
         await fetch('/scan/stop', { method: 'POST', headers: authH() })
         setScanRunning(false)
-        setLogs(l => [...l, { t: now(), level: 'INFO', msg: 'Oracle Intent Engine stop signal sent.' }])
-        toast.info('Oracle scan stopping...')
+        setLogs(l => [...l.slice(-49), { t: ts(), level: 'INFO', msg: 'Oracle scan stopping…' }])
+        toast.info('Scan stopping…')
       } catch { toast.error('Failed to stop scan') }
     } else {
       try {
-        const res = await fetch('/scan/start', { method: 'POST', headers: { ...authH(), 'Content-Type': 'application/json' }, body: JSON.stringify({ sources: ['indeed', 'linkedin', 'google_jobs', 'news'], max_pages: 3 }) })
+        const res = await fetch('/scan/start', {
+          method: 'POST',
+          headers: { ...authH(), 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sources: ['indeed', 'linkedin', 'google_jobs', 'news'], max_pages: 3 }),
+        })
         if (!res.ok) throw new Error()
         setScanRunning(true)
-        setLogs(l => [...l, { t: now(), level: 'INFO', msg: 'Oracle Intent Engine starting... scanning LinkedIn Jobs, Indeed, Oracle News' }])
-        toast.success('Oracle Intent scan started')
+        setLogs(l => [...l.slice(-49), { t: ts(), level: 'INFO', msg: 'Oracle Intent Engine starting…' }])
+        toast.success('Scan started')
       } catch { toast.error('Failed to start scan') }
     }
   }
 
+  // ── polling — 5 s stats, 5 s log ──────────────────────────────────────────
   useEffect(() => {
-    fetchStats()
+    fetchStats(true)
     fetchLog()
-    const statsInterval = setInterval(fetchStats, 15000)
-    const logInterval = setInterval(fetchLog, 5000)
-    return () => { clearInterval(statsInterval); clearInterval(logInterval) }
-  }, [])
+    const si = setInterval(() => fetchStats(true), 5000)
+    const li = setInterval(fetchLog, 5000)
+    return () => { clearInterval(si); clearInterval(li) }
+  }, [fetchStats, fetchLog])
+
+  // ── countdown when offline ─────────────────────────────────────────────────
+  useEffect(() => {
+    if (backendState === 'offline' && !retryTimer.current) {
+      setRetryIn(5)
+      retryTimer.current = setInterval(() => {
+        setRetryIn(n => {
+          if (n <= 1) { fetchStats(true); return 5 }
+          return n - 1
+        })
+      }, 1000)
+    }
+    if (backendState === 'online' && retryTimer.current) {
+      clearInterval(retryTimer.current)
+      retryTimer.current = null
+      setRetryIn(0)
+    }
+    return () => { if (retryTimer.current) clearInterval(retryTimer.current) }
+  }, [backendState, fetchStats])
 
   useEffect(() => {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight
   }, [logs])
 
+  // ── derived ────────────────────────────────────────────────────────────────
+  const badgeStyle = (state: BackendState) => ({
+    fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 999,
+    background: state === 'online'  ? 'rgba(16,185,129,0.12)'
+              : state === 'loading' ? 'rgba(251,191,36,0.15)'
+              : 'rgba(107,114,128,0.15)',
+    color: state === 'online'  ? '#34d399'
+         : state === 'loading' ? '#fbbf24'
+         : '#6b7280',
+  })
+
+  const badgeLabel = (state: BackendState) =>
+    state === 'online' ? 'live' : state === 'loading' ? '…' : 'offline'
+
   const kpis = [
-    { label: 'Companies Tracked', value: stats ? stats.companies_tracked.toLocaleString() : '—', icon: Building2, color: '#3b82f6' },
-    { label: 'Contacts Enriched', value: stats ? stats.contacts_enriched.toLocaleString() : '—', icon: Users, color: '#6366f1' },
-    { label: 'Intent Signals', value: stats ? stats.intent_signals.toLocaleString() : '—', icon: Zap, color: '#f59e0b' },
-    { label: 'Pushed to HubSpot', value: stats ? stats.pushed_to_hubspot.toLocaleString() : '—', icon: CheckCircle2, color: '#10b981' },
+    { label: 'Companies Tracked', value: stats?.companies_tracked.toLocaleString() ?? '—', icon: Building2,    color: '#3b82f6' },
+    { label: 'Contacts Enriched', value: stats?.contacts_enriched.toLocaleString()  ?? '—', icon: Users,        color: '#6366f1' },
+    { label: 'Intent Signals',    value: stats?.intent_signals.toLocaleString()      ?? '—', icon: Zap,          color: '#f59e0b' },
+    { label: 'Pushed to HubSpot', value: stats?.pushed_to_hubspot.toLocaleString()   ?? '—', icon: CheckCircle2, color: '#10b981' },
   ]
 
   const engineRows = [
-    { id: 'oracle', label: 'Oracle Intent Engine', desc: '18 signal scrapers', color: '#3b82f6', live: scanRunning },
-    { id: 'enrichment', label: 'Lead Enrichment', desc: '7-stage pipeline', color: '#6366f1', live: false },
-    { id: 'hubspot', label: 'HubSpot Sync', desc: 'CRM connector', color: '#f59e0b', live: false },
+    { id: 'oracle',     label: 'Oracle Intent Engine', desc: '18 signal scrapers',  color: '#3b82f6', live: scanRunning },
+    { id: 'enrichment', label: 'Lead Enrichment',      desc: '7-stage pipeline',    color: '#6366f1', live: false },
+    { id: 'hubspot',    label: 'HubSpot Sync',         desc: 'CRM connector',        color: '#f59e0b', live: false },
   ]
 
-  const activityItems = [
-    { icon: CheckCircle2, color: '#10b981', msg: `${stats?.implementing ?? 0} companies in implementing phase`, time: 'live' },
-    { icon: Zap, color: '#f59e0b', msg: `${stats?.intent_signals ?? 0} total Oracle intent signals`, time: 'live' },
-    { icon: Building2, color: '#3b82f6', msg: `${stats?.companies_tracked ?? 0} companies tracked across all runs`, time: 'live' },
-    { icon: TrendingUp, color: '#6366f1', msg: `${stats?.evaluating ?? 0} evaluating · ${stats?.researching ?? 0} researching`, time: 'live' },
-    { icon: Clock, color: '#64748b', msg: backendOk === false ? 'Backend offline — run unified_app.py' : backendOk ? 'Backend connected on port 8000' : 'Connecting...', time: '' },
+  const liveItems = [
+    { icon: CheckCircle2, color: '#10b981', msg: `${stats?.implementing ?? 0} companies in implementing phase` },
+    { icon: Zap,          color: '#f59e0b', msg: `${stats?.intent_signals ?? 0} total Oracle intent signals` },
+    { icon: Building2,    color: '#3b82f6', msg: `${stats?.companies_tracked ?? 0} companies tracked` },
+    { icon: TrendingUp,   color: '#6366f1', msg: `${stats?.evaluating ?? 0} evaluating · ${stats?.researching ?? 0} researching` },
+    { icon: Clock,        color: '#64748b', msg: backendState === 'online'  ? 'Backend connected on port 8000'
+                                                : backendState === 'loading' ? 'Connecting to backend…'
+                                                : `Backend offline — retrying in ${retryIn}s` },
   ]
 
   return (
@@ -136,7 +205,10 @@ export default function Dashboard() {
         <div>
           <h1 style={{ fontSize: 20, fontWeight: 600, color: '#0f172a', margin: 0 }}>Control Panel</h1>
           <p style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>
-            Live system overview — backend {backendOk === null ? 'connecting...' : backendOk ? <span style={{ color: '#10b981' }}>online</span> : <span style={{ color: '#ef4444' }}>offline</span>}
+            Live system overview — backend{' '}
+            {backendState === 'online'  && <span style={{ color: '#10b981' }}>online</span>}
+            {backendState === 'loading' && <span style={{ color: '#f59e0b' }}>connecting…</span>}
+            {backendState === 'offline' && <span style={{ color: '#ef4444' }}>offline · retry in {retryIn}s</span>}
           </p>
         </div>
         <button
@@ -144,14 +216,18 @@ export default function Dashboard() {
           disabled={refreshing}
           style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: refreshing ? 'default' : 'pointer', opacity: refreshing ? 0.75 : 1 }}
         >
-          <RefreshCw size={13} style={{ animation: refreshing ? 'spin 1s linear infinite' : 'none' }} /> {refreshing ? 'Refreshing...' : 'Refresh All'}
+          <RefreshCw size={13} style={{ animation: refreshing ? 'spin 1s linear infinite' : 'none' }} />
+          {refreshing ? 'Refreshing…' : 'Refresh All'}
         </button>
       </div>
 
-      {/* Backend offline banner */}
-      {backendOk === false && (
-        <div style={{ padding: '12px 16px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: 10, fontSize: 13, color: '#f87171' }}>
-          Backend not running. From the DATA TOOL folder run: <code style={{ fontFamily: 'JetBrains Mono, monospace', background: 'rgba(0,0,0,0.3)', padding: '2px 6px', borderRadius: 4 }}>uvicorn unified_app:app --reload --port 8000</code>
+      {/* Offline banner — only after confirmed offline, never during initial load */}
+      {backendState === 'offline' && (
+        <div style={{ padding: '12px 16px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: 10, fontSize: 13, color: '#f87171', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span>Backend unreachable. Ensure uvicorn is running on port 8000.</span>
+          <button onClick={() => fetchStats(false)} style={{ background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.4)', borderRadius: 6, color: '#f87171', fontSize: 12, padding: '4px 10px', cursor: 'pointer' }}>
+            Retry now
+          </button>
         </div>
       )}
 
@@ -163,9 +239,7 @@ export default function Dashboard() {
               <div style={{ width: 36, height: 36, borderRadius: 8, background: `${k.color}20`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <k.icon size={17} color={k.color} strokeWidth={1.75} />
               </div>
-              <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 999, background: backendOk ? 'rgba(16,185,129,0.12)' : 'rgba(107,114,128,0.15)', color: backendOk ? '#34d399' : '#6b7280' }}>
-                {backendOk ? 'live' : 'offline'}
-              </span>
+              <span style={badgeStyle(backendState)}>{badgeLabel(backendState)}</span>
             </div>
             <div style={{ fontSize: 26, fontWeight: 700, color: '#0f172a', lineHeight: 1 }}>{k.value}</div>
             <div style={{ fontSize: 12, color: '#64748b', marginTop: 6 }}>{k.label}</div>
@@ -173,7 +247,7 @@ export default function Dashboard() {
         ))}
       </div>
 
-      {/* Middle row — engine status / review queue / live stats */}
+      {/* Middle row */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, alignItems: 'start' }}>
 
         {/* Engine Status */}
@@ -195,7 +269,7 @@ export default function Dashboard() {
                 </span>
                 {engine.id === 'oracle' && (
                   <button
-                    onClick={toggleOracleScan}
+                    onClick={toggleScan}
                     style={{ width: 28, height: 28, borderRadius: 7, border: '1px solid #e2e8f0', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: engine.live ? '#ef4444' : '#94a3b8', flexShrink: 0 }}
                   >
                     {engine.live ? <Square size={11} /> : <Play size={11} />}
@@ -218,8 +292,8 @@ export default function Dashboard() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {[
                 { label: 'Implementing', count: stats.implementing, color: '#3b82f6' },
-                { label: 'Evaluating', count: stats.evaluating, color: '#6366f1' },
-                { label: 'Researching', count: stats.researching, color: '#94a3b8' },
+                { label: 'Evaluating',   count: stats.evaluating,   color: '#6366f1' },
+                { label: 'Researching',  count: stats.researching,  color: '#94a3b8' },
               ].map(row => (
                 <div key={row.label} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8 }}>
                   <div style={{ width: 8, height: 8, borderRadius: '50%', background: row.color, flexShrink: 0 }} />
@@ -237,26 +311,27 @@ export default function Dashboard() {
               </div>
             </div>
           ) : (
-            <div style={{ color: '#94a3b8', fontSize: 13, padding: '20px 0', textAlign: 'center' }}>Loading...</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {[1, 2, 3].map(i => (
+                <div key={i} style={{ height: 40, borderRadius: 8, background: 'linear-gradient(90deg,#f1f5f9 25%,#e2e8f0 50%,#f1f5f9 75%)', backgroundSize: '200% 100%', animation: 'shimmer 1.5s infinite' }} />
+              ))}
+            </div>
           )}
         </div>
 
-        {/* Recent Activity */}
+        {/* Live Stats */}
         <div style={card}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
             <span style={{ fontSize: 13, fontWeight: 600, color: '#0f172a' }}>Live Stats</span>
-            <div style={{ width: 8, height: 8, borderRadius: '50%', background: backendOk ? '#10b981' : '#374151' }} />
+            <div style={{ width: 8, height: 8, borderRadius: '50%', background: backendState === 'online' ? '#10b981' : backendState === 'loading' ? '#fbbf24' : '#374151', boxShadow: backendState === 'online' ? '0 0 6px #10b981' : 'none' }} />
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            {activityItems.map((item, i) => (
+            {liveItems.map((item, i) => (
               <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
                 <div style={{ width: 28, height: 28, borderRadius: 7, background: `${item.color}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                   <item.icon size={13} color={item.color} />
                 </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 12, color: '#0f172a', lineHeight: '1.5' }}>{item.msg}</div>
-                  {item.time && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>{item.time}</div>}
-                </div>
+                <div style={{ flex: 1, fontSize: 12, color: '#0f172a', lineHeight: '1.5', paddingTop: 6 }}>{item.msg}</div>
               </div>
             ))}
           </div>
@@ -294,6 +369,10 @@ export default function Dashboard() {
         </div>
       </div>
 
+      <style>{`
+        @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+        @keyframes spin    { to{transform:rotate(360deg)} }
+      `}</style>
     </div>
   )
 }
