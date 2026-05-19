@@ -289,9 +289,7 @@ export default function Contacts() {
                   <td style={{ padding: '12px 16px', fontSize: 13, whiteSpace: 'nowrap' }}>
                     {c.title
                       ? <span style={{ color: '#0f172a', fontWeight: 500 }}>{c.title}</span>
-                      : isApollo(c.source || '')
-                        ? <span style={{ color: '#94a3b8' }}>—</span>
-                        : <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 999, background: 'rgba(107,114,128,0.08)', color: '#94a3b8', fontStyle: 'italic' }}>email only</span>
+                      : <span style={{ color: '#94a3b8' }}>—</span>
                     }
                   </td>
                   <td style={{ padding: '12px 16px' }}>
