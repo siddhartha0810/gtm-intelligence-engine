@@ -744,7 +744,18 @@ def save_contacts(company_id: int, contacts: list):
                      email_validation_status, email_source, email_prediction_pattern,
                      unique_key)
                 VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-                ON CONFLICT DO NOTHING
+                ON CONFLICT (company_id, email) WHERE email IS NOT NULL DO UPDATE SET
+                    title      = CASE WHEN EXCLUDED.title <> '' THEN EXCLUDED.title
+                                      ELSE company_contacts.title END,
+                    linkedin_url = COALESCE(EXCLUDED.linkedin_url, company_contacts.linkedin_url),
+                    seniority  = CASE WHEN EXCLUDED.seniority <> '' THEN EXCLUDED.seniority
+                                      ELSE company_contacts.seniority END,
+                    confidence = GREATEST(EXCLUDED.confidence, company_contacts.confidence),
+                    source     = CASE WHEN EXCLUDED.source IN ('apollo','apollo.io')
+                                      THEN EXCLUDED.source ELSE company_contacts.source END,
+                    email_validation_status = COALESCE(EXCLUDED.email_validation_status,
+                                                       company_contacts.email_validation_status),
+                    is_target  = GREATEST(EXCLUDED.is_target, company_contacts.is_target)
             """, (
                 company_id,
                 c.get("full_name", ""),
