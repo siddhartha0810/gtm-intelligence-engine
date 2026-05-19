@@ -61,8 +61,16 @@ export default function HubSpotSync() {
       .then(r => r.ok ? r.json() : null)
       .then(data => {
         if (data) {
-          setConfig(data)
-          setPortalId(data.portalId || '')
+          setConfig({
+            hasSavedKey:     !!(data.api_key || data.hasSavedKey),
+            maskedKey:       data.api_key || data.maskedKey,
+            portalId:        data.portal_id || data.portalId || '',
+            lastSync:        data.last_sync_at || data.lastSync,
+            companiesSynced: data.companies_synced ?? data.companiesSynced,
+            contactsSynced:  data.contacts_synced  ?? data.contactsSynced,
+            syncStatus:      data.sync_status || data.syncStatus || 'idle',
+          })
+          setPortalId(data.portal_id || data.portalId || '')
         }
       })
       .catch(() => {})
@@ -75,7 +83,7 @@ export default function HubSpotSync() {
       const res = await fetch('/api/hubspot/config', {
         method: 'POST',
         headers: authHeaders(),
-        body: JSON.stringify({ apiKey: apiKey || undefined, portalId }),
+        body: JSON.stringify({ api_key: apiKey || undefined, portal_id: portalId }),
       })
       const data = await res.json()
       setConfig(prev => ({ ...prev, ...data, hasSavedKey: apiKey ? true : prev.hasSavedKey }))
@@ -91,7 +99,7 @@ export default function HubSpotSync() {
     setTesting(true)
     setTestResult(null)
     try {
-      const res = await fetch('/api/hubspot/test', { method: 'POST', headers: authHeaders() })
+      const res = await fetch('/api/hubspot/test', { method: 'POST', headers: authHeaders(), body: JSON.stringify({ api_key: apiKey || undefined }) })
       const data = await res.json()
       setTestResult({ ok: res.ok, message: data.message || (res.ok ? 'Connection successful' : 'Connection failed') })
     } catch {

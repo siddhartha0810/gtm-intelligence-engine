@@ -55,7 +55,8 @@ export default function Dashboard() {
       const res = await fetch('/scan/log')
       if (!res.ok) return
       const data = await res.json()
-      const entries: ScanLog[] = (data.log || []).map((line: string) => {
+      const rawLog: string[] = Array.isArray(data) ? data : (data.log || data.logs || [])
+      const entries: ScanLog[] = rawLog.map((line: string) => {
         const m = line.match(/^\[(\d{2}:\d{2}:\d{2})\]\s+\[(\w+)\]\s+(.+)$/)
         return m ? { t: m[1], level: m[2], msg: m[3] } : { t: now(), level: 'INFO', msg: line }
       })

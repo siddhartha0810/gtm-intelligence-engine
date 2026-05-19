@@ -2,6 +2,11 @@ import { useState, useEffect } from 'react'
 import { Plus, Trash2, Edit2, ChevronDown, RefreshCw, X, CheckCircle2, XCircle } from 'lucide-react'
 import { toast } from '../components/Toast'
 
+const authH = (): Record<string, string> => ({
+  'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
+  'Content-Type': 'application/json',
+})
+
 interface TechProfile {
   id: number
   name: string
@@ -52,7 +57,7 @@ function SlideOver({ profile, onClose, onSave }: { profile: Partial<TechProfile>
     try {
       const url = isEdit ? `/api/technology-profiles/${profile!.id}` : '/api/technology-profiles'
       const method = isEdit ? 'PATCH' : 'POST'
-      const r = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      const r = await fetch(url, { method, headers: authH(), body: JSON.stringify(body) })
       if (!r.ok) throw new Error(`HTTP ${r.status}`)
       toast.success(isEdit ? 'Profile updated' : 'Profile created')
       onSave()
@@ -109,7 +114,7 @@ function TaxonomyRow({ profileId, onClose }: { profileId: number; onClose: () =>
     try {
       const r = await fetch(`/api/technology-profiles/${profileId}/taxonomy`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authH(),
         body: JSON.stringify({ canonical_name: form.canonical_name.trim(), aliases: form.aliases.split(',').map(s => s.trim()).filter(Boolean), category: form.category.trim(), confidence_weight: parseFloat(form.confidence_weight) || 1.0 }),
       })
       if (!r.ok) throw new Error()
@@ -123,7 +128,7 @@ function TaxonomyRow({ profileId, onClose }: { profileId: number; onClose: () =>
   const deleteTaxonomy = async (id: number) => {
     if (!window.confirm('Delete this taxonomy item?')) return
     try {
-      const r = await fetch(`/api/taxonomy/${id}`, { method: 'DELETE' })
+      const r = await fetch(`/api/taxonomy/${id}`, { method: 'DELETE', headers: authH() })
       if (!r.ok) throw new Error()
       toast.success('Deleted')
       setItems(i => i.filter(x => x.id !== id))
@@ -206,7 +211,7 @@ export default function TechnologyProfiles() {
 
   const toggleActive = async (p: TechProfile) => {
     try {
-      const r = await fetch(`/api/technology-profiles/${p.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ is_active: !p.is_active }) })
+      const r = await fetch(`/api/technology-profiles/${p.id}`, { method: 'PATCH', headers: authH(), body: JSON.stringify({ is_active: !p.is_active }) })
       if (!r.ok) throw new Error()
       setProfiles(ps => ps.map(x => x.id === p.id ? { ...x, is_active: !p.is_active } : x))
       toast.success(`Profile ${!p.is_active ? 'activated' : 'deactivated'}`)
@@ -216,7 +221,7 @@ export default function TechnologyProfiles() {
   const deleteProfile = async (p: TechProfile) => {
     if (!window.confirm(`Delete "${p.name}"?`)) return
     try {
-      const r = await fetch(`/api/technology-profiles/${p.id}`, { method: 'DELETE' })
+      const r = await fetch(`/api/technology-profiles/${p.id}`, { method: 'DELETE', headers: authH() })
       if (!r.ok) throw new Error()
       toast.success('Profile deleted')
       setProfiles(ps => ps.filter(x => x.id !== p.id))

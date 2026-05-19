@@ -2,6 +2,10 @@ import { useState, useEffect, useRef } from 'react'
 import { Upload, CheckCircle2, XCircle, AlertCircle, Trash2, RefreshCw, ChevronDown } from 'lucide-react'
 import { toast } from '../components/Toast'
 
+const authH = (): Record<string, string> => ({
+  'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
+})
+
 type EntityType = 'Company' | 'Contact'
 type Step = 1 | 2 | 3 | 4
 
@@ -74,7 +78,7 @@ export default function ListImport() {
       setMappings(initMappings)
 
       const fRes = await fetch(`/api/import/fields/${entityType}`)
-      if (fRes.ok) setFields(await fRes.json())
+      if (fRes.ok) { const fd2 = await fRes.json(); setFields(Array.isArray(fd2) ? fd2 : (fd2.fields ?? [])) }
 
       setStep(2)
     } catch { toast.error('Failed to parse file headers') } finally { setProcessing(false) }
@@ -106,7 +110,7 @@ export default function ListImport() {
   const deleteTemplate = async (id: number) => {
     if (!window.confirm('Delete this template?')) return
     try {
-      const r = await fetch(`/api/import/templates/${id}`, { method: 'DELETE' })
+      const r = await fetch(`/api/import/templates/${id}`, { method: 'DELETE', headers: authH() })
       if (!r.ok) throw new Error()
       toast.success('Template deleted')
       setTemplates(ts => ts.filter(t => t.id !== id))

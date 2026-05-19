@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { PackageSearch, Search, ChevronDown, ChevronRight, X, ExternalLink, AlertCircle } from 'lucide-react'
+import { PackageSearch, Search, ChevronDown, ChevronRight, X, ExternalLink, AlertCircle, RefreshCw } from 'lucide-react'
 
 const card: React.CSSProperties = {
   background: '#ffffff',
@@ -63,14 +63,31 @@ export default function ProductIntelligence() {
   const [loading, setLoading]         = useState(true)
   const [selected, setSelected]       = useState<Company | null>(null)
   const [taxOpen, setTaxOpen]         = useState(true)
+  const [refreshing, setRefreshing]   = useState(false)
+
+  const refreshFromSignals = async () => {
+    setRefreshing(true)
+    try {
+      const r = await fetch('/api/product-intelligence/refresh', {
+        method: 'POST', headers: authHeaders(),
+      })
+      const d = await r.json()
+      if (r.ok) {
+        fetchData()
+        alert(`✅ Refreshed — ${d.updated} companies updated from signals`)
+      } else {
+        alert(`Error: ${d.error}`)
+      }
+    } catch { alert('Network error') }
+    finally { setRefreshing(false) }
+  }
 
   const fetchData = useCallback(() => {
     setLoading(true)
     const params = new URLSearchParams({
-      page: String(page),
+      offset: String((page - 1) * PAGE_SIZE),
       limit: String(PAGE_SIZE),
-      ...(search && { search }),
-      ...(productFilter && { product: productFilter }),
+      ...(productFilter && { product_filter: productFilter }),
     })
     fetch(`/api/product-intelligence?${params}`, { headers: authHeaders() })
       .then(r => r.ok ? r.json() : null)
@@ -110,12 +127,27 @@ export default function ProductIntelligence() {
       {/* Main content */}
       <div style={{ flex: 1, minWidth: 0 }}>
         {/* Header */}
-        <div style={{ marginBottom: 20 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-            <PackageSearch size={22} color="#2563eb" />
-            <h1 style={{ fontSize: 22, fontWeight: 700, color: '#0f172a', margin: 0 }}>Product Intelligence</h1>
+        <div style={{ marginBottom: 20, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+              <PackageSearch size={22} color="#2563eb" />
+              <h1 style={{ fontSize: 22, fontWeight: 700, color: '#0f172a', margin: 0 }}>Product Intelligence</h1>
+            </div>
+            <p style={{ margin: 0, fontSize: 14, color: '#64748b' }}>Company × Oracle Product matrix</p>
           </div>
-          <p style={{ margin: 0, fontSize: 14, color: '#64748b' }}>Company × Oracle Product matrix</p>
+          <button
+            onClick={refreshFromSignals}
+            disabled={refreshing}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 7, padding: '8px 16px',
+              background: refreshing ? '#e2e8f0' : '#2563eb', color: refreshing ? '#94a3b8' : '#fff',
+              border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600,
+              cursor: refreshing ? 'not-allowed' : 'pointer', transition: 'background 0.15s',
+            }}
+          >
+            <RefreshCw size={14} style={{ animation: refreshing ? 'spin 1s linear infinite' : 'none' }} />
+            {refreshing ? 'Refreshing…' : 'Refresh from Signals'}
+          </button>
         </div>
 
         {/* Stats row */}

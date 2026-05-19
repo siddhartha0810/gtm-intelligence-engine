@@ -2,6 +2,8 @@
 .env
 .env.*
 !.env.example
+oracle_intent_engine/.env
+lead_enrichment_engine/.env
 *.pem
 *.key
 secrets/

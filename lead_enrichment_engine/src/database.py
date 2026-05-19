@@ -29,10 +29,10 @@ import psycopg2.pool
 APOLLO_TTL_DAYS = 30
 ZB_TTL_DAYS     = 7
 
-# ── Connection string (oracle_intent) ───────────────────────────────────────
-_ORACLE_INTENT_DSN = (
-    "host=10.0.0.149 port=5432 dbname=oracle_intent "
-    "user=postgres password=Inoapps123"
+# ── Connection string — read from environment (set by unified_app.py) ────────
+_ORACLE_INTENT_DSN = os.environ.get(
+    "ORACLE_PG_DSN",
+    "host=10.0.0.149 port=5432 dbname=oracle_intent user=postgres password=",
 )
 
 # ── Module-level singleton ───────────────────────────────────────────────────

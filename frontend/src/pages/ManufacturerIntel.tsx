@@ -2,6 +2,11 @@ import { useState, useEffect } from 'react'
 import { Plus, Trash2, Edit2, X, Search, Link, RefreshCw } from 'lucide-react'
 import { toast } from '../components/Toast'
 
+const authH = (): Record<string, string> => ({
+  'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
+  'Content-Type': 'application/json',
+})
+
 interface MfgContact {
   id: number
   first_name: string
@@ -42,7 +47,7 @@ function SlideOver({ contact, onClose, onSave }: { contact: Partial<MfgContact> 
     setSaving(true)
     try {
       const url = isEdit ? `/api/manufacturer-contacts/${contact!.id}` : '/api/manufacturer-contacts'
-      const r = await fetch(url, { method: isEdit ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) })
+      const r = await fetch(url, { method: isEdit ? 'PATCH' : 'POST', headers: authH(), body: JSON.stringify(form) })
       if (!r.ok) throw new Error()
       toast.success(isEdit ? 'Contact updated' : 'Contact created')
       onSave()
@@ -98,7 +103,7 @@ function LinkCompanyRow({ contactId, onDone }: { contactId: number; onDone: () =
     if (!companyId.trim()) { toast.error('Enter a company ID'); return }
     setLinking(true)
     try {
-      const r = await fetch(`/api/manufacturer-contacts/${contactId}/link/${companyId}`, { method: 'POST' })
+      const r = await fetch(`/api/manufacturer-contacts/${contactId}/link/${companyId}`, { method: 'POST', headers: authH() })
       if (!r.ok) throw new Error()
       toast.success('Company linked')
       onDone()
@@ -136,7 +141,7 @@ export default function ManufacturerIntel() {
   const deleteContact = async (c: MfgContact) => {
     if (!window.confirm(`Delete ${c.first_name} ${c.last_name}?`)) return
     try {
-      const r = await fetch(`/api/manufacturer-contacts/${c.id}`, { method: 'DELETE' })
+      const r = await fetch(`/api/manufacturer-contacts/${c.id}`, { method: 'DELETE', headers: authH() })
       if (!r.ok) throw new Error()
       toast.success('Contact deleted')
       setContacts(cs => cs.filter(x => x.id !== c.id))

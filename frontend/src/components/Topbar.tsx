@@ -121,7 +121,7 @@ export default function Topbar({ onCmdK, user, onLogout }: TopbarProps) {
               <span style={{ display: 'inline-block', marginTop: 6, fontSize: 11, padding: '2px 8px', borderRadius: 999, background: 'rgba(59,130,246,0.12)', color: '#2563eb' }}>{displayRole}</span>
             </div>
             {[
-              { icon: User, label: 'My Profile', action: () => {} },
+              { icon: User, label: 'My Profile', action: () => { navigate('/profile'); setUserOpen(false) } },
               { icon: Settings, label: 'Settings & API', action: () => { navigate('/settings'); setUserOpen(false) } },
             ].map((item, i) => (
               <button key={i} onClick={item.action} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', fontSize: 13, textAlign: 'left' }}

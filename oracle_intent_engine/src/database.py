@@ -758,6 +758,76 @@ def get_enrichment_stats() -> dict:
         }
 
 
+# ── Product Intelligence aggregation ─────────────────────────────────────────
+# Products that are primarily cloud-delivered
+_CLOUD_PRODUCTS = {
+    "Oracle Cloud ERP", "Oracle HCM", "Oracle SCM", "Oracle EPM",
+    "Oracle CX", "NetSuite", "Oracle OCI", "Oracle Integration",
+}
+# Products that are primarily on-premise / legacy
+_ONPREM_PRODUCTS = {
+    "JD Edwards", "Oracle Database", "Oracle APEX",
+}
+# Products that can be either (treated as cloud for classification)
+_BOTH_PRODUCTS = {
+    "Oracle Database",  # can be cloud-hosted too
+}
+
+
+def aggregate_product_intel() -> dict:
+    """
+    Read oracle_signals grouped by company, classify products as Cloud or On-Premise,
+    and write back to companies.oracle_cloud_solutions / oracle_on_premise_solutions /
+    detected_products / product_confidence_scores.
+
+    Returns {"updated": N, "companies_processed": N}.
+    """
+    with db_cursor(commit=False) as cur:
+        cur.execute("""
+            SELECT company_id,
+                   oracle_product,
+                   MAX(confidence) AS max_conf,
+                   COUNT(*)        AS signal_count
+            FROM oracle_signals
+            WHERE oracle_product IS NOT NULL AND oracle_product <> ''
+            GROUP BY company_id, oracle_product
+        """)
+        rows = cur.fetchall()
+
+    # Build per-company product maps
+    from collections import defaultdict
+    company_products: dict = defaultdict(lambda: {"cloud": set(), "onprem": set(), "scores": {}})
+    for row in rows:
+        cid     = row["company_id"]
+        product = row["oracle_product"]
+        conf    = float(row["max_conf"] or 0)
+        company_products[cid]["scores"][product] = round(conf, 3)
+        if product in _ONPREM_PRODUCTS and product not in _CLOUD_PRODUCTS:
+            company_products[cid]["onprem"].add(product)
+        else:
+            company_products[cid]["cloud"].add(product)
+
+    updated = 0
+    with db_cursor(commit=True) as cur:
+        for cid, data in company_products.items():
+            cloud  = sorted(data["cloud"])
+            onprem = sorted(data["onprem"])
+            all_p  = sorted(data["cloud"] | data["onprem"])
+            scores = data["scores"]
+            import json as _json
+            cur.execute("""
+                UPDATE companies
+                   SET oracle_cloud_solutions      = %s,
+                       oracle_on_premise_solutions = %s,
+                       detected_products           = %s,
+                       product_confidence_scores   = %s
+                 WHERE id = %s
+            """, (cloud, onprem, all_p, _json.dumps(scores), cid))
+            updated += 1
+
+    return {"updated": updated, "companies_processed": len(company_products)}
+
+
 def get_contacts_for_company(company_id: int) -> list:
     with db_cursor(commit=False) as cur:
         cur.execute("""

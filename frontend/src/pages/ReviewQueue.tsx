@@ -2,6 +2,11 @@ import { useState, useEffect } from 'react'
 import { Check, X, ChevronRight, Mail, ExternalLink, Building2, RefreshCw, Loader } from 'lucide-react'
 import { toast } from '../components/Toast'
 
+const authH = (): Record<string, string> => ({
+  'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
+  'Content-Type': 'application/json',
+})
+
 interface Contact {
   id: number
   first_name: string
@@ -41,11 +46,12 @@ export default function ReviewQueue() {
     setLoading(true)
     setError('')
     try {
-      const r = await fetch('/api/review-queue?limit=100')
+      const r = await fetch('/api/contacts?limit=200', { headers: authH() })
       if (!r.ok) throw new Error(`HTTP ${r.status}`)
       const data: Contact[] = await r.json()
-      setItems(data)
-      setSelected(data[0]?.id ?? null)
+      const pending = Array.isArray(data) ? data.filter(c => !c.is_target) : []
+      setItems(pending)
+      setSelected(pending[0]?.id ?? null)
     } catch (e: any) {
       setError(e.message || 'Failed to load')
     } finally {
@@ -63,7 +69,7 @@ export default function ReviewQueue() {
     try {
       const r = await fetch('/api/contacts/push-hubspot', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authH(),
         body: JSON.stringify(contact),
       })
       const data = await r.json()
@@ -85,7 +91,14 @@ export default function ReviewQueue() {
     }
   }
 
-  const reject = (contact: Contact) => {
+  const reject = async (contact: Contact) => {
+    try {
+      await fetch(`/api/contacts/${contact.id}`, {
+        method: 'PATCH',
+        headers: authH(),
+        body: JSON.stringify({ is_target: false, email_validation_status: 'excluded' }),
+      })
+    } catch { /* best-effort — still remove from local view */ }
     setDone(d => ({ ...d, [contact.id]: true }))
     setItems(prev => {
       const next = prev.filter(x => x.id !== contact.id)

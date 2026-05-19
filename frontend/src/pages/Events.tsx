@@ -2,6 +2,11 @@ import { useState, useEffect } from 'react'
 import { Calendar, Plus, Trash2, Edit2, X, Search, Users } from 'lucide-react'
 import { toast } from '../components/Toast'
 
+const authH = (): Record<string, string> => ({
+  'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
+  'Content-Type': 'application/json',
+})
+
 type EventType = 'conference' | 'webinar' | 'workshop' | 'meetup' | 'trade_show' | 'other'
 
 interface Event {
@@ -63,7 +68,7 @@ function EventFormModal({ event, onClose, onSave }: { event: Partial<Event> | nu
     const body = { ...form, attendee_count: parseInt(form.attendee_count) || 0 }
     try {
       const url = isEdit ? `/api/events/${event!.id}` : '/api/events'
-      const r = await fetch(url, { method: isEdit ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      const r = await fetch(url, { method: isEdit ? 'PATCH' : 'POST', headers: authH(), body: JSON.stringify(body) })
       if (!r.ok) throw new Error()
       toast.success(isEdit ? 'Event updated' : 'Event created')
       onSave()
@@ -123,7 +128,7 @@ function EventSlideOver({ event, onClose, onUpdated }: { event: Event; onClose: 
   const addAttendee = async () => {
     if (!contactId.trim()) { toast.error('Contact ID is required'); return }
     try {
-      const r = await fetch(`/api/events/${event.id}/attendees`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contact_id: parseInt(contactId), role }) })
+      const r = await fetch(`/api/events/${event.id}/attendees`, { method: 'POST', headers: authH(), body: JSON.stringify({ contact_id: parseInt(contactId), role }) })
       if (!r.ok) throw new Error()
       toast.success('Attendee added')
       setContactId('')
@@ -133,7 +138,7 @@ function EventSlideOver({ event, onClose, onUpdated }: { event: Event; onClose: 
 
   const removeAttendee = async (aid: number) => {
     try {
-      const r = await fetch(`/api/events/${event.id}/attendees/${aid}`, { method: 'DELETE' })
+      const r = await fetch(`/api/events/${event.id}/attendees/${aid}`, { method: 'DELETE', headers: authH() })
       if (!r.ok) throw new Error()
       toast.success('Attendee removed')
       setAttendees(a => a.filter(x => x.id !== aid))
@@ -235,7 +240,7 @@ export default function Events() {
   const deleteEvent = async (e: Event) => {
     if (!window.confirm(`Delete "${e.name}"?`)) return
     try {
-      const r = await fetch(`/api/events/${e.id}`, { method: 'DELETE' })
+      const r = await fetch(`/api/events/${e.id}`, { method: 'DELETE', headers: authH() })
       if (!r.ok) throw new Error()
       toast.success('Event deleted')
       setEvents(evs => evs.filter(x => x.id !== e.id))

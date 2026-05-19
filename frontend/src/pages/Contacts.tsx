@@ -1,4 +1,9 @@
 import { useState, useRef, useEffect } from 'react'
+
+const authH = (): Record<string, string> => ({
+  'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
+  'Content-Type': 'application/json',
+})
 import { Search, Download, Mail, ExternalLink, MoreHorizontal, Filter, CheckCircle2, Trash2, Send, UserX, Loader, RefreshCw } from 'lucide-react'
 import { toast } from '../components/Toast'
 
@@ -58,7 +63,7 @@ function ActionMenu({ onClose, anchorRef, contact }: {
       try {
         const r = await fetch('/api/contacts/push-hubspot', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: authH(),
           body: JSON.stringify(contact),
         })
         const data = await r.json()
@@ -128,7 +133,7 @@ export default function Contacts() {
       if (!c) continue
       try {
         const r = await fetch('/api/contacts/push-hubspot', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          method: 'POST', headers: authH(),
           body: JSON.stringify(c),
         })
         const data = await r.json()

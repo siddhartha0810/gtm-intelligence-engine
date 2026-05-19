@@ -26,6 +26,7 @@ import UserManagement from './pages/UserManagement'
 import HubSpotSync from './pages/HubSpotSync'
 import ProductIntelligence from './pages/ProductIntelligence'
 import Recruitment from './pages/Recruitment'
+import Profile from './pages/Profile'
 
 export default function App() {
   const [cmdOpen, setCmdOpen]                   = useState(false)
@@ -91,6 +92,7 @@ export default function App() {
               <Route path="/intent-data"            element={<IntentData />} />
               <Route path="/reporting"              element={<Reporting />} />
               <Route path="/settings"               element={<Settings />} />
+              <Route path="/profile"                element={<Profile user={user} />} />
               {/* New unified platform pages */}
               <Route path="/technology-profiles"    element={<TechnologyProfiles />} />
               <Route path="/list-import"            element={<ListImport />} />

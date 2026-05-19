@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { Plus, RefreshCw, X, Shield } from 'lucide-react'
+import { useState, useEffect, useCallback } from 'react'
+import { Plus, RefreshCw, X, Shield, UserCheck, UserX, ChevronDown, Search } from 'lucide-react'
 import { toast } from '../components/Toast'
 
 type Role = 'owner' | 'admin' | 'analyst' | 'viewer' | 'recruitment'
@@ -14,27 +14,98 @@ interface AppUser {
   created_at: string
 }
 
-interface Me {
-  id: number
-  email: string
-  role: Role
+interface Me { id: number; email: string; role: Role }
+
+const ROLES: Role[] = ['owner', 'admin', 'analyst', 'recruitment', 'viewer']
+
+const ROLE_META: Record<Role, { bg: string; color: string; desc: string; icon: string }> = {
+  owner:       { bg: 'rgba(139,92,246,0.15)', color: '#a78bfa', desc: 'Full platform control',        icon: '👑' },
+  admin:       { bg: 'rgba(239,68,68,0.15)',  color: '#f87171', desc: 'User & data management',       icon: '🛡️' },
+  analyst:     { bg: 'rgba(59,130,246,0.15)', color: '#60a5fa', desc: 'Read/write all data modules',   icon: '📊' },
+  recruitment: { bg: 'rgba(245,158,11,0.15)', color: '#fbbf24', desc: 'Recruitment module only',       icon: '💼' },
+  viewer:      { bg: 'rgba(107,114,128,0.15)',color: '#9ca3af', desc: 'Read-only access',              icon: '👁️' },
 }
 
-const ROLES: Role[] = ['owner', 'admin', 'analyst', 'viewer', 'recruitment']
+// ── single source of truth for auth headers ────────────────────────────────
+const authH = (): Record<string, string> => ({
+  'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
+  'Content-Type': 'application/json',
+})
 
-const roleBadge = (role: Role): { bg: string; color: string } => {
-  const m: Record<Role, { bg: string; color: string }> = {
-    owner:       { bg: 'rgba(139,92,246,0.15)', color: '#a78bfa' },
-    admin:       { bg: 'rgba(239,68,68,0.15)', color: '#f87171' },
-    analyst:     { bg: 'rgba(59,130,246,0.15)', color: '#60a5fa' },
-    viewer:      { bg: 'rgba(107,114,128,0.15)', color: '#9ca3af' },
-    recruitment: { bg: 'rgba(245,158,11,0.15)', color: '#fbbf24' },
-  }
-  return m[role] ?? m.viewer
+// ── Role picker dropdown ───────────────────────────────────────────────────
+function RolePicker({ user, disabled, onChange }: {
+  user: AppUser
+  disabled: boolean
+  onChange: (role: Role) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const meta = ROLE_META[user.role]
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <button
+        disabled={disabled}
+        onClick={() => !disabled && setOpen(v => !v)}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 6,
+          padding: '5px 10px', borderRadius: 8,
+          background: meta.bg, border: `1px solid ${meta.color}33`,
+          color: meta.color, fontSize: 12, fontWeight: 600,
+          cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.5 : 1,
+          transition: 'all 0.15s',
+        }}>
+        <span>{meta.icon}</span>
+        {user.role.charAt(0).toUpperCase() + user.role.slice(1)}
+        {!disabled && <ChevronDown size={10} style={{ transition: 'transform 0.2s', transform: open ? 'rotate(180deg)' : 'none' }} />}
+      </button>
+
+      {open && (
+        <>
+          <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 200 }} />
+          <div style={{
+            position: 'absolute', top: '110%', left: 0, zIndex: 300,
+            background: '#ffffff', border: '1px solid #e2e8f0',
+            borderRadius: 10, boxShadow: '0 8px 32px rgba(0,0,0,0.12)',
+            minWidth: 230, overflow: 'hidden',
+          }}>
+            <div style={{ padding: '8px 12px', borderBottom: '1px solid #f1f5f9', fontSize: 11, fontWeight: 700, color: '#94a3b8', letterSpacing: '0.06em' }}>
+              ASSIGN ROLE
+            </div>
+            {ROLES.map(r => {
+              const m = ROLE_META[r]
+              const active = r === user.role
+              return (
+                <button key={r} onClick={() => { onChange(r); setOpen(false) }}
+                  style={{
+                    width: '100%', display: 'flex', alignItems: 'center', gap: 10,
+                    padding: '10px 14px', background: active ? m.bg : 'transparent',
+                    border: 'none', cursor: 'pointer', textAlign: 'left',
+                    borderLeft: active ? `3px solid ${m.color}` : '3px solid transparent',
+                    transition: 'background 0.12s',
+                  }}
+                  onMouseEnter={e => { if (!active) e.currentTarget.style.background = '#f8fafc' }}
+                  onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent' }}>
+                  <span style={{ fontSize: 16 }}>{m.icon}</span>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: active ? m.color : '#0f172a' }}>
+                      {r.charAt(0).toUpperCase() + r.slice(1)}
+                      {active && <span style={{ fontSize: 10, marginLeft: 6, opacity: 0.7 }}>current</span>}
+                    </div>
+                    <div style={{ fontSize: 11, color: '#64748b', marginTop: 1 }}>{m.desc}</div>
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+        </>
+      )}
+    </div>
+  )
 }
 
+// ── Invite Modal ───────────────────────────────────────────────────────────
 function InviteModal({ onClose, onSave }: { onClose: () => void; onSave: () => void }) {
-  const [form, setForm] = useState({ email: '', name: '', password: '', role: 'viewer' as Role })
+  const [form, setForm] = useState({ email: '', name: '', password: '', role: 'analyst' as Role })
   const [saving, setSaving] = useState(false)
   const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }))
 
@@ -45,216 +116,368 @@ function InviteModal({ onClose, onSave }: { onClose: () => void; onSave: () => v
     try {
       const r = await fetch('/api/auth/register', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authH(),
         body: JSON.stringify(form),
       })
-      if (!r.ok) {
-        const err = await r.json().catch(() => ({}))
-        throw new Error(err.detail || err.message || `HTTP ${r.status}`)
-      }
-      toast.success(`${form.email} invited successfully`)
+      const data = await r.json().catch(() => ({}))
+      if (!r.ok) throw new Error(data.detail || data.error || `HTTP ${r.status}`)
+      toast.success(`${form.email} added as ${form.role}`)
       onSave()
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : 'Invite failed')
     } finally { setSaving(false) }
   }
 
-  const inp: React.CSSProperties = { width: '100%', padding: '8px 12px', borderRadius: 8, background: '#ffffff', border: '1px solid #d1d5db', color: '#0f172a', fontSize: 13, outline: 'none', boxSizing: 'border-box' }
-  const lbl: React.CSSProperties = { fontSize: 12, color: '#64748b', fontWeight: 600, letterSpacing: '0.04em', display: 'block', marginBottom: 6 }
+  const inp: React.CSSProperties = {
+    width: '100%', padding: '9px 12px', borderRadius: 8,
+    background: '#f8fafc', border: '1px solid #d1d5db',
+    color: '#0f172a', fontSize: 13, outline: 'none', boxSizing: 'border-box',
+  }
+  const lbl: React.CSSProperties = { fontSize: 11, color: '#64748b', fontWeight: 700, letterSpacing: '0.05em', display: 'block', marginBottom: 5 }
+
+  const selectedMeta = ROLE_META[form.role]
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 500, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.6)' }} />
-      <div style={{ position: 'relative', width: 420, background: '#ffffff', borderRadius: 14, border: '1px solid #e2e8f0', zIndex: 1, boxShadow: '0 8px 40px rgba(0,0,0,0.12)' }}>
+      <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(2px)' }} />
+      <div style={{ position: 'relative', width: 460, background: '#ffffff', borderRadius: 16, border: '1px solid #e2e8f0', zIndex: 1, boxShadow: '0 20px 60px rgba(0,0,0,0.15)' }}>
+        {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px', borderBottom: '1px solid #e2e8f0' }}>
-          <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: '#0f172a' }}>Invite User</h2>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', padding: 4 }}><X size={18} /></button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(59,130,246,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Plus size={16} color="#3b82f6" />
+            </div>
+            <div>
+              <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#0f172a' }}>Add New User</h2>
+              <p style={{ margin: 0, fontSize: 12, color: '#64748b' }}>Create account and assign role</p>
+            </div>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: 4, borderRadius: 6 }}>
+            <X size={18} />
+          </button>
         </div>
+
+        {/* Form */}
         <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <div><label style={lbl}>Email *</label><input style={inp} type="email" value={form.email} onChange={e => set('email', e.target.value)} placeholder="user@example.com" /></div>
-          <div><label style={lbl}>Full Name</label><input style={inp} value={form.name} onChange={e => set('name', e.target.value)} placeholder="Jane Smith" /></div>
-          <div><label style={lbl}>Password *</label><input style={inp} type="password" value={form.password} onChange={e => set('password', e.target.value)} /></div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div>
+              <label style={lbl}>EMAIL *</label>
+              <input style={inp} type="email" value={form.email} onChange={e => set('email', e.target.value)} placeholder="user@company.com"
+                onFocus={e => e.currentTarget.style.borderColor = '#3b82f6'}
+                onBlur={e => e.currentTarget.style.borderColor = '#d1d5db'} />
+            </div>
+            <div>
+              <label style={lbl}>FULL NAME</label>
+              <input style={inp} value={form.name} onChange={e => set('name', e.target.value)} placeholder="Jane Smith"
+                onFocus={e => e.currentTarget.style.borderColor = '#3b82f6'}
+                onBlur={e => e.currentTarget.style.borderColor = '#d1d5db'} />
+            </div>
+          </div>
+
           <div>
-            <label style={lbl}>Role</label>
-            <select style={{ ...inp, cursor: 'pointer' }} value={form.role} onChange={e => set('role', e.target.value)}>
-              {ROLES.map(r => <option key={r} value={r}>{r.charAt(0).toUpperCase() + r.slice(1)}</option>)}
-            </select>
+            <label style={lbl}>TEMPORARY PASSWORD *</label>
+            <input style={inp} type="password" value={form.password} onChange={e => set('password', e.target.value)} placeholder="Min 8 characters"
+              onFocus={e => e.currentTarget.style.borderColor = '#3b82f6'}
+              onBlur={e => e.currentTarget.style.borderColor = '#d1d5db'} />
+          </div>
+
+          {/* Role selector */}
+          <div>
+            <label style={lbl}>ROLE</label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {ROLES.map(r => {
+                const m = ROLE_META[r]
+                const active = form.role === r
+                return (
+                  <button key={r} onClick={() => set('role', r)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 12,
+                      padding: '10px 14px', borderRadius: 9, border: `1.5px solid ${active ? m.color : '#e2e8f0'}`,
+                      background: active ? m.bg : '#f8fafc', cursor: 'pointer',
+                      textAlign: 'left', transition: 'all 0.15s',
+                    }}>
+                    <span style={{ fontSize: 18 }}>{m.icon}</span>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: active ? m.color : '#374151' }}>
+                        {r.charAt(0).toUpperCase() + r.slice(1)}
+                      </div>
+                      <div style={{ fontSize: 11, color: '#64748b', marginTop: 1 }}>{m.desc}</div>
+                    </div>
+                    {active && (
+                      <div style={{ width: 16, height: 16, borderRadius: '50%', background: m.color, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#fff' }} />
+                      </div>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Role summary */}
+          <div style={{ padding: '10px 14px', borderRadius: 8, background: selectedMeta.bg, border: `1px solid ${selectedMeta.color}33`, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 16 }}>{selectedMeta.icon}</span>
+            <span style={{ fontSize: 12, color: selectedMeta.color, fontWeight: 500 }}>
+              {form.email || 'This user'} will have <strong>{form.role}</strong> access — {selectedMeta.desc.toLowerCase()}.
+            </span>
           </div>
         </div>
+
         <div style={{ padding: '16px 24px', borderTop: '1px solid #e2e8f0', display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-          <button onClick={onClose} style={{ padding: '8px 20px', borderRadius: 8, border: '1px solid #e2e8f0', background: 'transparent', color: '#94a3b8', fontSize: 13, cursor: 'pointer' }}>Cancel</button>
-          <button onClick={save} disabled={saving} style={{ padding: '8px 20px', borderRadius: 8, border: 'none', background: '#3b82f6', color: 'white', fontSize: 13, fontWeight: 500, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1 }}>{saving ? 'Inviting...' : 'Send Invite'}</button>
+          <button onClick={onClose} style={{ padding: '9px 20px', borderRadius: 8, border: '1px solid #e2e8f0', background: 'transparent', color: '#64748b', fontSize: 13, cursor: 'pointer' }}>Cancel</button>
+          <button onClick={save} disabled={saving}
+            style={{ padding: '9px 22px', borderRadius: 8, border: 'none', background: saving ? '#93c5fd' : '#3b82f6', color: 'white', fontSize: 13, fontWeight: 600, cursor: saving ? 'not-allowed' : 'pointer', transition: 'background 0.15s' }}>
+            {saving ? 'Creating...' : 'Create User'}
+          </button>
         </div>
       </div>
     </div>
   )
 }
 
+// ── Main page ──────────────────────────────────────────────────────────────
 export default function UserManagement() {
-  const [users, setUsers] = useState<AppUser[]>([])
-  const [loading, setLoading] = useState(true)
-  const [me, setMe] = useState<Me | null>(null)
+  const [users, setUsers]       = useState<AppUser[]>([])
+  const [loading, setLoading]   = useState(true)
+  const [me, setMe]             = useState<Me | null>(null)
   const [inviteOpen, setInviteOpen] = useState(false)
+  const [search, setSearch]     = useState('')
+  const [roleFilter, setRoleFilter] = useState<Role | ''>('')
+  const [saving, setSaving]     = useState<number | null>(null)   // which user id is being saved
 
-  const loadMe = async () => {
+  const loadMe = useCallback(async () => {
     try {
-      const r = await fetch('/api/auth/me')
+      const r = await fetch('/api/auth/me', { headers: authH() })
       if (r.ok) setMe(await r.json())
     } catch { }
-  }
+  }, [])
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true)
     try {
-      const r = await fetch('/api/users')
+      const r = await fetch('/api/users', { headers: authH() })
       if (!r.ok) throw new Error(`HTTP ${r.status}`)
       setUsers(await r.json())
-    } catch { toast.error('Failed to load users') } finally { setLoading(false) }
-  }
+    } catch { toast.error('Failed to load users') }
+    finally { setLoading(false) }
+  }, [])
 
-  useEffect(() => { loadMe(); load() }, [])
+  useEffect(() => { loadMe(); load() }, [loadMe, load])
 
   const changeRole = async (u: AppUser, role: Role) => {
+    if (role === u.role) return
+    setSaving(u.id)
     try {
-      const r = await fetch(`/api/users/${u.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role }) })
-      if (!r.ok) throw new Error()
-      toast.success(`${u.email} role changed to ${role}`)
+      const r = await fetch(`/api/users/${u.id}`, {
+        method: 'PATCH', headers: authH(),
+        body: JSON.stringify({ role }),
+      })
+      if (!r.ok) throw new Error(`HTTP ${r.status}`)
+      toast.success(`${u.name || u.email} → ${role}`)
       setUsers(us => us.map(x => x.id === u.id ? { ...x, role } : x))
     } catch { toast.error('Role change failed') }
+    finally { setSaving(null) }
   }
 
-  const deactivate = async (u: AppUser) => {
-    if (!window.confirm(`Deactivate ${u.email}?`)) return
+  const toggleActive = async (u: AppUser) => {
+    if (!window.confirm(`${u.is_active ? 'Deactivate' : 'Reactivate'} ${u.email}?`)) return
+    setSaving(u.id)
     try {
-      const r = await fetch(`/api/users/${u.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ is_active: false }) })
-      if (!r.ok) throw new Error()
-      toast.success(`${u.email} deactivated`)
-      setUsers(us => us.map(x => x.id === u.id ? { ...x, is_active: false } : x))
-    } catch { toast.error('Deactivate failed') }
+      const r = await fetch(`/api/users/${u.id}`, {
+        method: 'PATCH', headers: authH(),
+        body: JSON.stringify({ is_active: !u.is_active }),
+      })
+      if (!r.ok) throw new Error(`HTTP ${r.status}`)
+      toast.success(`${u.email} ${u.is_active ? 'deactivated' : 'reactivated'}`)
+      setUsers(us => us.map(x => x.id === u.id ? { ...x, is_active: !u.is_active } : x))
+    } catch { toast.error('Action failed') }
+    finally { setSaving(null) }
   }
 
-  const reactivate = async (u: AppUser) => {
-    try {
-      const r = await fetch(`/api/users/${u.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ is_active: true }) })
-      if (!r.ok) throw new Error()
-      toast.success(`${u.email} reactivated`)
-      setUsers(us => us.map(x => x.id === u.id ? { ...x, is_active: true } : x))
-    } catch { toast.error('Reactivate failed') }
+  // Filters
+  const filtered = users.filter(u => {
+    const q = search.toLowerCase()
+    const matchSearch = !q || u.email.toLowerCase().includes(q) || (u.name || '').toLowerCase().includes(q)
+    const matchRole   = !roleFilter || u.role === roleFilter
+    return matchSearch && matchRole
+  })
+
+  const stats = {
+    total:  users.length,
+    active: users.filter(u => u.is_active).length,
+    byRole: ROLES.reduce((acc, r) => { acc[r] = users.filter(u => u.role === r).length; return acc }, {} as Record<Role, number>),
   }
 
-  const thStyle: React.CSSProperties = { padding: '11px 16px', textAlign: 'left', fontSize: 12, fontWeight: 600, color: '#475569', letterSpacing: '0.03em', whiteSpace: 'nowrap' }
-  const tdStyle: React.CSSProperties = { padding: '13px 16px', fontSize: 13, verticalAlign: 'middle', color: '#cbd5e1' }
-
-  const activeCount = users.filter(u => u.is_active).length
+  const thStyle: React.CSSProperties = { padding: '11px 16px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: '#64748b', letterSpacing: '0.05em', whiteSpace: 'nowrap' }
+  const tdStyle: React.CSSProperties = { padding: '13px 16px', fontSize: 13, verticalAlign: 'middle' }
+  const AVATAR_COLORS = ['#3b82f6', '#6366f1', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#14b8a6']
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 20, width: '100%' }}>
-      {inviteOpen && <InviteModal onClose={() => setInviteOpen(false)} onSave={() => { setInviteOpen(false); load() }} />}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 22, width: '100%' }}>
+      {inviteOpen && (
+        <InviteModal onClose={() => setInviteOpen(false)} onSave={() => { setInviteOpen(false); load() }} />
+      )}
 
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      {/* Page header */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <Shield size={20} color="#3b82f6" />
-            <h1 style={{ fontSize: 20, fontWeight: 600, color: '#0f172a', margin: 0 }}>User Management</h1>
+            <div style={{ width: 38, height: 38, borderRadius: 10, background: 'rgba(99,102,241,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Shield size={18} color="#6366f1" />
+            </div>
+            <h1 style={{ fontSize: 22, fontWeight: 700, color: '#0f172a', margin: 0 }}>User Management</h1>
           </div>
-          <p style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>
-            {loading ? 'Loading...' : `${users.length} users · ${activeCount} active`}
+          <p style={{ fontSize: 13, color: '#64748b', marginTop: 6, marginLeft: 48 }}>
+            {loading ? 'Loading...' : `${stats.total} users · ${stats.active} active`}
           </p>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
-          <button onClick={load} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 8, border: '1px solid #e2e8f0', background: 'transparent', color: '#94a3b8', fontSize: 13, cursor: 'pointer' }}>
+          <button onClick={load}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 8, border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', fontSize: 13, cursor: 'pointer' }}>
             <RefreshCw size={13} />
           </button>
-          <button onClick={() => setInviteOpen(true)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, border: 'none', background: '#3b82f6', color: 'white', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
-            <Plus size={14} /> Invite User
+          <button onClick={() => setInviteOpen(true)}
+            style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 18px', borderRadius: 9, border: 'none', background: '#3b82f6', color: 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer', boxShadow: '0 2px 8px rgba(59,130,246,0.35)' }}>
+            <Plus size={15} /> Add User
           </button>
         </div>
       </div>
 
-      {me && (
-        <div style={{ padding: '10px 16px', background: 'rgba(59,130,246,0.06)', border: '1px solid rgba(59,130,246,0.2)', borderRadius: 8, fontSize: 13, color: '#60a5fa', display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Shield size={14} /> Logged in as <strong>{me.email}</strong> ({me.role})
-        </div>
-      )}
+      {/* Stat chips */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+        {ROLES.map(r => {
+          const m = ROLE_META[r]
+          const cnt = stats.byRole[r] || 0
+          if (!cnt) return null
+          return (
+            <button key={r} onClick={() => setRoleFilter(roleFilter === r ? '' : r)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px',
+                borderRadius: 9, border: `1.5px solid ${roleFilter === r ? m.color : '#e2e8f0'}`,
+                background: roleFilter === r ? m.bg : '#fff',
+                cursor: 'pointer', transition: 'all 0.15s',
+              }}>
+              <span>{m.icon}</span>
+              <span style={{ fontSize: 13, fontWeight: 600, color: roleFilter === r ? m.color : '#374151' }}>
+                {r.charAt(0).toUpperCase() + r.slice(1)}
+              </span>
+              <span style={{ fontSize: 12, padding: '1px 7px', borderRadius: 999, background: m.bg, color: m.color, fontWeight: 700 }}>{cnt}</span>
+            </button>
+          )
+        })}
+        {roleFilter && (
+          <button onClick={() => setRoleFilter('')}
+            style={{ padding: '8px 12px', borderRadius: 9, border: '1px solid rgba(239,68,68,0.2)', background: 'transparent', color: '#f87171', fontSize: 12, cursor: 'pointer' }}>
+            Clear filter ×
+          </button>
+        )}
+      </div>
 
-      <div style={{ border: '1px solid #e2e8f0', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+      {/* Search */}
+      <div style={{ position: 'relative', maxWidth: 340 }}>
+        <Search size={13} style={{ position: 'absolute', left: 11, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by name or email…"
+          style={{ width: '100%', paddingLeft: 32, paddingRight: 12, paddingTop: 8, paddingBottom: 8, borderRadius: 8, border: '1px solid #d1d5db', background: '#fff', fontSize: 13, color: '#0f172a', outline: 'none', boxSizing: 'border-box' }}
+          onFocus={e => e.currentTarget.style.borderColor = '#3b82f6'}
+          onBlur={e => e.currentTarget.style.borderColor = '#d1d5db'} />
+      </div>
+
+      {/* Table */}
+      <div style={{ border: '1px solid #e2e8f0', borderRadius: 14, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', background: '#fff' }}>
         <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 760 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 780 }}>
             <thead>
-              <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                <th style={thStyle}>User</th>
-                <th style={thStyle}>Role</th>
-                <th style={thStyle}>Status</th>
-                <th style={thStyle}>Last Login</th>
-                <th style={thStyle}>Created</th>
-                <th style={{ ...thStyle, width: 200 }}>Actions</th>
+              <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
+                <th style={thStyle}>USER</th>
+                <th style={thStyle}>ROLE</th>
+                <th style={thStyle}>STATUS</th>
+                <th style={thStyle}>LAST LOGIN</th>
+                <th style={thStyle}>JOINED</th>
+                <th style={{ ...thStyle, width: 110 }}>ACTIONS</th>
               </tr>
             </thead>
             <tbody>
-              {loading && <tr><td colSpan={6} style={{ padding: '40px 0', textAlign: 'center', color: '#475569', fontSize: 13 }}>Loading users...</td></tr>}
-              {!loading && users.length === 0 && <tr><td colSpan={6} style={{ padding: '40px 0', textAlign: 'center', color: '#475569', fontSize: 13 }}>No users found.</td></tr>}
-              {!loading && users.map((u, i) => {
-                const rb = roleBadge(u.role)
-                const isSelf = me?.id === u.id
-                const AVATAR_COLORS = ['#3b82f6', '#6366f1', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899']
+              {loading && (
+                <tr><td colSpan={6} style={{ padding: '50px 0', textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>Loading users…</td></tr>
+              )}
+              {!loading && filtered.length === 0 && (
+                <tr><td colSpan={6} style={{ padding: '50px 0', textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>No users found.</td></tr>
+              )}
+              {!loading && filtered.map((u, i) => {
+                const isSelf    = me?.id === u.id
+                const isSaving  = saving === u.id
+                const canChange = !isSelf && me?.role === 'owner' || (me?.role === 'admin' && u.role !== 'owner')
                 const avatarColor = AVATAR_COLORS[i % AVATAR_COLORS.length]
+
                 return (
-                  <tr key={u.id} style={{ background: '#ffffff', borderBottom: '1px solid #f1f5f9' }}
-                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(37,99,235,0.04)'}
-                    onMouseLeave={e => e.currentTarget.style.background = '#ffffff'}>
+                  <tr key={u.id}
+                    style={{ borderBottom: '1px solid #f1f5f9', transition: 'background 0.12s', opacity: isSaving ? 0.6 : 1 }}
+                    onMouseEnter={e => e.currentTarget.style.background = '#fafbff'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+
+                    {/* User */}
                     <td style={tdStyle}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <div style={{ width: 34, height: 34, borderRadius: '50%', background: avatarColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: 'white', flexShrink: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <div style={{ width: 36, height: 36, borderRadius: '50%', background: avatarColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, color: 'white', flexShrink: 0 }}>
                           {(u.name || u.email || '?')[0].toUpperCase()}
                         </div>
                         <div>
-                          <div style={{ fontSize: 13, fontWeight: 500, color: '#0f172a' }}>{u.name || '—'} {isSelf && <span style={{ fontSize: 11, color: '#3b82f6', fontWeight: 400 }}>(you)</span>}</div>
-                          <div style={{ fontSize: 11, color: '#475569', marginTop: 2 }}>{u.email}</div>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: '#0f172a' }}>
+                            {u.name || '—'}
+                            {isSelf && <span style={{ marginLeft: 6, fontSize: 10, padding: '1px 6px', borderRadius: 4, background: 'rgba(59,130,246,0.12)', color: '#3b82f6' }}>you</span>}
+                          </div>
+                          <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{u.email}</div>
                         </div>
                       </div>
                     </td>
+
+                    {/* Role */}
                     <td style={tdStyle}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span style={{ fontSize: 12, padding: '3px 10px', borderRadius: 999, background: rb.bg, color: rb.color, fontWeight: 500 }}>{u.role}</span>
-                        <select
-                          value={u.role}
-                          onChange={e => changeRole(u, e.target.value as Role)}
-                          onClick={e => e.stopPropagation()}
-                          style={{ padding: '4px 8px', borderRadius: 6, background: '#ffffff', border: '1px solid #d1d5db', color: '#64748b', fontSize: 11, outline: 'none', cursor: 'pointer' }}>
-                          {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
-                        </select>
-                      </div>
+                      <RolePicker
+                        user={u}
+                        disabled={!canChange || isSaving}
+                        onChange={role => changeRole(u, role)}
+                      />
                     </td>
+
+                    {/* Status */}
                     <td style={tdStyle}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                        <div style={{ width: 8, height: 8, borderRadius: '50%', background: u.is_active ? '#10b981' : '#ef4444', flexShrink: 0 }} />
-                        <span style={{ fontSize: 12, color: u.is_active ? '#34d399' : '#f87171' }}>{u.is_active ? 'Active' : 'Inactive'}</span>
+                        <div style={{ width: 7, height: 7, borderRadius: '50%', background: u.is_active ? '#10b981' : '#ef4444', flexShrink: 0 }} />
+                        <span style={{ fontSize: 12, color: u.is_active ? '#10b981' : '#ef4444', fontWeight: 500 }}>
+                          {u.is_active ? 'Active' : 'Inactive'}
+                        </span>
                       </div>
                     </td>
+
+                    {/* Last login */}
                     <td style={{ ...tdStyle, fontSize: 12, color: '#64748b' }}>
-                      {u.last_login ? new Date(u.last_login).toLocaleDateString() : 'Never'}
+                      {u.last_login ? new Date(u.last_login).toLocaleDateString() : <span style={{ color: '#cbd5e1' }}>Never</span>}
                     </td>
-                    <td style={{ ...tdStyle, fontSize: 12, color: '#475569' }}>
+
+                    {/* Joined */}
+                    <td style={{ ...tdStyle, fontSize: 12, color: '#94a3b8' }}>
                       {u.created_at ? new Date(u.created_at).toLocaleDateString() : '—'}
                     </td>
+
+                    {/* Actions */}
                     <td style={tdStyle}>
-                      {u.is_active ? (
+                      {!isSelf && (
                         <button
-                          onClick={() => deactivate(u)}
-                          disabled={isSelf}
-                          title={isSelf ? 'Cannot deactivate yourself' : 'Deactivate user'}
-                          style={{ padding: '5px 12px', borderRadius: 7, border: '1px solid rgba(239,68,68,0.25)', background: 'transparent', color: isSelf ? '#374151' : '#f87171', fontSize: 12, cursor: isSelf ? 'not-allowed' : 'pointer', opacity: isSelf ? 0.4 : 1 }}
-                          onMouseEnter={e => { if (!isSelf) e.currentTarget.style.background = 'rgba(239,68,68,0.08)' }}
-                          onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}>
-                          Deactivate
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => reactivate(u)}
-                          style={{ padding: '5px 12px', borderRadius: 7, border: '1px solid rgba(16,185,129,0.25)', background: 'transparent', color: '#34d399', fontSize: 12, cursor: 'pointer' }}
-                          onMouseEnter={e => e.currentTarget.style.background = 'rgba(16,185,129,0.08)'}
+                          onClick={() => toggleActive(u)}
+                          disabled={isSaving}
+                          title={u.is_active ? 'Deactivate user' : 'Reactivate user'}
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: 5,
+                            padding: '6px 12px', borderRadius: 7, fontSize: 12, fontWeight: 500, cursor: isSaving ? 'not-allowed' : 'pointer',
+                            border: `1px solid ${u.is_active ? 'rgba(239,68,68,0.25)' : 'rgba(16,185,129,0.25)'}`,
+                            background: 'transparent',
+                            color: u.is_active ? '#ef4444' : '#10b981',
+                            transition: 'background 0.12s',
+                          }}
+                          onMouseEnter={e => e.currentTarget.style.background = u.is_active ? 'rgba(239,68,68,0.07)' : 'rgba(16,185,129,0.07)'}
                           onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                          Reactivate
+                          {u.is_active ? <><UserX size={12} /> Deactivate</> : <><UserCheck size={12} /> Reactivate</>}
                         </button>
                       )}
                     </td>
@@ -264,27 +487,26 @@ export default function UserManagement() {
             </tbody>
           </table>
         </div>
-        <div style={{ padding: '12px 16px', background: '#f8fafc', borderTop: '1px solid #e2e8f0', fontSize: 12, color: '#64748b' }}>
-          {users.length} users · {activeCount} active · {users.length - activeCount} inactive
+
+        <div style={{ padding: '12px 18px', background: '#f8fafc', borderTop: '1px solid #e2e8f0', fontSize: 12, color: '#94a3b8', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>Showing {filtered.length} of {stats.total} users</span>
+          <span>{stats.active} active · {stats.total - stats.active} inactive</span>
         </div>
       </div>
 
-      {/* Role legend */}
-      <div style={{ padding: '16px 20px', background: '#ffffff', borderRadius: 10, border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-        <div style={{ fontSize: 12, color: '#475569', fontWeight: 600, letterSpacing: '0.04em', marginBottom: 12 }}>ROLE PERMISSIONS</div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
-          {[
-            { role: 'owner' as Role, desc: 'Full access, can manage all settings' },
-            { role: 'admin' as Role, desc: 'Manage users and all data' },
-            { role: 'analyst' as Role, desc: 'Read/write access to data' },
-            { role: 'recruitment' as Role, desc: 'Access to recruitment features' },
-            { role: 'viewer' as Role, desc: 'Read-only access' },
-          ].map(({ role, desc }) => {
-            const rb = roleBadge(role)
+      {/* Role reference card */}
+      <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '18px 22px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', letterSpacing: '0.07em', marginBottom: 14 }}>ROLE REFERENCE</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 10 }}>
+          {ROLES.map(r => {
+            const m = ROLE_META[r]
             return (
-              <div key={role} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', background: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0' }}>
-                <span style={{ fontSize: 12, padding: '2px 8px', borderRadius: 999, background: rb.bg, color: rb.color, fontWeight: 500 }}>{role}</span>
-                <span style={{ fontSize: 12, color: '#64748b' }}>{desc}</span>
+              <div key={r} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 10, background: m.bg, border: `1px solid ${m.color}33` }}>
+                <span style={{ fontSize: 18 }}>{m.icon}</span>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: m.color }}>{r.charAt(0).toUpperCase() + r.slice(1)}</div>
+                  <div style={{ fontSize: 11, color: '#64748b', marginTop: 1 }}>{m.desc}</div>
+                </div>
               </div>
             )
           })}

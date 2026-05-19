@@ -93,9 +93,20 @@ def main() -> None:
                         help="Max companies to enrich per run")
     parser.add_argument("--max-per-company", type=int, default=10,
                         help="Max contacts per company from Apollo")
+    parser.add_argument("--batch-size",      type=int, default=None,
+                        help="Process in sub-batches of this size with a pause between")
+    parser.add_argument("--role-filters",    type=str, default=None,
+                        help="JSON array of job title strings to filter Apollo results")
     parser.add_argument("--status-file",     required=True)
     parser.add_argument("--log-file",        required=True)
     args = parser.parse_args()
+
+    role_filters = None
+    if args.role_filters:
+        try:
+            role_filters = json.loads(args.role_filters)
+        except Exception:
+            role_filters = None
 
     status_path = Path(args.status_file)
     log_path    = Path(args.log_file)
@@ -137,6 +148,8 @@ def main() -> None:
         limit=args.limit,
         max_per_company=args.max_per_company,
         log=log_fn,
+        role_filters=role_filters,
+        batch_size=args.batch_size,
     )
 
     stop_evt.set()

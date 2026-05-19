@@ -226,7 +226,25 @@ def _predict_and_fill_emails(
 
 
 # Pass-1: exact Oracle/JDE/Finance/IT titles — very targeted
+# Includes user-specified target roles plus standard Oracle/JDE roles
 ORACLE_JDE_TITLES = [
+    # User-specified exact roles
+    "Oracle Apps DBA",
+    "Oracle Business Analyst",
+    "Finance Project Manager",
+    "Oracle Cloud HCM Support Analyst",
+    "Oracle Cloud Support Analyst",
+    "Senior System Analyst",
+    "Oracle Fusion Senior Support Agent",
+    "Oracle Fusion Test Manager",
+    "Oracle Change & Release Manager",
+    "Head of Oracle Support",
+    "Senior Transformation Leader",
+    "Group Programme Director",
+    "Senior Project Manager",
+    "Project and Programme Delivery",
+    "Head of Finance Systems",
+    # Standard Oracle/JDE roles
     "JD Edwards", "JDE", "JDE EnterpriseOne",
     "Oracle ERP", "Oracle Cloud", "Oracle Fusion", "Oracle EBS",
     "Oracle HCM", "Oracle SCM", "Oracle EPM", "Oracle NetSuite",
@@ -236,17 +254,30 @@ ORACLE_JDE_TITLES = [
     "Enterprise Applications Manager", "Business Systems Manager",
     "Supply Chain Director", "Operations Director",
     "Digital Transformation Manager", "Oracle Developer",
+    "Chief Information Officer", "Chief Technology Officer",
+    "Chief Financial Officer", "Head of IT", "Head of Finance",
+    "IT Architect", "Enterprise Architect", "Solutions Architect",
+    "Business Systems Analyst", "Financial Systems Manager",
+    "Application Manager", "Applications Director",
+    "Transformation Director", "Programme Director",
+    "Project Manager", "Programme Manager",
 ]
 
 # Keywords used to score pass-2 (broad) contacts — any match → keep
 _RELEVANCE_KEYWORDS = [
     "oracle", "jd edwards", "jde", "erp", "enterprise resource",
+    "fusion", "hcm", "cloud",
     "finance", "financial", "controller", "accounting", "accounts",
     "supply chain", "procurement", "operations",
     "information technology", "it director", "it manager", "systems",
     "cfo", "cio", "cto", "vp finance", "vp it",
     "digital transformation", "business systems", "enterprise applications",
+    "architect", "architecture", "transformation", "programme",
+    "financial system", "business system", "application", "project manager",
 ]
+
+# Default role filters when user hasn't customised (matches ORACLE_JDE_TITLES above)
+DEFAULT_ROLE_FILTERS = ORACLE_JDE_TITLES
 
 # ── Live status (read by enrichment_worker's status thread) ─────────────────
 _status: dict = {
@@ -331,7 +362,7 @@ def _apollo_reveal(person_id: str, api_key: str) -> str:
 
 
 def _apollo_call(org_name: str, api_key: str, max_per: int,
-                 with_titles: bool) -> list:
+                 with_titles: bool, role_filters: list = None) -> list:
     """Single Apollo API call. Returns raw parsed contacts list."""
     payload_dict = {
         "q_organization_name": org_name,
@@ -339,7 +370,7 @@ def _apollo_call(org_name: str, api_key: str, max_per: int,
         "page": 1,
     }
     if with_titles:
-        payload_dict["person_titles"] = ORACLE_JDE_TITLES
+        payload_dict["person_titles"] = role_filters if role_filters else ORACLE_JDE_TITLES
 
     try:
         req = urllib.request.Request(
@@ -410,11 +441,12 @@ def _apollo_call(org_name: str, api_key: str, max_per: int,
     return contacts
 
 
-def _apollo_search(company_name: str, api_key: str, max_per: int = 10) -> tuple:
+def _apollo_search(company_name: str, api_key: str, max_per: int = 10,
+                   role_filters: list = None) -> tuple:
     """
     Two-pass Apollo search.
 
-    Pass 1 — clean name + Oracle/JDE title filter (targeted, fast).
+    Pass 1 — clean name + role_filters title filter (targeted, fast).
     Pass 2 — if pass 1 returns nothing, retry without title filter and
               keep only contacts whose title contains a relevance keyword.
               If even after filtering nothing remains, keep all pass-2
@@ -427,8 +459,8 @@ def _apollo_search(company_name: str, api_key: str, max_per: int = 10) -> tuple:
 
     clean = _clean_company_name(company_name)
 
-    # Pass 1 — targeted
-    contacts = _apollo_call(clean, api_key, max_per, with_titles=True)
+    # Pass 1 — targeted with role filters
+    contacts = _apollo_call(clean, api_key, max_per, with_titles=True, role_filters=role_filters)
     if contacts:
         return contacts, 1
 
@@ -510,13 +542,32 @@ def enrich_companies(
     limit: int = 50,
     max_per_company: int = 10,
     log: Callable = None,
+    role_filters: list = None,
+    batch_size: int = None,
 ) -> dict:
     """
     Enrich companies that have intent signals but no contacts yet.
+
+    Args:
+        apollo_key:       Apollo API key for contact search.
+        zerobounce_key:   ZeroBounce key for email validation.
+        limit:            Max total companies to process this run.
+        max_per_company:  Max contacts to fetch per company from Apollo.
+        log:              Callable for progress messages.
+        role_filters:     List of job titles to search for in Apollo (pass-1 filter).
+                          Defaults to ORACLE_JDE_TITLES if not supplied.
+        batch_size:       Process in sub-batches of this size with a pause between
+                          (useful for rate limiting / credit control). None = no batching.
+
     Returns final status dict.
     """
     if log is None:
         log = lambda msg: logger.info(msg)
+
+    # Resolve role filters — fall back to full ORACLE_JDE_TITLES list
+    effective_roles = role_filters if role_filters else ORACLE_JDE_TITLES
+    if role_filters:
+        log(f"Role filters active: {len(effective_roles)} titles")
 
     _status.update({
         "status": "running",
@@ -605,7 +656,8 @@ def enrich_companies(
                 f"({valid_from_master} valid) — skipped Apollo")
             continue
 
-        contacts, pass_used = _apollo_search(name, apollo_key, max_per_company)
+        contacts, pass_used = _apollo_search(name, apollo_key, max_per_company,
+                                             role_filters=effective_roles)
 
         if not contacts:
             log(f"  — no contacts found on Apollo (pass 1 + pass 2 tried)")
@@ -660,6 +712,13 @@ def enrich_companies(
         _status["companies_processed"] += 1
 
         time.sleep(RATE_LIMIT_DELAY)
+
+        # Batch pause — give APIs (and credits) a breather between batches
+        if batch_size and (i + 1) % batch_size == 0 and (i + 1) < len(companies):
+            pause = 5  # seconds between batches
+            log(f"── Batch {(i+1)//batch_size} complete "
+                f"({i+1}/{len(companies)} companies). Pausing {pause}s before next batch...")
+            time.sleep(pause)
 
     log(f"Enrichment complete: {total_contacts} contacts across {len(companies)} companies, "
         f"{total_validated} valid emails")

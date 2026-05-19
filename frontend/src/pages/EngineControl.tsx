@@ -1,14 +1,66 @@
 import { useState, useEffect, useRef } from 'react'
-import { Play, Square, RotateCcw, Download, Trash2, Factory, Users, CheckCircle, Mail } from 'lucide-react'
+import { Play, Square, RotateCcw, Download, Trash2, Factory, Users, CheckCircle,
+         Mail, X, ChevronRight, Zap, Clock, CreditCard, Building2, Database } from 'lucide-react'
 import { toast } from '../components/Toast'
 
-const ENGINES = [
-  { id: 'oracle',      label: 'Oracle Intent Engine',   desc: 'Scans job boards, oracle.com, news & case studies for Oracle/JDE signals', color: '#3b82f6', modules: 18 },
-  { id: 'enrichment',  label: 'Lead Enrichment Engine', desc: '7-stage: Apollo → ZeroBounce → LinkedIn → HubSpot push',                  color: '#6366f1', modules: 7 },
-  { id: 'hubspot',     label: 'HubSpot Sync Engine',    desc: 'Pushes approved contacts from Review Queue to CRM',                       color: '#f59e0b', modules: 1 },
+const authH = (): Record<string, string> => ({
+  Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
+  'Content-Type': 'application/json',
+})
+
+// ── Role definitions ──────────────────────────────────────────────────────────
+
+const EXACT_ROLES = [
+  'Oracle Apps DBA',
+  'Oracle Business Analyst',
+  'Finance Project Manager',
+  'Oracle Cloud HCM Support Analyst',
+  'Oracle Cloud Support Analyst',
+  'Senior System Analyst',
+  'Oracle Fusion Senior Support Agent',
+  'Oracle Fusion Test Manager',
+  'Oracle Change & Release Manager',
+  'Head of Oracle Support',
+  'Senior Transformation Leader',
+  'Group Programme Director',
+  'Senior Project Manager',
+  'Project and Programme Delivery',
+  'Head of Finance Systems',
 ]
 
-const SOURCES: { label: string; id: string; desc: string }[] = [
+const KEYWORD_ROLES = [
+  'Oracle / ERP / HCM / Cloud / Fusion',
+  'CIO / Chief Information Officer',
+  'IT / Information Technology',
+  'CTO / Chief Technology Officer',
+  'Architect / Architecture',
+  'Business System / Business Systems',
+  'Financial System / Financial Systems',
+  'Application / Applications',
+  'Transformation',
+  'Project Manager',
+  'CFO / Chief Financial Officer',
+  'Oracle ERP', 'Oracle Fusion', 'Oracle EBS', 'Oracle HCM',
+  'JD Edwards', 'JDE', 'ERP Manager', 'ERP Director', 'ERP Consultant',
+  'Finance Director', 'Financial Controller', 'VP Finance',
+  'IT Director', 'CIO', 'CTO', 'IT Manager',
+  'Enterprise Applications Manager', 'Business Systems Manager',
+  'Digital Transformation Manager', 'Oracle Developer',
+  'Head of Finance', 'Head of IT', 'IT Architect', 'Solutions Architect',
+]
+
+// All roles flat — used when "Select All" is clicked
+const ALL_ROLES = [...EXACT_ROLES, ...KEYWORD_ROLES]
+
+// ── Engines + Sources ─────────────────────────────────────────────────────────
+
+const ENGINES = [
+  { id: 'oracle',     label: 'Oracle Intent Engine',   desc: 'Scans job boards, oracle.com, news & case studies for Oracle/JDE signals', color: '#3b82f6', modules: 18 },
+  { id: 'enrichment', label: 'Lead Enrichment Engine', desc: '7-stage: master_leads → Apollo → ZeroBounce → prediction → HubSpot',       color: '#6366f1', modules: 7 },
+  { id: 'hubspot',    label: 'HubSpot Sync Engine',    desc: 'Pushes approved contacts from Review Queue to CRM',                         color: '#f59e0b', modules: 1 },
+]
+
+const SOURCES = [
   { id: 'linkedin',          label: 'LinkedIn Jobs',          desc: 'Job postings (public search)' },
   { id: 'oracle_website',    label: 'Oracle.com',             desc: 'Customer stories + press releases' },
   { id: 'partner_casestudy', label: 'Partner Stories',        desc: 'Oracle Gold/Platinum SI case studies' },
@@ -23,14 +75,19 @@ const SOURCES: { label: string; id: string; desc: string }[] = [
   { id: 'procurement',       label: 'Procurement Tenders',    desc: 'Contracts Finder, SAM.gov, TED EU' },
 ]
 
-const DEFAULT_SOURCES = ['linkedin', 'oracle_website', 'partner_casestudy', 'si_casestudy', 'oracle_community', 'oracle_event', 'news', 'erp_today', 'home_builders']
+const DEFAULT_SOURCES = ['linkedin','oracle_website','partner_casestudy','si_casestudy','oracle_community','oracle_event','news','erp_today','home_builders']
 
-const card = { background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 12, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }
+const card = { background:'#ffffff', border:'1px solid #e2e8f0', borderRadius:12, padding:20, boxShadow:'0 1px 3px rgba(0,0,0,0.06)' }
 const now  = () => new Date().toLocaleTimeString('en-GB', { hour12: false })
 const levelColor = (l: string) =>
   l === 'SUCCESS' ? '#10b981' : l === 'ERROR' ? '#ef4444' : l === 'WARN' ? '#f59e0b' : '#64748b'
 
-interface LogEntry { t: string; level: string; msg: string }
+interface LogEntry  { t: string; level: string; msg: string }
+interface Preflight {
+  total: number; from_master_leads: number; need_apollo: number;
+  est_credits: number; est_minutes: number;
+  apollo_configured: boolean; zerobounce_configured: boolean;
+}
 interface EnrichStats {
   total_companies?: number; enriched_companies?: number; pending_companies?: number;
   total_contacts?: number; contacts_with_email?: number; contacts_valid_email?: number;
@@ -42,19 +99,224 @@ interface EnrichStatus {
   contacts_found?: number; contacts_validated?: number;
 }
 
+// ── Pre-flight modal ──────────────────────────────────────────────────────────
+
+function PreflightModal({
+  preflight, enrichLimit, enrichPerCo, batchSize, selectedRoles,
+  onClose, onStart,
+  setEnrichLimit, setEnrichPerCo, setBatchSize, setSelectedRoles,
+}: {
+  preflight: Preflight
+  enrichLimit: number; enrichPerCo: number; batchSize: number; selectedRoles: string[]
+  onClose: () => void; onStart: () => void
+  setEnrichLimit: (v: number) => void; setEnrichPerCo: (v: number) => void
+  setBatchSize: (v: number) => void; setSelectedRoles: (v: string[]) => void
+}) {
+  const [roleTab, setRoleTab] = useState<'exact' | 'keyword'>('exact')
+  const toggleRole = (r: string) =>
+    setSelectedRoles(selectedRoles.includes(r) ? selectedRoles.filter(x => x !== r) : [...selectedRoles, r])
+  const selectAll  = () => setSelectedRoles(ALL_ROLES)
+  const clearAll   = () => setSelectedRoles([])
+
+  const numBatches = batchSize > 0 ? Math.ceil(Math.min(enrichLimit, preflight.total) / batchSize) : 1
+  const apolloNeeded = Math.min(preflight.need_apollo, enrichLimit)
+  const masterNeeded = Math.min(preflight.from_master_leads, enrichLimit)
+  const creditsNeeded = apolloNeeded * 2
+
+  const stat = (icon: React.ReactNode, label: string, val: string | number, color: string, sub?: string) => (
+    <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '14px 16px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+        <span style={{ color }}>{icon}</span>
+        <span style={{ fontSize: 11, color: '#64748b' }}>{label}</span>
+      </div>
+      <div style={{ fontSize: 22, fontWeight: 700, color: '#0f172a' }}>{val}</div>
+      {sub && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 3 }}>{sub}</div>}
+    </div>
+  )
+
+  return (
+    <>
+      {/* Backdrop */}
+      <div onClick={onClose} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', zIndex:999, backdropFilter:'blur(2px)' }} />
+
+      {/* Modal */}
+      <div style={{ position:'fixed', top:'50%', left:'50%', transform:'translate(-50%,-50%)', width:'min(820px, 95vw)', maxHeight:'90vh', overflowY:'auto', background:'#ffffff', borderRadius:16, boxShadow:'0 24px 80px rgba(0,0,0,0.2)', zIndex:1000 }}>
+        {/* Header */}
+        <div style={{ padding:'20px 24px', borderBottom:'1px solid #e2e8f0', display:'flex', alignItems:'center', justifyContent:'space-between', position:'sticky', top:0, background:'#fff', zIndex:1 }}>
+          <div>
+            <div style={{ fontSize:16, fontWeight:700, color:'#0f172a' }}>Enrichment Pre-Flight Check</div>
+            <div style={{ fontSize:12, color:'#64748b', marginTop:3 }}>Review estimates and configure before launching</div>
+          </div>
+          <button onClick={onClose} style={{ width:32, height:32, borderRadius:8, border:'1px solid #e2e8f0', background:'transparent', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', color:'#64748b' }}>
+            <X size={14} />
+          </button>
+        </div>
+
+        <div style={{ padding:'20px 24px', display:'flex', flexDirection:'column', gap:20 }}>
+
+          {/* Summary stats */}
+          <div>
+            <div style={{ fontSize:12, fontWeight:600, color:'#94a3b8', letterSpacing:'0.06em', marginBottom:10 }}>ENRICHMENT ESTIMATE</div>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:10 }}>
+              {stat(<Building2 size={14}/>, 'Companies to enrich', Math.min(enrichLimit, preflight.total), '#3b82f6', `of ${preflight.total} total pending`)}
+              {stat(<Database size={14}/>, 'From master DB', masterNeeded, '#10b981', 'no Apollo credits used')}
+              {stat(<Zap size={14}/>, 'Need Apollo', apolloNeeded, '#6366f1', 'will use API credits')}
+              {stat(<CreditCard size={14}/>, 'Est. credits', creditsNeeded, '#f59e0b', `~${Math.ceil(preflight.est_minutes * (enrichLimit / preflight.total || 1))} min`)}
+            </div>
+          </div>
+
+          {/* Key notices */}
+          <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+            {masterNeeded > 0 && (
+              <div style={{ padding:'10px 14px', background:'rgba(16,185,129,0.08)', border:'1px solid rgba(16,185,129,0.2)', borderRadius:8, fontSize:12, color:'#10b981' }}>
+                ✓ <strong>{masterNeeded} companies</strong> will be served from your 221k-contact master database — <strong>zero Apollo credits</strong> used.
+              </div>
+            )}
+            {apolloNeeded > 0 && !preflight.apollo_configured && (
+              <div style={{ padding:'10px 14px', background:'rgba(239,68,68,0.08)', border:'1px solid rgba(239,68,68,0.2)', borderRadius:8, fontSize:12, color:'#f87171' }}>
+                ✗ Apollo API key not configured — {apolloNeeded} companies cannot be enriched. Add <code style={{ background:'rgba(239,68,68,0.15)', padding:'1px 4px', borderRadius:3 }}>APOLLO_API_KEY</code> to oracle_intent_engine/.env
+              </div>
+            )}
+          </div>
+
+          {/* Config row */}
+          <div>
+            <div style={{ fontSize:12, fontWeight:600, color:'#94a3b8', letterSpacing:'0.06em', marginBottom:10 }}>BATCH CONFIGURATION</div>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12 }}>
+              <div>
+                <div style={{ fontSize:12, color:'#374151', fontWeight:500, marginBottom:6 }}>
+                  Companies per run <span style={{ color:'#3b82f6', fontWeight:700 }}>{enrichLimit}</span>
+                </div>
+                <select value={enrichLimit} onChange={e => setEnrichLimit(+e.target.value)}
+                  style={{ width:'100%', padding:'8px 10px', borderRadius:8, border:'1px solid #d1d5db', fontSize:13, color:'#0f172a', background:'#fff' }}>
+                  {[20,50,100,200,500].map(v => <option key={v} value={v}>{v} companies</option>)}
+                </select>
+                <div style={{ fontSize:11, color:'#94a3b8', marginTop:4 }}>Total to process this run</div>
+              </div>
+              <div>
+                <div style={{ fontSize:12, color:'#374151', fontWeight:500, marginBottom:6 }}>
+                  Contacts per company <span style={{ color:'#6366f1', fontWeight:700 }}>{enrichPerCo}</span>
+                </div>
+                <select value={enrichPerCo} onChange={e => setEnrichPerCo(+e.target.value)}
+                  style={{ width:'100%', padding:'8px 10px', borderRadius:8, border:'1px solid #d1d5db', fontSize:13, color:'#0f172a', background:'#fff' }}>
+                  {[5,10,15,25].map(v => <option key={v} value={v}>{v} contacts max</option>)}
+                </select>
+                <div style={{ fontSize:11, color:'#94a3b8', marginTop:4 }}>Apollo results per company</div>
+              </div>
+              <div>
+                <div style={{ fontSize:12, color:'#374151', fontWeight:500, marginBottom:6 }}>
+                  Batch size <span style={{ color:'#f59e0b', fontWeight:700 }}>{batchSize === 0 ? 'No batching' : `${batchSize} / batch`}</span>
+                </div>
+                <select value={batchSize} onChange={e => setBatchSize(+e.target.value)}
+                  style={{ width:'100%', padding:'8px 10px', borderRadius:8, border:'1px solid #d1d5db', fontSize:13, color:'#0f172a', background:'#fff' }}>
+                  <option value={0}>No batching</option>
+                  {[5,10,20,50].map(v => <option key={v} value={v}>{v} per batch</option>)}
+                </select>
+                <div style={{ fontSize:11, color:'#94a3b8', marginTop:4 }}>
+                  {batchSize > 0 ? `${numBatches} batch${numBatches > 1 ? 'es' : ''} with 5s pause` : 'Runs continuously'}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Role filters */}
+          <div>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:10 }}>
+              <div style={{ fontSize:12, fontWeight:600, color:'#94a3b8', letterSpacing:'0.06em' }}>ROLE FILTERS — APOLLO PASS 1 (TARGETED)</div>
+              <div style={{ display:'flex', gap:8 }}>
+                <span style={{ fontSize:11, padding:'2px 8px', borderRadius:999, background:'rgba(99,102,241,0.12)', color:'#818cf8' }}>
+                  {selectedRoles.length} selected
+                </span>
+                <button onClick={selectAll}  style={{ fontSize:11, color:'#3b82f6', background:'none', border:'none', cursor:'pointer', textDecoration:'underline' }}>All</button>
+                <button onClick={clearAll}   style={{ fontSize:11, color:'#94a3b8', background:'none', border:'none', cursor:'pointer', textDecoration:'underline' }}>None</button>
+              </div>
+            </div>
+
+            {/* Tab selector */}
+            <div style={{ display:'flex', gap:0, marginBottom:10, borderRadius:8, background:'#f1f5f9', padding:3 }}>
+              {(['exact','keyword'] as const).map(tab => (
+                <button key={tab} onClick={() => setRoleTab(tab)}
+                  style={{ flex:1, padding:'6px 0', borderRadius:6, border:'none', fontSize:12, fontWeight:500, cursor:'pointer',
+                    background: roleTab === tab ? '#ffffff' : 'transparent',
+                    color: roleTab === tab ? '#0f172a' : '#64748b',
+                    boxShadow: roleTab === tab ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                    transition:'all 0.15s' }}>
+                  {tab === 'exact' ? `Exact Roles (${EXACT_ROLES.length})` : `Oracle Keywords (${KEYWORD_ROLES.length})`}
+                </button>
+              ))}
+            </div>
+
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:6, maxHeight:200, overflowY:'auto' }}>
+              {(roleTab === 'exact' ? EXACT_ROLES : KEYWORD_ROLES).map(role => {
+                const on = selectedRoles.includes(role)
+                return (
+                  <button key={role} onClick={() => toggleRole(role)}
+                    style={{ padding:'7px 10px', borderRadius:7, border:`1px solid ${on ? 'rgba(99,102,241,0.35)' : '#e2e8f0'}`,
+                      background: on ? 'rgba(99,102,241,0.08)' : '#f8fafc',
+                      color: on ? '#6366f1' : '#475569',
+                      fontSize:11, fontWeight: on ? 600 : 400, cursor:'pointer', textAlign:'left',
+                      transition:'all 0.12s' }}>
+                    {on && <span style={{ marginRight:4 }}>✓</span>}{role}
+                  </button>
+                )
+              })}
+            </div>
+            <div style={{ fontSize:11, color:'#94a3b8', marginTop:6 }}>
+              Selected roles are sent as Apollo <code>person_titles</code> filter. Pass 2 (broad) uses keyword matching as fallback.
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div style={{ padding:'16px 24px', borderTop:'1px solid #e2e8f0', display:'flex', alignItems:'center', justifyContent:'space-between', position:'sticky', bottom:0, background:'#fff' }}>
+          <div style={{ display:'flex', alignItems:'center', gap:12, fontSize:12, color:'#64748b' }}>
+            <Clock size={13} />
+            Est. <strong style={{ color:'#0f172a' }}>{Math.ceil(preflight.est_minutes * (enrichLimit / (preflight.total || 1)))}</strong> min &nbsp;·&nbsp;
+            <CreditCard size={13} />
+            ~<strong style={{ color:'#0f172a' }}>{creditsNeeded}</strong> Apollo credits &nbsp;·&nbsp;
+            {numBatches > 1 && <><ChevronRight size={12} /><strong style={{ color:'#0f172a' }}>{numBatches} batches</strong></>}
+          </div>
+          <div style={{ display:'flex', gap:10 }}>
+            <button onClick={onClose}
+              style={{ padding:'9px 20px', borderRadius:8, border:'1px solid #e2e8f0', background:'transparent', color:'#64748b', fontSize:13, fontWeight:500, cursor:'pointer' }}>
+              Cancel
+            </button>
+            <button onClick={onStart} disabled={!preflight.apollo_configured && preflight.need_apollo > 0 && preflight.from_master_leads === 0}
+              style={{ padding:'9px 24px', borderRadius:8, border:'none',
+                background: '#6366f1', color:'white',
+                fontSize:13, fontWeight:600, cursor:'pointer',
+                display:'flex', alignItems:'center', gap:8 }}>
+              <Play size={13} /> Launch Enrichment
+            </button>
+          </div>
+        </div>
+      </div>
+    </>
+  )
+}
+
+// ── Main page ─────────────────────────────────────────────────────────────────
+
 export default function EngineControl() {
-  const [oracleState,      setOracleState]      = useState<'idle' | 'running' | 'stopping'>('idle')
-  const [enrichState,      setEnrichState]      = useState<'idle' | 'running'>('idle')
-  const [logs,             setLogs]             = useState<LogEntry[]>([{ t: now(), level: 'INFO', msg: 'System ready. Fetching engine status...' }])
-  const [enrichLogs,       setEnrichLogs]       = useState<LogEntry[]>([])
-  const [selectedSources,  setSelectedSources]  = useState<string[]>(DEFAULT_SOURCES)
-  const [depth,            setDepth]            = useState('medium')
-  const [jdeMfg,           setJdeMfg]           = useState(false)
-  const [enrichLimit,      setEnrichLimit]      = useState(50)
-  const [enrichPerCo,      setEnrichPerCo]      = useState(10)
-  const [enrichStats,      setEnrichStats]      = useState<EnrichStats>({})
-  const [enrichStatus,     setEnrichStatus]     = useState<EnrichStatus>({})
-  const [showEnrichLog,    setShowEnrichLog]    = useState(false)
+  const [oracleState,     setOracleState]     = useState<'idle' | 'running' | 'stopping'>('idle')
+  const [enrichState,     setEnrichState]     = useState<'idle' | 'running'>('idle')
+  const [logs,            setLogs]            = useState<LogEntry[]>([{ t: now(), level: 'INFO', msg: 'System ready. Fetching engine status...' }])
+  const [enrichLogs,      setEnrichLogs]      = useState<LogEntry[]>([])
+  const [selectedSources, setSelectedSources] = useState<string[]>(DEFAULT_SOURCES)
+  const [depth,           setDepth]           = useState('medium')
+  const [jdeMfg,          setJdeMfg]          = useState(false)
+  const [enrichLimit,     setEnrichLimit]     = useState(50)
+  const [enrichPerCo,     setEnrichPerCo]     = useState(10)
+  const [batchSize,       setBatchSize]       = useState(0)
+  const [selectedRoles,   setSelectedRoles]   = useState<string[]>(EXACT_ROLES) // default: exact roles
+  const [enrichStats,     setEnrichStats]     = useState<EnrichStats>({})
+  const [enrichStatus,    setEnrichStatus]    = useState<EnrichStatus>({})
+  const [showEnrichLog,   setShowEnrichLog]   = useState(false)
+  const [autoTrigger,     setAutoTrigger]     = useState(false)
+  const [showPreflight,   setShowPreflight]   = useState(false)
+  const [preflight,       setPreflight]       = useState<Preflight | null>(null)
+  const [preflightLoading, setPreflightLoading] = useState(false)
+
   const logRef       = useRef<HTMLDivElement>(null)
   const enrichLogRef = useRef<HTMLDivElement>(null)
   const pollRef      = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -64,8 +326,8 @@ export default function EngineControl() {
     setLogs(l => [...l.slice(-200), { t: now(), level, msg }])
 
   const parseLine = (line: string): LogEntry => {
-    const m = line.match(/^\[(\d{2}:\d{2}:\d{2})\]\s+\[(\w+)\]\s+(.+)$/)
-    if (m) return { t: m[1], level: m[2], msg: m[3] }
+    const m  = line.match(/^\[(\d{2}:\d{2}:\d{2})\]\s+\[(\w+)\]\s+(.+)$/)
+    if (m)  return { t: m[1], level: m[2], msg: m[3] }
     const m2 = line.match(/^\[(\w+)\]\s+(.+)$/)
     if (m2) return { t: now(), level: m2[1], msg: m2[2] }
     return { t: now(), level: 'INFO', msg: line }
@@ -93,14 +355,14 @@ export default function EngineControl() {
 
   const fetchEnrichStats = async () => {
     try {
-      const r = await fetch('/api/enrich/stats')
+      const r = await fetch('/api/enrich/stats', { headers: authH() })
       if (r.ok) setEnrichStats(await r.json())
     } catch { /* silent */ }
   }
 
   const fetchEnrichLog = async () => {
     try {
-      const r = await fetch('/api/enrich/log')
+      const r = await fetch('/api/enrich/log', { headers: authH() })
       if (!r.ok) return
       const lines: string[] = await r.json()
       if (lines.length > 0) setEnrichLogs(lines.map(parseLine).slice(-100))
@@ -109,7 +371,7 @@ export default function EngineControl() {
 
   const fetchEnrichStatus = async () => {
     try {
-      const r = await fetch('/api/enrich/status')
+      const r = await fetch('/api/enrich/status', { headers: authH() })
       if (!r.ok) return
       const d = await r.json()
       setEnrichStatus(d)
@@ -122,6 +384,65 @@ export default function EngineControl() {
     } catch { /* silent */ }
   }
 
+  // ── Fetch preflight data ────────────────────────────────────────────────────
+  const fetchPreflight = async () => {
+    setPreflightLoading(true)
+    try {
+      const r = await fetch('/api/enrich/preflight', { headers: authH() })
+      if (r.ok) {
+        const d = await r.json()
+        setPreflight(d)
+        setShowPreflight(true)
+      } else {
+        toast.error('Could not load preflight data')
+      }
+    } catch { toast.error('Network error') }
+    finally { setPreflightLoading(false) }
+  }
+
+  // ── Start enrichment (called from modal) ────────────────────────────────────
+  const startEnrichment = async () => {
+    setShowPreflight(false)
+    try {
+      const res = await fetch('/api/enrich/start', {
+        method: 'POST',
+        headers: authH(),
+        body: JSON.stringify({
+          limit:           enrichLimit,
+          max_per_company: enrichPerCo,
+          batch_size:      batchSize || null,
+          role_filters:    selectedRoles.length > 0 ? selectedRoles : null,
+        }),
+      })
+      if (!res.ok) { toast.error((await res.json()).error || 'Failed to start enrichment'); return }
+      setEnrichState('running')
+      setShowEnrichLog(true)
+      toast.success(`Enrichment started — ${enrichLimit} companies, ${enrichPerCo} contacts each${batchSize ? `, ${batchSize}/batch` : ''}`)
+      if (enrichPoll.current) clearInterval(enrichPoll.current)
+      enrichPoll.current = setInterval(async () => {
+        await fetchEnrichLog()
+        await fetchEnrichStatus()
+        const s = await fetch('/api/enrich/status', { headers: authH() }).then(r => r.json()).catch(() => null)
+        if (s && s.status !== 'running') {
+          setEnrichState('idle')
+          clearInterval(enrichPoll.current!)
+          fetchEnrichStats()
+          toast.success(`Enrichment done — ${s.contacts_found || 0} contacts, ${s.contacts_validated || 0} valid emails`)
+        }
+      }, 3000)
+    } catch { toast.error('Cannot connect to backend.') }
+  }
+
+  const stopEnrichment = async () => {
+    try {
+      await fetch('/api/enrich/stop', { method: 'POST', headers: authH() })
+      setEnrichState('idle')
+      if (enrichPoll.current) clearInterval(enrichPoll.current)
+      toast.info('Enrichment stopped')
+    } catch { toast.error('Failed to stop enrichment') }
+  }
+
+  // ── Oracle scan controls ────────────────────────────────────────────────────
   const startEngine = async () => {
     const maxPages = depth === 'shallow' ? 1 : depth === 'deep' ? 5 : 3
     try {
@@ -144,6 +465,18 @@ export default function EngineControl() {
           toast.success('Oracle Intent scan completed')
           clearInterval(pollRef.current!)
           fetchEnrichStats()
+          // Auto-trigger enrichment after scan if toggle is on
+          if (autoTrigger) {
+            addLog('INFO', 'Auto-trigger: loading enrichment preflight...')
+            toast.info('Auto-triggering enrichment...')
+            const pf = await fetch('/api/enrich/preflight', { headers: authH() }).then(r => r.json()).catch(() => null)
+            if (pf && pf.total > 0) {
+              setPreflight(pf)
+              setShowPreflight(true)
+            } else {
+              addLog('INFO', 'Auto-trigger: no new companies to enrich.')
+            }
+          }
         }
       }, 3000)
     } catch { toast.error('Cannot connect to backend.') }
@@ -159,41 +492,6 @@ export default function EngineControl() {
     } catch { toast.error('Failed to send stop signal') }
   }
 
-  const startEnrichment = async () => {
-    try {
-      const res = await fetch('/api/enrich/start', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ limit: enrichLimit, max_per_company: enrichPerCo }),
-      })
-      if (!res.ok) { toast.error((await res.json()).error || 'Failed to start enrichment'); return }
-      setEnrichState('running')
-      setShowEnrichLog(true)
-      toast.success('Contact enrichment started')
-      if (enrichPoll.current) clearInterval(enrichPoll.current)
-      enrichPoll.current = setInterval(async () => {
-        await fetchEnrichLog()
-        await fetchEnrichStatus()
-        const s = await fetch('/api/enrich/status').then(r => r.json()).catch(() => null)
-        if (s && s.status !== 'running') {
-          setEnrichState('idle')
-          clearInterval(enrichPoll.current!)
-          fetchEnrichStats()
-          toast.success(`Enrichment done — ${s.contacts_found || 0} contacts, ${s.contacts_validated || 0} valid emails`)
-        }
-      }, 3000)
-    } catch { toast.error('Cannot connect to backend.') }
-  }
-
-  const stopEnrichment = async () => {
-    try {
-      await fetch('/api/enrich/stop', { method: 'POST' })
-      setEnrichState('idle')
-      if (enrichPoll.current) clearInterval(enrichPoll.current)
-      toast.info('Enrichment stopped')
-    } catch { toast.error('Failed to stop enrichment') }
-  }
-
   const resetEngine = () => {
     if (oracleState === 'running') stopEngine()
     setTimeout(() => { setOracleState('idle'); toast.info('Engine reset') }, oracleState === 'running' ? 2500 : 0)
@@ -202,12 +500,12 @@ export default function EngineControl() {
   useEffect(() => {
     fetchStatus(); fetchLog(); fetchEnrichStats(); fetchEnrichStatus()
     return () => {
-      if (pollRef.current) clearInterval(pollRef.current)
+      if (pollRef.current)  clearInterval(pollRef.current)
       if (enrichPoll.current) clearInterval(enrichPoll.current)
     }
   }, [])
 
-  useEffect(() => { if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight }, [logs])
+  useEffect(() => { if (logRef.current)       logRef.current.scrollTop       = logRef.current.scrollHeight },       [logs])
   useEffect(() => { if (enrichLogRef.current) enrichLogRef.current.scrollTop = enrichLogRef.current.scrollHeight }, [enrichLogs])
 
   const toggleSource = (id: string) =>
@@ -220,60 +518,75 @@ export default function EngineControl() {
 
   const clearLog = () => { setLogs([{ t: now(), level: 'INFO', msg: 'Log cleared.' }]); toast.info('Log cleared') }
 
-  const pending   = enrichStats.pending_companies ?? 0
-  const enriched  = enrichStats.enriched_companies ?? 0
-  const totalCo   = enrichStats.total_companies ?? 0
-  const totalCt   = enrichStats.total_contacts ?? 0
-  const validCt   = enrichStats.contacts_valid_email ?? 0
-  const pctDone   = totalCo > 0 ? Math.round((enriched / totalCo) * 100) : 0
-  const apolloOk  = enrichStats.apollo_configured
-  const zbOk      = enrichStats.zerobounce_configured
+  const pending  = enrichStats.pending_companies   ?? 0
+  const enriched = enrichStats.enriched_companies  ?? 0
+  const totalCo  = enrichStats.total_companies     ?? 0
+  const totalCt  = enrichStats.total_contacts      ?? 0
+  const validCt  = enrichStats.contacts_valid_email ?? 0
+  const pctDone  = totalCo > 0 ? Math.round((enriched / totalCo) * 100) : 0
+  const apolloOk = enrichStats.apollo_configured
+  const zbOk     = enrichStats.zerobounce_configured
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 20, width: '100%' }}>
+    <div style={{ display:'flex', flexDirection:'column', gap:20, width:'100%' }}>
+      <style>{`@keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}} @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.5}}`}</style>
+
+      {/* Pre-flight modal */}
+      {showPreflight && preflight && (
+        <PreflightModal
+          preflight={preflight}
+          enrichLimit={enrichLimit} enrichPerCo={enrichPerCo}
+          batchSize={batchSize}    selectedRoles={selectedRoles}
+          onClose={() => setShowPreflight(false)}
+          onStart={startEnrichment}
+          setEnrichLimit={setEnrichLimit} setEnrichPerCo={setEnrichPerCo}
+          setBatchSize={setBatchSize}     setSelectedRoles={setSelectedRoles}
+        />
+      )}
+
       <div>
-        <h1 style={{ fontSize: 20, fontWeight: 600, color: '#0f172a', margin: 0 }}>Engine Control</h1>
-        <p style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>Start, stop, and monitor intelligence engines in real time</p>
+        <h1 style={{ fontSize:20, fontWeight:600, color:'#0f172a', margin:0 }}>Engine Control</h1>
+        <p style={{ fontSize:13, color:'#64748b', marginTop:4 }}>Start, stop, and monitor intelligence engines in real time</p>
       </div>
 
       {/* Engine cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:16 }}>
         {ENGINES.map(engine => {
           const isOracle = engine.id === 'oracle'
           const state    = isOracle ? oracleState : 'idle'
           const running  = state === 'running'
           return (
             <div key={engine.id} style={card}>
-              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 12 }}>
-                <div style={{ flex: 1, paddingRight: 12 }}>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: '#0f172a' }}>{engine.label}</div>
-                  <div style={{ fontSize: 12, color: '#64748b', marginTop: 4, lineHeight: 1.5 }}>{engine.desc}</div>
+              <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:12 }}>
+                <div style={{ flex:1, paddingRight:12 }}>
+                  <div style={{ fontSize:14, fontWeight:600, color:'#0f172a' }}>{engine.label}</div>
+                  <div style={{ fontSize:12, color:'#64748b', marginTop:4, lineHeight:1.5 }}>{engine.desc}</div>
                 </div>
-                <div style={{ width: 10, height: 10, borderRadius: '50%', flexShrink: 0, marginTop: 4, background: running ? engine.color : '#cbd5e1', boxShadow: running ? `0 0 8px ${engine.color}` : 'none' }} />
+                <div style={{ width:10, height:10, borderRadius:'50%', flexShrink:0, marginTop:4, background: running ? engine.color : '#cbd5e1', boxShadow: running ? `0 0 8px ${engine.color}` : 'none' }} />
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-                <span style={{ fontSize: 12, padding: '2px 10px', borderRadius: 999, fontWeight: 500, background: running ? `${engine.color}18` : state === 'stopping' ? 'rgba(245,158,11,0.12)' : 'rgba(203,213,225,0.5)', color: running ? engine.color : state === 'stopping' ? '#f59e0b' : '#94a3b8' }}>
+              <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:16 }}>
+                <span style={{ fontSize:12, padding:'2px 10px', borderRadius:999, fontWeight:500, background: running ? `${engine.color}18` : state === 'stopping' ? 'rgba(245,158,11,0.12)' : 'rgba(203,213,225,0.5)', color: running ? engine.color : state === 'stopping' ? '#f59e0b' : '#94a3b8' }}>
                   {running ? 'Running' : state === 'stopping' ? 'Stopping...' : 'Idle'}
                 </span>
-                {engine.modules > 1 && <span style={{ fontSize: 12, color: '#374151' }}>{engine.modules} modules</span>}
+                {engine.modules > 1 && <span style={{ fontSize:12, color:'#374151' }}>{engine.modules} modules</span>}
               </div>
-              <div style={{ display: 'flex', gap: 8 }}>
+              <div style={{ display:'flex', gap:8 }}>
                 {isOracle ? (
                   state === 'idle' ? (
-                    <button onClick={startEngine} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '9px 0', borderRadius: 8, border: 'none', background: engine.color, color: 'white', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
+                    <button onClick={startEngine} style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', gap:8, padding:'9px 0', borderRadius:8, border:'none', background:engine.color, color:'white', fontSize:13, fontWeight:500, cursor:'pointer' }}>
                       <Play size={13} /> Start Scan
                     </button>
                   ) : (
-                    <button onClick={stopEngine} disabled={state === 'stopping'} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '9px 0', borderRadius: 8, border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.1)', color: '#ef4444', fontSize: 13, fontWeight: 500, cursor: 'pointer', opacity: state === 'stopping' ? 0.5 : 1 }}>
+                    <button onClick={stopEngine} disabled={state === 'stopping'} style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', gap:8, padding:'9px 0', borderRadius:8, border:'1px solid rgba(239,68,68,0.3)', background:'rgba(239,68,68,0.1)', color:'#ef4444', fontSize:13, fontWeight:500, cursor:'pointer', opacity: state === 'stopping' ? 0.5 : 1 }}>
                       <Square size={13} /> Stop
                     </button>
                   )
                 ) : (
-                  <button disabled style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '9px 0', borderRadius: 8, border: 'none', background: 'rgba(203,213,225,0.5)', color: '#94a3b8', fontSize: 13, cursor: 'default' }}>
+                  <button disabled style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', gap:8, padding:'9px 0', borderRadius:8, border:'none', background:'rgba(203,213,225,0.5)', color:'#94a3b8', fontSize:13, cursor:'default' }}>
                     <Play size={13} /> Start
                   </button>
                 )}
-                <button onClick={isOracle ? resetEngine : undefined} style={{ width: 36, height: 36, borderRadius: 8, border: '1px solid #e2e8f0', background: 'transparent', cursor: isOracle ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', opacity: isOracle ? 1 : 0.3 }}>
+                <button onClick={isOracle ? resetEngine : undefined} style={{ width:36, height:36, borderRadius:8, border:'1px solid #e2e8f0', background:'transparent', cursor: isOracle ? 'pointer' : 'default', display:'flex', alignItems:'center', justifyContent:'center', color:'#94a3b8', opacity: isOracle ? 1 : 0.3 }}>
                   <RotateCcw size={13} />
                 </button>
               </div>
@@ -283,28 +596,41 @@ export default function EngineControl() {
       </div>
 
       {/* Config + Scan Log */}
-      <div style={{ display: 'grid', gridTemplateColumns: '360px 1fr', gap: 16 }}>
+      <div style={{ display:'grid', gridTemplateColumns:'360px 1fr', gap:16 }}>
         {/* Scan config */}
         <div style={card}>
-          <div style={{ fontSize: 14, fontWeight: 600, color: '#0f172a', marginBottom: 16 }}>Scan Configuration</div>
+          <div style={{ fontSize:14, fontWeight:600, color:'#0f172a', marginBottom:16 }}>Scan Configuration</div>
+
+          {/* Auto-trigger enrichment toggle */}
+          <div style={{ marginBottom:16, padding:'12px 14px', background: autoTrigger ? 'rgba(99,102,241,0.06)' : '#f8fafc', border:`1px solid ${autoTrigger ? 'rgba(99,102,241,0.25)' : '#e2e8f0'}`, borderRadius:10 }}>
+            <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+              <button onClick={() => setAutoTrigger(v => !v)}
+                style={{ width:36, height:20, borderRadius:10, border:'none', cursor:'pointer', background: autoTrigger ? '#6366f1' : '#cbd5e1', position:'relative', flexShrink:0, transition:'background 0.2s' }}>
+                <span style={{ position:'absolute', top:2, left: autoTrigger ? 18 : 2, width:16, height:16, borderRadius:'50%', background:'white', transition:'left 0.2s' }} />
+              </button>
+              <Zap size={14} color={autoTrigger ? '#6366f1' : '#475569'} />
+              <div>
+                <div style={{ fontSize:13, fontWeight:600, color: autoTrigger ? '#6366f1' : '#0f172a' }}>Auto-trigger Enrichment</div>
+                <div style={{ fontSize:11, color:'#475569', marginTop:2 }}>Open pre-flight check when scan completes</div>
+              </div>
+            </div>
+          </div>
 
           {/* JDE Manufacturing Focus */}
-          <div style={{ marginBottom: 16, padding: '12px 14px', background: jdeMfg ? 'rgba(16,185,129,0.08)' : '#f8fafc', border: `1px solid ${jdeMfg ? 'rgba(16,185,129,0.3)' : '#e2e8f0'}`, borderRadius: 10 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <button
-                onClick={() => setJdeMfg(v => !v)}
-                style={{ width: 36, height: 20, borderRadius: 10, border: 'none', cursor: 'pointer', background: jdeMfg ? '#10b981' : '#cbd5e1', position: 'relative', flexShrink: 0, transition: 'background 0.2s' }}
-              >
-                <span style={{ position: 'absolute', top: 2, left: jdeMfg ? 18 : 2, width: 16, height: 16, borderRadius: '50%', background: 'white', transition: 'left 0.2s' }} />
+          <div style={{ marginBottom:16, padding:'12px 14px', background: jdeMfg ? 'rgba(16,185,129,0.08)' : '#f8fafc', border:`1px solid ${jdeMfg ? 'rgba(16,185,129,0.3)' : '#e2e8f0'}`, borderRadius:10 }}>
+            <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+              <button onClick={() => setJdeMfg(v => !v)}
+                style={{ width:36, height:20, borderRadius:10, border:'none', cursor:'pointer', background: jdeMfg ? '#10b981' : '#cbd5e1', position:'relative', flexShrink:0, transition:'background 0.2s' }}>
+                <span style={{ position:'absolute', top:2, left: jdeMfg ? 18 : 2, width:16, height:16, borderRadius:'50%', background:'white', transition:'left 0.2s' }} />
               </button>
               <Factory size={14} color={jdeMfg ? '#10b981' : '#475569'} />
               <div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: jdeMfg ? '#10b981' : '#0f172a' }}>JDE Manufacturing Focus</div>
-                <div style={{ fontSize: 11, color: '#475569', marginTop: 2 }}>Manufacturing queries + LinkedIn industry filter</div>
+                <div style={{ fontSize:13, fontWeight:600, color: jdeMfg ? '#10b981' : '#0f172a' }}>JDE Manufacturing Focus</div>
+                <div style={{ fontSize:11, color:'#475569', marginTop:2 }}>Manufacturing queries + LinkedIn industry filter</div>
               </div>
             </div>
             {jdeMfg && (
-              <div style={{ marginTop: 10, fontSize: 11, color: '#64748b', lineHeight: 1.6 }}>
+              <div style={{ marginTop:10, fontSize:11, color:'#64748b', lineHeight:1.6 }}>
                 ✓ 29 manufacturing-specific JDE queries<br/>
                 ✓ LinkedIn: Manufacturing, Automotive, Industrial Eng, Construction, Energy, Food & Bev<br/>
                 ✓ Home Builders: 36 companies ≥1,000 annual closings
@@ -313,18 +639,18 @@ export default function EngineControl() {
           </div>
 
           {/* Data Sources */}
-          <div style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 12, fontWeight: 500, color: '#94a3b8', marginBottom: 10 }}>Data Sources</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={{ marginBottom:16 }}>
+            <div style={{ fontSize:12, fontWeight:500, color:'#94a3b8', marginBottom:10 }}>Data Sources</div>
+            <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
               {SOURCES.map(s => {
                 const active = selectedSources.includes(s.id)
                 return (
                   <button key={s.id} onClick={() => toggleSource(s.id)}
-                    style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 8, cursor: 'pointer', background: active ? 'rgba(59,130,246,0.08)' : '#f8fafc', color: active ? '#2563eb' : '#64748b', border: active ? '1px solid rgba(59,130,246,0.25)' : '1px solid #e2e8f0', textAlign: 'left', transition: 'all 0.15s' }}>
-                    <div style={{ width: 6, height: 6, borderRadius: '50%', background: active ? '#3b82f6' : '#cbd5e1', flexShrink: 0 }} />
-                    <div style={{ flex: 1 }}>
-                      <span style={{ fontSize: 12, fontWeight: 500 }}>{s.label}</span>
-                      <span style={{ fontSize: 11, color: '#94a3b8', marginLeft: 6 }}>{s.desc}</span>
+                    style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 10px', borderRadius:8, cursor:'pointer', background: active ? 'rgba(59,130,246,0.08)' : '#f8fafc', color: active ? '#2563eb' : '#64748b', border: active ? '1px solid rgba(59,130,246,0.25)' : '1px solid #e2e8f0', textAlign:'left', transition:'all 0.15s' }}>
+                    <div style={{ width:6, height:6, borderRadius:'50%', background: active ? '#3b82f6' : '#cbd5e1', flexShrink:0 }} />
+                    <div style={{ flex:1 }}>
+                      <span style={{ fontSize:12, fontWeight:500 }}>{s.label}</span>
+                      <span style={{ fontSize:11, color:'#94a3b8', marginLeft:6 }}>{s.desc}</span>
                     </div>
                   </button>
                 )
@@ -333,46 +659,47 @@ export default function EngineControl() {
           </div>
 
           {/* Scan Depth */}
-          <div style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 12, fontWeight: 500, color: '#94a3b8', marginBottom: 8 }}>Scan Depth</div>
-            <select value={depth} onChange={e => setDepth(e.target.value)} style={{ width: '100%', padding: '8px 12px', borderRadius: 8, background: '#ffffff', color: '#0f172a', border: '1px solid #d1d5db', fontSize: 13, cursor: 'pointer' }}>
+          <div style={{ marginBottom:16 }}>
+            <div style={{ fontSize:12, fontWeight:500, color:'#94a3b8', marginBottom:8 }}>Scan Depth</div>
+            <select value={depth} onChange={e => setDepth(e.target.value)} style={{ width:'100%', padding:'8px 12px', borderRadius:8, background:'#ffffff', color:'#0f172a', border:'1px solid #d1d5db', fontSize:13, cursor:'pointer' }}>
               <option value="shallow">Shallow — fast, 1 page per source</option>
               <option value="medium">Medium — balanced, 3 pages</option>
               <option value="deep">Deep — thorough, 5 pages</option>
             </select>
           </div>
 
-          <div style={{ padding: '10px 12px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 11, color: '#94a3b8' }}>
+          <div style={{ padding:'10px 12px', background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:8, fontSize:11, color:'#94a3b8' }}>
             {selectedSources.length} sources selected · depth: {depth}
-            {jdeMfg && <span style={{ color: '#10b981', marginLeft: 8 }}>· JDE Mfg focus ON</span>}
+            {jdeMfg && <span style={{ color:'#10b981', marginLeft:8 }}>· JDE Mfg focus ON</span>}
+            {autoTrigger && <span style={{ color:'#6366f1', marginLeft:8 }}>· auto-enrich ON</span>}
           </div>
         </div>
 
         {/* Scan live log */}
-        <div style={{ background: '#080c14', border: '1px solid #1f2d45', borderRadius: 12, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', borderBottom: '1px solid #1f2d45' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#ef4444' }} />
-              <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#f59e0b' }} />
-              <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#10b981' }} />
-              <span style={{ marginLeft: 8, fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: '#475569' }}>scan.log — {logs.length} events</span>
+        <div style={{ background:'#080c14', border:'1px solid #1f2d45', borderRadius:12, overflow:'hidden', display:'flex', flexDirection:'column' }}>
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 16px', borderBottom:'1px solid #1f2d45' }}>
+            <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+              <div style={{ width:10, height:10, borderRadius:'50%', background:'#ef4444' }} />
+              <div style={{ width:10, height:10, borderRadius:'50%', background:'#f59e0b' }} />
+              <div style={{ width:10, height:10, borderRadius:'50%', background:'#10b981' }} />
+              <span style={{ marginLeft:8, fontFamily:'JetBrains Mono, monospace', fontSize:12, color:'#475569' }}>scan.log — {logs.length} events</span>
             </div>
-            <div style={{ display: 'flex', gap: 12 }}>
-              <button onClick={exportLog} style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4, color: '#475569', background: 'none', border: 'none', cursor: 'pointer' }}><Download size={11} /> Export</button>
-              <button onClick={clearLog} style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4, color: '#475569', background: 'none', border: 'none', cursor: 'pointer' }}><Trash2 size={11} /> Clear</button>
+            <div style={{ display:'flex', gap:12 }}>
+              <button onClick={exportLog} style={{ fontSize:12, display:'flex', alignItems:'center', gap:4, color:'#475569', background:'none', border:'none', cursor:'pointer' }}><Download size={11} /> Export</button>
+              <button onClick={clearLog}  style={{ fontSize:12, display:'flex', alignItems:'center', gap:4, color:'#475569', background:'none', border:'none', cursor:'pointer' }}><Trash2 size={11} /> Clear</button>
             </div>
           </div>
-          <div ref={logRef} style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12, padding: 16, flex: 1, minHeight: 260, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <div ref={logRef} style={{ fontFamily:'JetBrains Mono, monospace', fontSize:12, padding:16, flex:1, minHeight:260, overflowY:'auto', display:'flex', flexDirection:'column', gap:4 }}>
             {logs.map((log, i) => (
-              <div key={i} style={{ display: 'flex', gap: 12, lineHeight: '1.7' }}>
-                <span style={{ color: '#374151', flexShrink: 0 }}>[{log.t}]</span>
-                <span style={{ color: levelColor(log.level), flexShrink: 0, minWidth: 72 }}>[{log.level}]</span>
-                <span style={{ color: '#94a3b8' }}>{log.msg}</span>
+              <div key={i} style={{ display:'flex', gap:12, lineHeight:'1.7' }}>
+                <span style={{ color:'#374151', flexShrink:0 }}>[{log.t}]</span>
+                <span style={{ color:levelColor(log.level), flexShrink:0, minWidth:72 }}>[{log.level}]</span>
+                <span style={{ color:'#94a3b8' }}>{log.msg}</span>
               </div>
             ))}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <span style={{ color: '#374151' }}>›</span>
-              <span style={{ display: 'inline-block', width: 7, height: 14, background: '#3b82f6', opacity: 0.7 }} />
+            <div style={{ display:'flex', alignItems:'center', gap:4 }}>
+              <span style={{ color:'#374151' }}>›</span>
+              <span style={{ display:'inline-block', width:7, height:14, background:'#3b82f6', opacity:0.7 }} />
             </div>
           </div>
         </div>
@@ -380,66 +707,69 @@ export default function EngineControl() {
 
       {/* ── Contact Enrichment Pipeline ────────────────────────────────────── */}
       <div style={card}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:16 }}>
           <div>
-            <div style={{ fontSize: 14, fontWeight: 600, color: '#0f172a' }}>Contact Enrichment Pipeline</div>
-            <div style={{ fontSize: 12, color: '#475569', marginTop: 3 }}>
-              For each new company: check DB → Apollo people search → validate emails → store contacts
+            <div style={{ fontSize:14, fontWeight:600, color:'#0f172a' }}>Contact Enrichment Pipeline</div>
+            <div style={{ fontSize:12, color:'#475569', marginTop:3 }}>
+              master_leads DB check → Apollo people search → ZeroBounce → email prediction → store
             </div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ display: 'flex', gap: 6 }}>
-              <span style={{ fontSize: 11, padding: '3px 8px', borderRadius: 6, background: apolloOk ? 'rgba(59,130,246,0.15)' : 'rgba(239,68,68,0.1)', color: apolloOk ? '#60a5fa' : '#f87171', border: `1px solid ${apolloOk ? 'rgba(59,130,246,0.25)' : 'rgba(239,68,68,0.2)'}` }}>
+          <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+            <div style={{ display:'flex', gap:6 }}>
+              <span style={{ fontSize:11, padding:'3px 8px', borderRadius:6, background: apolloOk ? 'rgba(59,130,246,0.15)' : 'rgba(239,68,68,0.1)', color: apolloOk ? '#60a5fa' : '#f87171', border:`1px solid ${apolloOk ? 'rgba(59,130,246,0.25)' : 'rgba(239,68,68,0.2)'}` }}>
                 Apollo {apolloOk ? '✓' : '✗'}
               </span>
-              <span style={{ fontSize: 11, padding: '3px 8px', borderRadius: 6, background: zbOk ? 'rgba(16,185,129,0.12)' : 'rgba(100,116,139,0.1)', color: zbOk ? '#34d399' : '#64748b', border: `1px solid ${zbOk ? 'rgba(16,185,129,0.2)' : '#1f2d45'}` }}>
+              <span style={{ fontSize:11, padding:'3px 8px', borderRadius:6, background: zbOk ? 'rgba(16,185,129,0.12)' : 'rgba(100,116,139,0.1)', color: zbOk ? '#34d399' : '#64748b', border:`1px solid ${zbOk ? 'rgba(16,185,129,0.2)' : '#1f2d45'}` }}>
                 ZeroBounce {zbOk ? '✓' : 'optional'}
+              </span>
+              <span style={{ fontSize:11, padding:'3px 8px', borderRadius:6, background:'rgba(99,102,241,0.1)', color:'#818cf8', border:'1px solid rgba(99,102,241,0.2)' }}>
+                {selectedRoles.length} roles selected
               </span>
             </div>
           </div>
         </div>
 
         {/* Stats row */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10, marginBottom: 20 }}>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(5, 1fr)', gap:10, marginBottom:20 }}>
           {[
-            { icon: <Users size={14} />, label: 'Total Companies', value: totalCo, color: '#3b82f6' },
-            { icon: <CheckCircle size={14} />, label: 'Enriched', value: enriched, color: '#10b981' },
-            { icon: <Users size={14} />, label: 'Pending', value: pending, color: '#f59e0b' },
-            { icon: <Users size={14} />, label: 'Contacts Found', value: totalCt, color: '#8b5cf6' },
-            { icon: <Mail size={14} />, label: 'Valid Emails', value: validCt, color: '#06b6d4' },
+            { icon: <Users size={14}/>,        label:'Total Companies', value: totalCo,   color:'#3b82f6' },
+            { icon: <CheckCircle size={14}/>,   label:'Enriched',       value: enriched,  color:'#10b981' },
+            { icon: <Users size={14}/>,         label:'Pending',        value: pending,   color:'#f59e0b' },
+            { icon: <Users size={14}/>,         label:'Contacts Found', value: totalCt,   color:'#8b5cf6' },
+            { icon: <Mail size={14}/>,          label:'Valid Emails',   value: validCt,   color:'#06b6d4' },
           ].map(({ icon, label, value, color }) => (
-            <div key={label} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '12px 14px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6, color }}>
+            <div key={label} style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:10, padding:'12px 14px' }}>
+              <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:6, color }}>
                 {icon}
-                <span style={{ fontSize: 11, color: '#64748b' }}>{label}</span>
+                <span style={{ fontSize:11, color:'#64748b' }}>{label}</span>
               </div>
-              <div style={{ fontSize: 22, fontWeight: 700, color: '#0f172a' }}>{value.toLocaleString()}</div>
+              <div style={{ fontSize:22, fontWeight:700, color:'#0f172a' }}>{value.toLocaleString()}</div>
             </div>
           ))}
         </div>
 
         {/* Enrichment progress bar */}
         {totalCo > 0 && (
-          <div style={{ marginBottom: 16 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, fontSize: 12, color: '#64748b' }}>
+          <div style={{ marginBottom:16 }}>
+            <div style={{ display:'flex', justifyContent:'space-between', marginBottom:6, fontSize:12, color:'#64748b' }}>
               <span>Enrichment coverage</span>
               <span>{enriched} / {totalCo} companies ({pctDone}%)</span>
             </div>
-            <div style={{ height: 6, background: '#e2e8f0', borderRadius: 3, overflow: 'hidden' }}>
-              <div style={{ height: '100%', width: `${pctDone}%`, background: 'linear-gradient(90deg, #3b82f6, #6366f1)', borderRadius: 3, transition: 'width 0.4s' }} />
+            <div style={{ height:6, background:'#e2e8f0', borderRadius:3, overflow:'hidden' }}>
+              <div style={{ height:'100%', width:`${pctDone}%`, background:'linear-gradient(90deg, #3b82f6, #6366f1)', borderRadius:3, transition:'width 0.4s' }} />
             </div>
           </div>
         )}
 
         {/* Running progress */}
         {enrichState === 'running' && (
-          <div style={{ marginBottom: 16, padding: '10px 14px', background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.25)', borderRadius: 8 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-              <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#6366f1', boxShadow: '0 0 6px #6366f1', animation: 'pulse 1s infinite' }} />
-              <span style={{ fontSize: 13, color: '#a5b4fc', fontWeight: 500 }}>Enrichment running...</span>
+          <div style={{ marginBottom:16, padding:'10px 14px', background:'rgba(99,102,241,0.08)', border:'1px solid rgba(99,102,241,0.25)', borderRadius:8 }}>
+            <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:8 }}>
+              <div style={{ width:8, height:8, borderRadius:'50%', background:'#6366f1', boxShadow:'0 0 6px #6366f1', animation:'pulse 1s infinite' }} />
+              <span style={{ fontSize:13, color:'#a5b4fc', fontWeight:500 }}>Enrichment running...</span>
             </div>
-            <div style={{ fontSize: 12, color: '#64748b' }}>{enrichStatus.progress || 'Processing...'}</div>
-            <div style={{ display: 'flex', gap: 20, marginTop: 8, fontSize: 12, color: '#94a3b8' }}>
+            <div style={{ fontSize:12, color:'#64748b' }}>{enrichStatus.progress || 'Processing...'}</div>
+            <div style={{ display:'flex', gap:20, marginTop:8, fontSize:12, color:'#94a3b8' }}>
               <span>{enrichStatus.companies_processed ?? 0} / {enrichStatus.companies_total ?? '?'} companies</span>
               <span>{enrichStatus.contacts_found ?? 0} contacts found</span>
               <span>{enrichStatus.contacts_validated ?? 0} valid emails</span>
@@ -447,73 +777,53 @@ export default function EngineControl() {
           </div>
         )}
 
-        {/* Controls row */}
-        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 14, flexWrap: 'wrap' }}>
-          <div>
-            <div style={{ fontSize: 11, color: '#64748b', marginBottom: 5 }}>Companies per run</div>
-            <select value={enrichLimit} onChange={e => setEnrichLimit(+e.target.value)}
-              style={{ padding: '7px 10px', borderRadius: 8, background: '#ffffff', color: '#0f172a', border: '1px solid #d1d5db', fontSize: 12 }}>
-              <option value={20}>20</option>
-              <option value={50}>50</option>
-              <option value={100}>100</option>
-              <option value={200}>200</option>
-            </select>
-          </div>
-          <div>
-            <div style={{ fontSize: 11, color: '#64748b', marginBottom: 5 }}>Contacts per company</div>
-            <select value={enrichPerCo} onChange={e => setEnrichPerCo(+e.target.value)}
-              style={{ padding: '7px 10px', borderRadius: 8, background: '#ffffff', color: '#0f172a', border: '1px solid #d1d5db', fontSize: 12 }}>
-              <option value={5}>5</option>
-              <option value={10}>10</option>
-              <option value={15}>15</option>
-              <option value={25}>25</option>
-            </select>
-          </div>
-
+        {/* Controls */}
+        <div style={{ display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' }}>
           {enrichState === 'idle' ? (
             <button
-              onClick={startEnrichment}
-              disabled={!apolloOk}
-              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 20px', borderRadius: 8, border: 'none', background: apolloOk ? '#6366f1' : 'rgba(55,65,81,0.4)', color: apolloOk ? 'white' : '#6b7280', fontSize: 13, fontWeight: 500, cursor: apolloOk ? 'pointer' : 'not-allowed' }}
-              title={!apolloOk ? 'Add APOLLO_API_KEY to oracle_intent_engine/.env' : ''}
-            >
-              <Play size={13} />
-              {pending > 0 ? `Enrich ${pending} companies` : 'Run Enrichment'}
+              onClick={fetchPreflight}
+              disabled={preflightLoading}
+              style={{ display:'flex', alignItems:'center', gap:8, padding:'9px 20px', borderRadius:8, border:'none', background: apolloOk ? '#6366f1' : 'rgba(55,65,81,0.4)', color: apolloOk ? 'white' : '#6b7280', fontSize:13, fontWeight:500, cursor: apolloOk ? 'pointer' : 'not-allowed', opacity: preflightLoading ? 0.7 : 1 }}
+              title={!apolloOk ? 'Add APOLLO_API_KEY to oracle_intent_engine/.env' : 'Open pre-flight check'}>
+              {preflightLoading
+                ? <><span style={{ animation:'spin 1s linear infinite', display:'inline-block' }}>⟳</span> Loading...</>
+                : <><Zap size={13} /> {pending > 0 ? `Enrich ${pending} companies` : 'Run Enrichment'}</>
+              }
             </button>
           ) : (
             <button onClick={stopEnrichment}
-              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 20px', borderRadius: 8, border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.1)', color: '#ef4444', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
+              style={{ display:'flex', alignItems:'center', gap:8, padding:'9px 20px', borderRadius:8, border:'1px solid rgba(239,68,68,0.3)', background:'rgba(239,68,68,0.1)', color:'#ef4444', fontSize:13, fontWeight:500, cursor:'pointer' }}>
               <Square size={13} /> Stop Enrichment
             </button>
           )}
 
           <button onClick={() => { setShowEnrichLog(v => !v); if (!showEnrichLog) fetchEnrichLog() }}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 14px', borderRadius: 8, border: '1px solid #e2e8f0', background: 'transparent', color: '#64748b', fontSize: 12, cursor: 'pointer' }}>
+            style={{ display:'flex', alignItems:'center', gap:6, padding:'9px 14px', borderRadius:8, border:'1px solid #e2e8f0', background:'transparent', color:'#64748b', fontSize:12, cursor:'pointer' }}>
             {showEnrichLog ? 'Hide' : 'Show'} log
           </button>
 
           {!apolloOk && (
-            <div style={{ fontSize: 11, color: '#f87171', padding: '8px 12px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 8 }}>
-              Apollo API key not configured. Add <code style={{ background: 'rgba(239,68,68,0.15)', padding: '1px 4px', borderRadius: 3 }}>APOLLO_API_KEY</code> to <code style={{ background: 'rgba(239,68,68,0.15)', padding: '1px 4px', borderRadius: 3 }}>oracle_intent_engine/.env</code>
+            <div style={{ fontSize:11, color:'#f87171', padding:'8px 12px', background:'rgba(239,68,68,0.08)', border:'1px solid rgba(239,68,68,0.2)', borderRadius:8 }}>
+              Apollo key not configured — add <code style={{ background:'rgba(239,68,68,0.15)', padding:'1px 4px', borderRadius:3 }}>APOLLO_API_KEY</code> to oracle_intent_engine/.env
             </div>
           )}
         </div>
 
         {/* Enrichment log */}
         {showEnrichLog && (
-          <div style={{ marginTop: 16, background: '#080c14', border: '1px solid #1f2d45', borderRadius: 10, overflow: 'hidden' }}>
-            <div style={{ padding: '8px 14px', borderBottom: '1px solid #1f2d45', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, color: '#475569' }}>enrich.log — {enrichLogs.length} entries</span>
-              <button onClick={() => setEnrichLogs([])} style={{ fontSize: 11, color: '#475569', background: 'none', border: 'none', cursor: 'pointer' }}>Clear</button>
+          <div style={{ marginTop:16, background:'#080c14', border:'1px solid #1f2d45', borderRadius:10, overflow:'hidden' }}>
+            <div style={{ padding:'8px 14px', borderBottom:'1px solid #1f2d45', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+              <span style={{ fontFamily:'JetBrains Mono, monospace', fontSize:11, color:'#475569' }}>enrich.log — {enrichLogs.length} entries</span>
+              <button onClick={() => setEnrichLogs([])} style={{ fontSize:11, color:'#475569', background:'none', border:'none', cursor:'pointer' }}>Clear</button>
             </div>
-            <div ref={enrichLogRef} style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, padding: 14, maxHeight: 220, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 3 }}>
+            <div ref={enrichLogRef} style={{ fontFamily:'JetBrains Mono, monospace', fontSize:11, padding:14, maxHeight:220, overflowY:'auto', display:'flex', flexDirection:'column', gap:3 }}>
               {enrichLogs.length === 0
-                ? <span style={{ color: '#374151' }}>No enrichment log yet. Start enrichment to see progress.</span>
+                ? <span style={{ color:'#374151' }}>No enrichment log yet. Start enrichment to see progress.</span>
                 : enrichLogs.map((log, i) => (
-                    <div key={i} style={{ display: 'flex', gap: 10, lineHeight: '1.6' }}>
-                      <span style={{ color: '#374151', flexShrink: 0 }}>[{log.t}]</span>
-                      <span style={{ color: levelColor(log.level), flexShrink: 0, minWidth: 64 }}>[{log.level}]</span>
-                      <span style={{ color: '#94a3b8' }}>{log.msg}</span>
+                    <div key={i} style={{ display:'flex', gap:10, lineHeight:'1.6' }}>
+                      <span style={{ color:'#374151', flexShrink:0 }}>[{log.t}]</span>
+                      <span style={{ color:levelColor(log.level), flexShrink:0, minWidth:64 }}>[{log.level}]</span>
+                      <span style={{ color:'#94a3b8' }}>{log.msg}</span>
                     </div>
                   ))
               }

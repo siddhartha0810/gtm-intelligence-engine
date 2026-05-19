@@ -35,6 +35,7 @@ if str(ORACLE_DIR) not in sys.path:
     sys.path.insert(0, str(ORACLE_DIR))
 
 from fastapi import FastAPI, File, Form, Request, UploadFile, Depends
+from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -94,10 +95,10 @@ app = FastAPI(title="Oracle Intelligence Platform")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://localhost:8000", "http://localhost:5173", "http://127.0.0.1:8000"],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "Accept"],
 )
 
 # ── Static file serving ──────────────────────────────────────────────────────
@@ -132,6 +133,12 @@ def _scan_current_status() -> dict:
                         if st.get("status") == "running":
                             st["status"]   = "idle"
                             st["progress"] = "Done." if _scan_proc.returncode == 0 else "Stopped."
+                            # Auto-update Product Intelligence whenever a scan finishes
+                            if _scan_proc.returncode == 0:
+                                try:
+                                    oracle_db.aggregate_product_intel()
+                                except Exception:
+                                    pass
                 return st
     except Exception:
         pass
@@ -242,7 +249,12 @@ def _enrich_get_log() -> list:
     return []
 
 
-def _start_enrich_subprocess(limit: int = 50, max_per_company: int = 10) -> bool:
+def _start_enrich_subprocess(
+    limit: int = 50,
+    max_per_company: int = 10,
+    batch_size: int = None,
+    role_filters: list = None,
+) -> bool:
     """Spawn enrichment_worker.py. Returns False if already running."""
     global _enrich_proc
     with _enrich_proc_lock:
@@ -271,6 +283,11 @@ def _start_enrich_subprocess(limit: int = 50, max_per_company: int = 10) -> bool
             "--limit",           str(limit),
             "--max-per-company", str(max_per_company),
         ]
+        if batch_size:
+            cmd += ["--batch-size", str(batch_size)]
+        if role_filters:
+            cmd += ["--role-filters", json.dumps(role_filters)]
+
         _enrich_proc = subprocess.Popen(
             cmd,
             cwd=str(BASE_DIR),
@@ -407,7 +424,7 @@ async def cancel_job(job_id: str):
 # ═══════════════════════════════════════════════════════════════════════════
 
 @app.get("/oracle/config")
-async def oracle_config():
+async def oracle_config(current_user: dict = Depends(oracle_auth.require_user)):
     try:
         oracle_db.init_db()
         db_ok = oracle_db.test_connection()
@@ -417,7 +434,7 @@ async def oracle_config():
 
 
 @app.post("/scan/start")
-async def start_scan(request: Request):
+async def start_scan(request: Request, current_user: dict = Depends(oracle_auth.require_analyst)):
     status = _scan_current_status()
     if status["status"] == "running":
         return JSONResponse(
@@ -438,18 +455,18 @@ async def start_scan(request: Request):
 
 
 @app.get("/scan/status")
-async def scan_status():
+async def scan_status(current_user: dict = Depends(oracle_auth.require_user)):
     return _scan_current_status()
 
 
 @app.post("/scan/stop")
-async def stop_scan():
+async def stop_scan(current_user: dict = Depends(oracle_auth.require_analyst)):
     _stop_scan_subprocess()
     return {"message": "Stop signal sent."}
 
 
 @app.get("/scan/log")
-async def scan_log():
+async def scan_log(current_user: dict = Depends(oracle_auth.require_user)):
     return _scan_get_log()
 
 
@@ -466,7 +483,8 @@ def _annotate_and_sort(companies: list) -> list:
 
 
 @app.get("/api/companies")
-async def api_companies(phase: str = "", product: str = "", show_all: int = 0):
+async def api_companies(phase: str = "", product: str = "", show_all: int = 0,
+                        current_user: dict = Depends(oracle_auth.require_user)):
     try:
         run_id = 0 if show_all else None
         companies = list(oracle_db.get_all_companies_with_signals(run_id=run_id))
@@ -475,6 +493,47 @@ async def api_companies(phase: str = "", product: str = "", show_all: int = 0):
             companies = [c for c in companies if phase in (c.get("phases") or [])]
         if product:
             companies = [c for c in companies if product in (c.get("products") or [])]
+
+        # ── Augment contact_count with master_leads fallback ──────────────────
+        # Build a single query for all domains + names to avoid N+1 calls
+        try:
+            domains = list({(c.get("domain") or "").strip().lower()
+                            for c in companies if (c.get("domain") or "").strip()})
+            names   = list({(c.get("name") or "").strip().lower()
+                            for c in companies if (c.get("name") or "").strip()})
+            with oracle_db.db_cursor(commit=False) as cur:
+                # Count by domain
+                domain_counts: dict = {}
+                if domains:
+                    cur.execute(
+                        "SELECT LOWER(domain) AS d, COUNT(*) AS cnt FROM master_leads "
+                        "WHERE LOWER(domain) = ANY(%s) GROUP BY LOWER(domain)",
+                        (domains,),
+                    )
+                    for row in cur.fetchall():
+                        domain_counts[row["d"]] = row["cnt"]
+                # Count by normalized name (for companies with no domain)
+                name_counts: dict = {}
+                if names:
+                    cur.execute(
+                        "SELECT LOWER(company_normalized) AS n, COUNT(*) AS cnt FROM master_leads "
+                        "WHERE LOWER(company_normalized) = ANY(%s) GROUP BY LOWER(company_normalized)",
+                        (names,),
+                    )
+                    for row in cur.fetchall():
+                        name_counts[row["n"]] = row["cnt"]
+
+            for c in companies:
+                existing = int(c.get("contact_count") or 0)
+                if existing == 0:
+                    d = (c.get("domain") or "").strip().lower()
+                    n = (c.get("name") or "").strip().lower()
+                    ml_count = domain_counts.get(d) or name_counts.get(n) or 0
+                    if ml_count:
+                        c["contact_count"] = ml_count
+        except Exception:
+            pass  # best-effort — don't break the response
+
         return [dict(c) for c in companies]
     except Exception as e:
         import traceback
@@ -483,7 +542,7 @@ async def api_companies(phase: str = "", product: str = "", show_all: int = 0):
 
 
 @app.get("/api/stats")
-async def api_stats(show_all: int = 0):
+async def api_stats(show_all: int = 0, current_user: dict = Depends(oracle_auth.require_user)):
     from collections import Counter
     run_id = 0 if show_all else None
     companies = list(oracle_db.get_all_companies_with_signals(run_id=run_id))
@@ -513,25 +572,153 @@ async def api_stats(show_all: int = 0):
 
 
 @app.get("/api/company/{company_id}/signals")
-async def api_company_signals(company_id: int):
+async def api_company_signals(company_id: int, current_user: dict = Depends(oracle_auth.require_user)):
     return JSONResponse([dict(s) for s in oracle_db.get_signals_for_company(company_id)])
 
 
 @app.get("/api/company/{company_id}/contacts")
-async def api_company_contacts(company_id: int):
-    return JSONResponse([dict(c) for c in oracle_db.get_contacts_for_company(company_id)])
+async def api_company_contacts(company_id: int, current_user: dict = Depends(oracle_auth.require_user)):
+    """Return enriched contacts for a company.
+    Primary source: company_contacts table.
+    Fallback: master_leads matched by domain or company name (so the panel
+    always shows something useful even before enrichment).
+    """
+    rows = jsonable_encoder([dict(c) for c in oracle_db.get_contacts_for_company(company_id)])
+    if rows:
+        return JSONResponse(rows)
+
+    # ── Fallback: pull from master_leads ─────────────────────────────────────
+    company = oracle_db.get_company_by_id(company_id)
+    if not company:
+        return JSONResponse([])
+
+    cname  = (company.get("name") or "").strip()
+    domain = (company.get("domain") or "").strip().lower()
+
+    try:
+        with oracle_db.db_cursor(commit=False) as cur:
+            if domain:
+                cur.execute(
+                    """SELECT lead_id, first_name, last_name, job_title AS title,
+                              email, linkedin_url, email_validation_status,
+                              company AS company_name, domain AS company_domain,
+                              first_seen_at::text AS created_at
+                       FROM master_leads
+                       WHERE LOWER(domain) = %s
+                       ORDER BY email_validation_status ASC, last_updated_at DESC
+                       LIMIT 100""",
+                    (domain,),
+                )
+            else:
+                cur.execute(
+                    """SELECT lead_id, first_name, last_name, job_title AS title,
+                              email, linkedin_url, email_validation_status,
+                              company AS company_name, domain AS company_domain,
+                              first_seen_at::text AS created_at
+                       FROM master_leads
+                       WHERE LOWER(company_normalized) = LOWER(%s)
+                       ORDER BY email_validation_status ASC, last_updated_at DESC
+                       LIMIT 100""",
+                    (cname,),
+                )
+            leads = cur.fetchall()
+
+        result = []
+        for i, row in enumerate(leads):
+            d = dict(row)
+            evs = d.pop("email_validation_status", "") or ""
+            conf = 0.85 if evs == "valid" else (0.55 if evs == "catch-all" else 0.30)
+            result.append({
+                "id":             f"ml_{d.get('lead_id', i)}",
+                "first_name":     d.get("first_name") or "",
+                "last_name":      d.get("last_name") or "",
+                "title":          d.get("title") or "",
+                "email":          d.get("email") or "",
+                "linkedin_url":   d.get("linkedin_url") or "",
+                "confidence":     conf,
+                "is_target":      False,
+                "source":         "master_leads",
+                "created_at":     d.get("created_at") or "",
+                "company_name":   d.get("company_name") or cname,
+                "company_domain": d.get("company_domain") or domain,
+            })
+        return JSONResponse(result)
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
 
 
 @app.post("/api/company/{company_id}/contacts/enrich")
-async def api_enrich_contacts(company_id: int):
+async def api_enrich_contacts(company_id: int, current_user: dict = Depends(oracle_auth.require_analyst)):
+    """Enrich contacts for a company.
+    Step 1: import from master_leads (fast, no external calls).
+    Step 2: if master_leads found nothing, call the external contact finder.
+    Saves results into company_contacts so they persist.
+    """
     company = oracle_db.get_company_by_id(company_id)
     if not company:
         return JSONResponse({"error": "Company not found"}, status_code=404)
-    domain = company.get("domain") or oracle_contact_finder.infer_domain(company["name"])
+
+    cname  = (company.get("name") or "").strip()
+    domain = (company.get("domain") or "").strip().lower() or \
+             oracle_contact_finder.infer_domain(cname)
+
+    # ── Step 1: pull from master_leads ───────────────────────────────────────
+    imported = 0
     try:
-        contacts = oracle_contact_finder.find_contacts(company["name"], domain)
+        with oracle_db.db_cursor(commit=False) as cur:
+            if domain:
+                cur.execute(
+                    """SELECT first_name, last_name, job_title, email, linkedin_url,
+                              email_validation_status, company AS company_name, domain
+                       FROM master_leads
+                       WHERE LOWER(domain) = %s
+                       ORDER BY email_validation_status ASC
+                       LIMIT 100""",
+                    (domain,),
+                )
+            else:
+                cur.execute(
+                    """SELECT first_name, last_name, job_title, email, linkedin_url,
+                              email_validation_status, company AS company_name, domain
+                       FROM master_leads
+                       WHERE LOWER(company_normalized) = LOWER(%s)
+                       ORDER BY email_validation_status ASC
+                       LIMIT 100""",
+                    (cname,),
+                )
+            leads = cur.fetchall()
+
+        if leads:
+            contacts_to_save = []
+            for row in leads:
+                d = dict(row)
+                evs = d.get("email_validation_status") or ""
+                conf = 0.85 if evs == "valid" else (0.55 if evs == "catch-all" else 0.30)
+                contacts_to_save.append({
+                    "first_name":   d.get("first_name") or "",
+                    "last_name":    d.get("last_name") or "",
+                    "title":        d.get("job_title") or "",
+                    "email":        d.get("email") or "",
+                    "linkedin_url": d.get("linkedin_url") or "",
+                    "confidence":   conf,
+                    "source":       "master_leads",
+                    "is_target":    False,
+                })
+            oracle_db.save_contacts(company_id, contacts_to_save)
+            imported = len(contacts_to_save)
+    except Exception as e:
+        pass  # fall through to external finder
+
+    if imported:
+        return {"contacts": [], "count": imported,
+                "message": f"Imported {imported} contacts from master database"}
+
+    # ── Step 2: external contact finder ──────────────────────────────────────
+    try:
+        contacts = oracle_contact_finder.find_contacts(cname, domain)
         oracle_db.save_contacts(company_id, contacts)
-        return {"contacts": contacts, "count": len(contacts)}
+        return {"contacts": contacts, "count": len(contacts),
+                "message": f"Found {len(contacts)} contacts via external search"}
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
 
@@ -541,14 +728,16 @@ async def api_enrich_contacts(company_id: int):
 # ═══════════════════════════════════════════════════════════════════════════
 
 @app.post("/admin/purge-invalid")
-async def purge_invalid():
+async def purge_invalid(current_user: dict = Depends(oracle_auth.require_admin)):
     count = oracle_db.purge_invalid_companies(is_valid_company_name)
+    log_audit(current_user, "purge_invalid", "system", "", new_value={"deleted": count})
     return {"deleted": count, "message": f"Purged {count} invalid company names."}
 
 
 @app.post("/admin/reset-all")
-async def reset_all():
+async def reset_all(current_user: dict = Depends(oracle_auth.require_admin)):
     oracle_db.reset_all_data()
+    log_audit(current_user, "reset_all", "system", "")
     return {"message": "All data cleared. Ready for a fresh scan."}
 
 
@@ -584,14 +773,14 @@ def _companies_to_export_format(db_rows) -> list:
 
 
 @app.get("/export/csv")
-async def export_csv():
+async def export_csv(current_user: dict = Depends(oracle_auth.require_analyst)):
     companies = oracle_db.get_all_companies_with_signals()
     path = oracle_exporter.export_csv(_companies_to_export_format(companies))
     return FileResponse(path, filename=os.path.basename(path), media_type="text/csv")
 
 
 @app.get("/export/excel")
-async def export_excel():
+async def export_excel(current_user: dict = Depends(oracle_auth.require_analyst)):
     companies = oracle_db.get_all_companies_with_signals()
     path = oracle_exporter.export_excel(_companies_to_export_format(companies))
     return FileResponse(path, filename=os.path.basename(path),
@@ -599,7 +788,7 @@ async def export_excel():
 
 
 @app.get("/export/excel/all")
-async def export_excel_all():
+async def export_excel_all(current_user: dict = Depends(oracle_auth.require_analyst)):
     companies = oracle_db.get_all_companies_with_signals(run_id=0)
     filename  = f"oracle_intent_ALL_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
     path = oracle_exporter.export_excel(_companies_to_export_format(companies), filename=filename)
@@ -608,7 +797,7 @@ async def export_excel_all():
 
 
 @app.get("/export/csv/all")
-async def export_csv_all():
+async def export_csv_all(current_user: dict = Depends(oracle_auth.require_analyst)):
     companies = oracle_db.get_all_companies_with_signals(run_id=0)
     filename  = f"oracle_intent_ALL_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
     path = oracle_exporter.export_csv(_companies_to_export_format(companies), filename=filename)
@@ -620,7 +809,7 @@ async def export_csv_all():
 # ═══════════════════════════════════════════════════════════════════════════
 
 @app.get("/config")
-async def get_config():
+async def get_config(current_user: dict = Depends(oracle_auth.require_user)):
     return {
         "pg_configured":  bool(PG_CONNECTION_STRING),
         "pg_input_table": PG_INPUT_TABLE,
@@ -632,7 +821,7 @@ async def get_config():
 
 
 @app.get("/config/status")
-async def config_status():
+async def config_status(current_user: dict = Depends(oracle_auth.require_user)):
     """Return real connection status for each API key — used by Settings page."""
     import httpx
 
@@ -702,7 +891,8 @@ async def config_status():
 
 
 @app.post("/config/test/{service}")
-async def config_test(service: str, request: Request):
+async def config_test(service: str, request: Request,
+                      current_user: dict = Depends(oracle_auth.require_admin)):
     """Test a single API key supplied in the request body."""
     import httpx
     data = await request.json()
@@ -755,7 +945,8 @@ async def config_test(service: str, request: Request):
 
 
 @app.post("/config/save/{service}")
-async def config_save(service: str, request: Request):
+async def config_save(service: str, request: Request,
+                      current_user: dict = Depends(oracle_auth.require_admin)):
     """Persist an API key to lead_enrichment_engine/.env and reload it in memory."""
     global APOLLO_API_KEY, ZEROBOUNCE_API_KEY, APIFY_TOKEN
 
@@ -803,7 +994,8 @@ async def config_save(service: str, request: Request):
 
 
 @app.post("/upload")
-async def upload_csv(file: UploadFile = File(...)):
+async def upload_csv(file: UploadFile = File(...),
+                     current_user: dict = Depends(oracle_auth.require_analyst)):
     dest_dir = ENRICH_DIR / "input"
     dest_dir.mkdir(exist_ok=True)
     suffix = Path(file.filename).suffix.lower()
@@ -822,6 +1014,7 @@ async def run_pipeline(
     restart:  bool = Form(False),
     use_db:   bool = Form(False),
     filename: str  = Form(""),
+    current_user: dict = Depends(oracle_auth.require_analyst),
 ):
     running = _running_jobs()
     if running:
@@ -850,7 +1043,7 @@ async def run_pipeline(
 
 
 @app.get("/api/leads")
-async def get_leads():
+async def get_leads(current_user: dict = Depends(oracle_auth.require_analyst)):
     import pandas as pd
     path = ENRICH_DIR / "output" / "final_outreach_ready.csv"
     if not path.exists():
@@ -866,7 +1059,7 @@ _ALLOWED_DOWNLOADS = {"final_outreach_ready.csv", "audit_log.csv", "vendor_perfo
 
 
 @app.get("/download/{filename}")
-async def download_file(filename: str):
+async def download_file(filename: str, current_user: dict = Depends(oracle_auth.require_analyst)):
     if filename not in _ALLOWED_DOWNLOADS:
         return JSONResponse({"error": "File not available"}, status_code=404)
     path = ENRICH_DIR / "output" / filename
@@ -905,7 +1098,7 @@ def _load_prospect_results(job_id: str):
 
 
 @app.post("/prospect/estimate")
-async def prospect_estimate(request: Request):
+async def prospect_estimate(request: Request, current_user: dict = Depends(oracle_auth.require_analyst)):
     data = await request.json()
     companies = [c.strip() for c in (data.get("companies") or []) if c and c.strip()]
 
@@ -934,7 +1127,7 @@ async def prospect_estimate(request: Request):
 
 
 @app.post("/prospect/db-search")
-async def prospect_db_search(request: Request):
+async def prospect_db_search(request: Request, current_user: dict = Depends(oracle_auth.require_analyst)):
     """Synchronous DB-only search — oracle SQLite contacts + PG master."""
     data      = await request.json()
     companies = [c.strip() for c in (data.get("companies") or []) if c and c.strip()]
@@ -1027,7 +1220,7 @@ async def prospect_db_search(request: Request):
 
 
 @app.post("/prospect/run")
-async def prospect_run(request: Request):
+async def prospect_run(request: Request, current_user: dict = Depends(oracle_auth.require_analyst)):
     """Launch Apollo prospecting as a subprocess; returns job_id for SSE streaming."""
     data = await request.json()
     companies       = [c.strip() for c in (data.get("companies") or []) if c and c.strip()]
@@ -1084,7 +1277,7 @@ async def prospect_run(request: Request):
 
 
 @app.get("/prospect/status/{job_id}")
-async def prospect_status(job_id: str):
+async def prospect_status(job_id: str, current_user: dict = Depends(oracle_auth.require_user)):
     if job_id not in _jobs:
         return JSONResponse({"status": "not_found"}, status_code=404)
     j = _jobs[job_id]
@@ -1096,14 +1289,14 @@ async def prospect_status(job_id: str):
 
 
 @app.get("/prospect/results")
-async def prospect_results():
+async def prospect_results(current_user: dict = Depends(oracle_auth.require_analyst)):
     if not _prospect_results:
         return JSONResponse({"error": "No prospect results yet — run a search first"}, status_code=404)
     return JSONResponse(_prospect_results)
 
 
 @app.get("/prospect/download/csv")
-async def prospect_download_csv():
+async def prospect_download_csv(current_user: dict = Depends(oracle_auth.require_analyst)):
     if not _prospect_results:
         return JSONResponse({"error": "No results to download"}, status_code=404)
     import io, csv as csv_mod
@@ -1122,7 +1315,7 @@ async def prospect_download_csv():
 
 
 @app.get("/prospect/download/excel")
-async def prospect_download_excel():
+async def prospect_download_excel(current_user: dict = Depends(oracle_auth.require_analyst)):
     if not _prospect_results:
         return JSONResponse({"error": "No results to download"}, status_code=404)
     import io
@@ -1144,7 +1337,7 @@ async def prospect_download_excel():
 # ═══════════════════════════════════════════════════════════════════════════
 
 @app.get("/api/dashboard")
-async def api_dashboard():
+async def api_dashboard(current_user: dict = Depends(oracle_auth.require_user)):
     """Single endpoint that powers the Dashboard page KPI cards."""
     from collections import Counter
     companies = list(oracle_db.get_all_companies_with_signals(run_id=0))
@@ -1185,7 +1378,8 @@ async def api_dashboard():
 
 
 @app.get("/api/contacts")
-async def api_contacts(company: str = "", limit: int = 200):
+async def api_contacts(company: str = "", limit: int = 200,
+                       current_user: dict = Depends(oracle_auth.require_user)):
     """Enriched contacts from company_contacts table."""
     try:
         with oracle_db.db_cursor(commit=False) as cur:
@@ -1231,7 +1425,7 @@ async def api_contacts(company: str = "", limit: int = 200):
 # ═══════════════════════════════════════════════════════════════════════════
 
 @app.get("/api/signals")
-async def api_signals(limit: int = 200):
+async def api_signals(limit: int = 200, current_user: dict = Depends(oracle_auth.require_user)):
     """All Oracle intent signals with company name, newest first."""
     try:
         with oracle_db.db_cursor(commit=False) as cur:
@@ -1274,7 +1468,7 @@ async def push_contact_to_hubspot_endpoint(
 
 
 @app.get("/api/reporting")
-async def api_reporting():
+async def api_reporting(current_user: dict = Depends(oracle_auth.require_user)):
     """Reporting stats: phase distribution, scan-run history, source breakdown."""
     from collections import Counter
     companies = list(oracle_db.get_all_companies_with_signals(run_id=0))
@@ -1306,40 +1500,119 @@ async def api_reporting():
 
 # ─── Enrichment endpoints ────────────────────────────────────────────────────
 
+@app.get("/api/enrich/preflight")
+async def enrich_preflight(current_user: dict = Depends(oracle_auth.require_analyst)):
+    """
+    Pre-flight estimate: how many companies need enrichment, how many can be served
+    from master_leads (free), how many need Apollo (credit cost), and estimated time.
+    """
+    try:
+        companies = oracle_db.get_companies_needing_enrichment(1000)
+        total = len(companies)
+
+        if not total:
+            return {
+                "total": 0, "from_master_leads": 0, "need_apollo": 0,
+                "est_credits": 0, "est_minutes": 0,
+                "apollo_configured": bool(APOLLO_API_KEY),
+                "zerobounce_configured": bool(ZEROBOUNCE_API_KEY),
+            }
+
+        # Batch-check master_leads coverage in two queries (not N+1)
+        names   = [c["name"].strip().lower() for c in companies]
+        domains = [c.get("domain", "").strip().lower() for c in companies if c.get("domain", "").strip()]
+
+        with oracle_db.db_cursor(commit=False) as cur:
+            cur.execute(
+                "SELECT DISTINCT LOWER(company_normalized) AS n FROM master_leads "
+                "WHERE LOWER(company_normalized) = ANY(%s)",
+                (names,),
+            )
+            name_hits = {r["n"] for r in cur.fetchall()}
+
+            domain_hits: set = set()
+            if domains:
+                cur.execute(
+                    "SELECT DISTINCT LOWER(domain) AS d FROM master_leads "
+                    "WHERE LOWER(domain) = ANY(%s) AND domain != ''",
+                    (domains,),
+                )
+                domain_hits = {r["d"] for r in cur.fetchall()}
+
+        from_master = sum(
+            1 for c in companies
+            if c["name"].strip().lower() in name_hits
+            or (c.get("domain", "").strip().lower() in domain_hits and c.get("domain", ""))
+        )
+        need_apollo = total - from_master
+
+        # Apollo credit estimate: 2 credits per company (targeted pass + possible broad pass)
+        est_credits  = need_apollo * 2
+        # Time estimate: ~3 s per Apollo company (1.2s × 2 passes + ZB overhead)
+        est_seconds  = need_apollo * 3
+        est_minutes  = max(0.5, round(est_seconds / 60, 1))
+
+        return {
+            "total":               total,
+            "from_master_leads":   from_master,
+            "need_apollo":         need_apollo,
+            "est_credits":         est_credits,
+            "est_minutes":         est_minutes,
+            "apollo_configured":   bool(APOLLO_API_KEY),
+            "zerobounce_configured": bool(ZEROBOUNCE_API_KEY),
+        }
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
 @app.post("/api/enrich/start")
-async def enrich_start(request: Request):
+async def enrich_start(request: Request, current_user: dict = Depends(oracle_auth.require_analyst)):
     """Launch the Apollo enrichment subprocess for companies without contacts."""
-    data              = await request.json() if request.headers.get("content-type", "").startswith("application/json") else {}
-    limit             = int(data.get("limit", 50))
-    max_per_company   = int(data.get("max_per_company", 10))
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+    limit           = int(data.get("limit", 50))
+    max_per_company = int(data.get("max_per_company", 10))
+    batch_size      = data.get("batch_size")
+    role_filters    = data.get("role_filters") or None
+
+    if batch_size:
+        batch_size = int(batch_size)
 
     if not APOLLO_API_KEY:
         return JSONResponse({"error": "Apollo API key not configured. Add APOLLO_API_KEY to oracle_intent_engine/.env"}, status_code=400)
 
-    started = _start_enrich_subprocess(limit=limit, max_per_company=max_per_company)
+    started = _start_enrich_subprocess(
+        limit=limit,
+        max_per_company=max_per_company,
+        batch_size=batch_size,
+        role_filters=role_filters,
+    )
     if not started:
         return JSONResponse({"error": "Enrichment already running"}, status_code=409)
-    return {"started": True, "limit": limit, "max_per_company": max_per_company}
+    return {"started": True, "limit": limit, "max_per_company": max_per_company,
+            "batch_size": batch_size, "role_filters_count": len(role_filters) if role_filters else 0}
 
 
 @app.post("/api/enrich/stop")
-async def enrich_stop():
+async def enrich_stop(current_user: dict = Depends(oracle_auth.require_analyst)):
     _stop_enrich_subprocess()
     return {"stopped": True}
 
 
 @app.get("/api/enrich/status")
-async def enrich_status():
+async def enrich_status(current_user: dict = Depends(oracle_auth.require_user)):
     return _enrich_current_status()
 
 
 @app.get("/api/enrich/log")
-async def enrich_log():
+async def enrich_log(current_user: dict = Depends(oracle_auth.require_user)):
     return _enrich_get_log()
 
 
 @app.get("/api/enrich/stats")
-async def enrich_stats():
+async def enrich_stats(current_user: dict = Depends(oracle_auth.require_user)):
     """Returns enrichment readiness: how many companies need enrichment."""
     try:
         stats = oracle_db.get_enrichment_stats()
@@ -1369,7 +1642,7 @@ async def auth_register(request: Request):
     if not email or not password:
         return JSONResponse({"error": "email and password are required"}, status_code=400)
     if oracle_auth.get_user_by_email(email):
-        return JSONResponse({"error": "Email already registered"}, status_code=409)
+        return JSONResponse({"error": "Registration failed. Please try again or contact support."}, status_code=409)
     user  = oracle_auth.create_user(email, name, password, role)
     token = oracle_auth.create_token(user["id"], user["email"], user["role"])
     return {"token": token, "user": {k: v for k, v in user.items() if k != "password_hash"}}
@@ -1796,13 +2069,16 @@ async def api_hubspot_sync_pull(
     current_user: dict = Depends(oracle_auth.require_admin),
 ):
     """Pull companies AND contacts from HubSpot into local DB (doc §6.3)."""
-    body    = await request.json()
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
     hs_key  = body.get("hubspot_key") or os.getenv("HUBSPOT_API_KEY", "")
     cfg     = oracle_db.get_hubspot_config()
     if not hs_key:
         hs_key = cfg.get("api_key", "")
     if not hs_key:
-        return JSONResponse({"error": "HubSpot API key required"}, status_code=400)
+        return JSONResponse({"error": "No HubSpot API key configured. Save one in HubSpot Sync → Credentials first."}, status_code=400)
 
     result = await hs_push.sync_pull_from_hubspot(hs_key)
     log_audit(current_user, "hubspot_sync_pull", "system", "",
@@ -1827,10 +2103,14 @@ async def save_hubspot_config(
 ):
     """Save HubSpot API key and portal ID."""
     body = await request.json()
-    api_key   = body.get("api_key", "").strip()
-    portal_id = body.get("portal_id", "").strip()
+    api_key   = (body.get("api_key") or "").strip()
+    portal_id = (body.get("portal_id") or "").strip()
+    # Allow saving portal_id alone (without changing the key)
+    existing  = oracle_db.get_hubspot_config()
     if not api_key:
-        return JSONResponse({"error": "api_key required"}, status_code=400)
+        api_key = existing.get("api_key", "")   # keep existing key
+    if not api_key and not portal_id:
+        return JSONResponse({"error": "At least api_key or portal_id required"}, status_code=400)
     cfg = oracle_db.upsert_hubspot_config(api_key, portal_id)
     # Also set in env for current process
     os.environ["HUBSPOT_API_KEY"] = api_key
@@ -1897,7 +2177,10 @@ async def bulk_push_companies_endpoint(
     current_user: dict = Depends(oracle_auth.require_analyst),
 ):
     """Bulk push all approved companies to HubSpot (doc §6.2)."""
-    body   = await request.json()
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
     status = body.get("status", "approved")
     limit  = min(int(body.get("limit", 100)), 500)
     result = await hs_push.bulk_push_companies(status, limit)
@@ -1911,7 +2194,10 @@ async def bulk_push_contacts_endpoint(
     current_user: dict = Depends(oracle_auth.require_analyst),
 ):
     """Bulk push all approved contacts to HubSpot."""
-    body   = await request.json()
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
     status = body.get("status", "approved")
     limit  = min(int(body.get("limit", 100)), 500)
     result = await hs_push.bulk_push_contacts(status, limit)
@@ -1924,6 +2210,15 @@ async def bulk_push_contacts_endpoint(
 @app.get("/api/engine-configs")
 async def get_engine_configs(current_user: dict = Depends(oracle_auth.require_analyst)):
     return oracle_db.list_engine_configs()
+
+@app.get("/api/engine-configs/{engine_type}")
+async def get_engine_config(engine_type: str, current_user: dict = Depends(oracle_auth.require_analyst)):
+    """Get a single engine config by type."""
+    configs = oracle_db.list_engine_configs()
+    for cfg in configs:
+        if cfg.get("engine_type") == engine_type:
+            return cfg
+    return JSONResponse({"error": f"Engine '{engine_type}' not found"}, status_code=404)
 
 @app.patch("/api/engine-configs/{engine_type}")
 async def update_engine_config_endpoint(
@@ -2007,46 +2302,111 @@ async def get_product_intelligence(
     product_filter: str = None,
     current_user: dict = Depends(oracle_auth.require_analyst),
 ):
-    """Company-product matrix: join companies.enrichment_data with product_taxonomy."""
+    """Company-product matrix built from oracle_signals aggregation."""
     with oracle_db.db_cursor(commit=False) as cur:
-        # Get all product taxonomy entries
-        cur.execute("SELECT * FROM product_taxonomy ORDER BY canonical_name")
-        taxonomy = [dict(r) for r in cur.fetchall()]
-
-        # Get companies with oracle product data
-        where = ""
-        params: list = []
+        # Base filter: companies that have at least one oracle product detected
+        # or have manually populated cloud/onprem fields
         if product_filter:
-            where = "WHERE (c.oracle_cloud_solutions ILIKE %s OR c.oracle_on_premise_solutions ILIKE %s OR c.oracle_version ILIKE %s)"
-            params = [f"%{product_filter}%"] * 3
+            where = """
+                WHERE (
+                    %s = ANY(c.oracle_cloud_solutions)
+                    OR %s = ANY(c.oracle_on_premise_solutions)
+                    OR %s = ANY(c.detected_products)
+                )"""
+            params: list = [product_filter] * 3
+        else:
+            where = """
+                WHERE (
+                    cardinality(c.oracle_cloud_solutions) > 0
+                    OR cardinality(c.oracle_on_premise_solutions) > 0
+                    OR cardinality(c.detected_products) > 0
+                )"""
+            params = []
 
         cur.execute(
             f"""SELECT c.id, c.name, c.domain, c.industry, c.status,
-                       c.oracle_cloud_solutions, c.oracle_on_premise_solutions,
-                       c.oracle_version, c.oracle_relationship_type,
-                       c.number_of_oracle_users, c.oracle_support_end_date,
-                       c.enrichment_data,
-                       COUNT(DISTINCT cc.id) AS contact_count
+                       c.oracle_cloud_solutions,
+                       c.oracle_on_premise_solutions  AS oracle_onprem_solutions,
+                       c.oracle_version,
+                       c.oracle_relationship_type     AS relationship_type,
+                       c.number_of_oracle_users       AS oracle_users,
+                       c.oracle_support_end_date,
+                       c.detected_products            AS product_taxonomy,
+                       c.product_confidence_scores,
+                       COUNT(DISTINCT cc.id)          AS contacts_count
                 FROM companies c
                 LEFT JOIN company_contacts cc ON cc.company_id = c.id
                 {where}
                 GROUP BY c.id
-                ORDER BY c.name
+                ORDER BY cardinality(c.detected_products) DESC, c.name
                 LIMIT %s OFFSET %s""",
             params + [limit, offset],
         )
-        companies = [dict(r) for r in cur.fetchall()]
+        companies_raw = cur.fetchall()
+        companies     = jsonable_encoder([dict(r) for r in companies_raw])
 
-        cur.execute("SELECT COUNT(*) FROM companies" + (" " + where if where else ""), params)
-        total = cur.fetchone()[0]
+        cur.execute(
+            f"SELECT COUNT(*) AS cnt FROM companies c {where}",
+            params,
+        )
+        total = cur.fetchone()["cnt"]
+
+        # Stats: cloud-only, onprem-only, mixed
+        cur.execute("""
+            SELECT
+                COUNT(*) FILTER (
+                    WHERE cardinality(oracle_cloud_solutions) > 0
+                      AND cardinality(oracle_on_premise_solutions) = 0
+                ) AS cloud,
+                COUNT(*) FILTER (
+                    WHERE cardinality(oracle_on_premise_solutions) > 0
+                      AND cardinality(oracle_cloud_solutions) = 0
+                ) AS onprem,
+                COUNT(*) FILTER (
+                    WHERE cardinality(oracle_cloud_solutions) > 0
+                      AND cardinality(oracle_on_premise_solutions) > 0
+                ) AS mixed,
+                COUNT(*) FILTER (
+                    WHERE cardinality(detected_products) > 0
+                ) AS total_with_products
+            FROM companies
+        """)
+        s = cur.fetchone()
+
+        # All unique product names for the filter dropdown
+        cur.execute("""
+            SELECT DISTINCT unnest(detected_products) AS product
+            FROM companies
+            WHERE cardinality(detected_products) > 0
+            ORDER BY 1
+        """)
+        products = [r["product"] for r in cur.fetchall()]
 
     return {
-        "taxonomy": taxonomy,
         "companies": companies,
-        "total": total,
-        "limit": limit,
-        "offset": offset,
+        "total":     total,
+        "limit":     limit,
+        "offset":    offset,
+        "stats": {
+            "total":  int(s["total_with_products"] or 0),
+            "cloud":  int(s["cloud"]  or 0),
+            "onprem": int(s["onprem"] or 0),
+            "mixed":  int(s["mixed"]  or 0),
+        },
+        "products": products,
     }
+
+
+@app.post("/api/product-intelligence/refresh")
+async def refresh_product_intelligence(
+    current_user: dict = Depends(oracle_auth.require_analyst),
+):
+    """Aggregate oracle_signals → populate product intel columns on companies."""
+    try:
+        result = oracle_db.aggregate_product_intel()
+        return {"ok": True, **result}
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
 
 
 @app.on_event("startup")

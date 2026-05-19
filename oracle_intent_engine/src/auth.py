@@ -32,7 +32,10 @@ from jose import JWTError, jwt
 import oracle_intent_engine.src.database as db
 
 # ── Configuration ─────────────────────────────────────────────────────────────
-_JWT_SECRET  = os.environ.get("JWT_SECRET", "CHANGE_ME_IN_PRODUCTION_use_32_random_bytes")
+_JWT_SECRET = os.environ.get("JWT_SECRET", "")
+if not _JWT_SECRET:
+    import secrets as _sec
+    _JWT_SECRET = _sec.token_hex(32)  # random per-process secret (dev fallback only)
 _JWT_ALG     = "HS256"
 _TOKEN_HOURS = 12
 
