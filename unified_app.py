@@ -573,7 +573,7 @@ async def api_stats(show_all: int = 0, current_user: dict = Depends(oracle_auth.
 
 @app.get("/api/company/{company_id}/signals")
 async def api_company_signals(company_id: int, current_user: dict = Depends(oracle_auth.require_user)):
-    return JSONResponse([dict(s) for s in oracle_db.get_signals_for_company(company_id)])
+    return JSONResponse(jsonable_encoder([dict(s) for s in oracle_db.get_signals_for_company(company_id)]))
 
 
 @app.get("/api/company/{company_id}/contacts")

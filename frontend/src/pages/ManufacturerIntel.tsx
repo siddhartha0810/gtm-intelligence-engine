@@ -130,7 +130,7 @@ export default function ManufacturerIntel() {
   const load = async () => {
     setLoading(true)
     try {
-      const r = await fetch('/api/manufacturer-contacts')
+      const r = await fetch('/api/manufacturer-contacts', { headers: authH() })
       if (!r.ok) throw new Error()
       setContacts(await r.json())
     } catch { toast.error('Failed to load manufacturer contacts') } finally { setLoading(false) }

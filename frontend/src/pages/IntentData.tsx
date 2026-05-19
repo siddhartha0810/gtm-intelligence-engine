@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { Zap, TrendingUp, Building2, RefreshCw } from 'lucide-react'
 
+const authH = () => ({ 'Authorization': `Bearer ${localStorage.getItem('token') || ''}` })
+
 interface Signal {
   id: number
   company_name: string
@@ -45,7 +47,7 @@ export default function IntentData() {
     setLoading(true)
     setError('')
     try {
-      const r = await fetch('/api/signals?limit=200')
+      const r = await fetch('/api/signals?limit=200', { headers: authH() })
       if (!r.ok) throw new Error(`HTTP ${r.status}`)
       setSignals(await r.json())
     } catch (e: any) {

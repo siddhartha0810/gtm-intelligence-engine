@@ -68,7 +68,7 @@ export default function ListImport() {
       const fd = new FormData()
       fd.append('file', file)
       fd.append('entity_type', entityType)
-      const r = await fetch('/api/import/parse-headers', { method: 'POST', body: fd })
+      const r = await fetch('/api/import/parse-headers', { method: 'POST', body: fd, headers: { 'Authorization': `Bearer ${localStorage.getItem('token') || ''}` } })
       if (!r.ok) throw new Error(`HTTP ${r.status}`)
       const data = await r.json()
       setHeaders(data.headers || [])
@@ -77,7 +77,7 @@ export default function ListImport() {
       ;(data.headers || []).forEach((h: ParsedHeader) => { initMappings[h.csv_header] = h.suggested_field || '' })
       setMappings(initMappings)
 
-      const fRes = await fetch(`/api/import/fields/${entityType}`)
+      const fRes = await fetch(`/api/import/fields/${entityType}`, { headers: authH() })
       if (fRes.ok) { const fd2 = await fRes.json(); setFields(Array.isArray(fd2) ? fd2 : (fd2.fields ?? [])) }
 
       setStep(2)
@@ -98,7 +98,7 @@ export default function ListImport() {
       fd.append('mappings', JSON.stringify(mappings))
       if (saveAsTemplate && templateName) fd.append('template_name', templateName)
       if (selectedTemplateId) fd.append('template_id', String(selectedTemplateId))
-      const r = await fetch('/api/import/upload', { method: 'POST', body: fd })
+      const r = await fetch('/api/import/upload', { method: 'POST', body: fd, headers: { 'Authorization': `Bearer ${localStorage.getItem('token') || ''}` } })
       if (!r.ok) throw new Error(`HTTP ${r.status}`)
       const data: ImportResult = await r.json()
       setResult(data)

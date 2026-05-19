@@ -101,7 +101,7 @@ function TaxonomyRow({ profileId, onClose }: { profileId: number; onClose: () =>
   const load = async () => {
     setLoading(true)
     try {
-      const r = await fetch(`/api/technology-profiles/${profileId}/taxonomy`)
+      const r = await fetch(`/api/technology-profiles/${profileId}/taxonomy`, { headers: authH() })
       if (!r.ok) throw new Error()
       setItems(await r.json())
     } catch { toast.error('Failed to load taxonomy') } finally { setLoading(false) }
@@ -201,7 +201,7 @@ export default function TechnologyProfiles() {
   const load = async () => {
     setLoading(true)
     try {
-      const r = await fetch('/api/technology-profiles')
+      const r = await fetch('/api/technology-profiles', { headers: authH() })
       if (!r.ok) throw new Error(`HTTP ${r.status}`)
       setProfiles(await r.json())
     } catch { toast.error('Failed to load technology profiles') } finally { setLoading(false) }

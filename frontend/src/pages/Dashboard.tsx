@@ -3,6 +3,8 @@ import { Building2, Users, Zap, CheckCircle2, Play, Square, RefreshCw, ChevronRi
 import { toast } from '../components/Toast'
 import { useNavigate } from 'react-router-dom'
 
+const authH = () => ({ 'Authorization': `Bearer ${localStorage.getItem('token') || ''}` })
+
 const card = { background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 12, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }
 
 const logColor = (level: string) => {
@@ -38,7 +40,7 @@ export default function Dashboard() {
 
   const fetchStats = async () => {
     try {
-      const res = await fetch('/api/dashboard')
+      const res = await fetch('/api/dashboard', { headers: authH() })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data: DashboardStats = await res.json()
       setStats(data)
@@ -52,7 +54,7 @@ export default function Dashboard() {
 
   const fetchLog = async () => {
     try {
-      const res = await fetch('/scan/log')
+      const res = await fetch('/scan/log', { headers: authH() })
       if (!res.ok) return
       const data = await res.json()
       const rawLog: string[] = Array.isArray(data) ? data : (data.log || data.logs || [])
@@ -77,14 +79,14 @@ export default function Dashboard() {
   const toggleOracleScan = async () => {
     if (scanRunning) {
       try {
-        await fetch('/scan/stop', { method: 'POST' })
+        await fetch('/scan/stop', { method: 'POST', headers: authH() })
         setScanRunning(false)
         setLogs(l => [...l, { t: now(), level: 'INFO', msg: 'Oracle Intent Engine stop signal sent.' }])
         toast.info('Oracle scan stopping...')
       } catch { toast.error('Failed to stop scan') }
     } else {
       try {
-        const res = await fetch('/scan/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sources: ['indeed', 'linkedin', 'google_jobs', 'news'], max_pages: 3 }) })
+        const res = await fetch('/scan/start', { method: 'POST', headers: { ...authH(), 'Content-Type': 'application/json' }, body: JSON.stringify({ sources: ['indeed', 'linkedin', 'google_jobs', 'news'], max_pages: 3 }) })
         if (!res.ok) throw new Error()
         setScanRunning(true)
         setLogs(l => [...l, { t: now(), level: 'INFO', msg: 'Oracle Intent Engine starting... scanning LinkedIn Jobs, Indeed, Oracle News' }])

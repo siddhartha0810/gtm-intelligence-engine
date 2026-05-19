@@ -117,7 +117,7 @@ function EventSlideOver({ event, onClose, onUpdated }: { event: Event; onClose: 
   const loadAttendees = async () => {
     setLoadingA(true)
     try {
-      const r = await fetch(`/api/events/${event.id}/attendees`)
+      const r = await fetch(`/api/events/${event.id}/attendees`, { headers: authH() })
       if (!r.ok) throw new Error()
       setAttendees(await r.json())
     } catch { } finally { setLoadingA(false) }
@@ -229,7 +229,7 @@ export default function Events() {
   const load = async () => {
     setLoading(true)
     try {
-      const r = await fetch('/api/events')
+      const r = await fetch('/api/events', { headers: authH() })
       if (!r.ok) throw new Error()
       setEvents(await r.json())
     } catch { toast.error('Failed to load events') } finally { setLoading(false) }
