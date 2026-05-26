@@ -13,16 +13,22 @@ Then open: http://localhost:8000
 """
 
 import asyncio
+import csv
+import io
 import json
+import logging
 import os
 import queue
 import subprocess
 import sys
 import threading
+import time
 import uuid
+from collections import Counter
+from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 # ── Path setup ─────────────────────────────────────────────────────────────
 BASE_DIR    = Path(__file__).parent
@@ -33,6 +39,11 @@ ENRICH_DIR  = BASE_DIR / "lead_enrichment_engine"
 # Lead enrichment pipeline runs as subprocess with cwd=ENRICH_DIR, so no conflict.
 if str(ORACLE_DIR) not in sys.path:
     sys.path.insert(0, str(ORACLE_DIR))
+
+import httpx
+import pandas as pd
+import psycopg2
+import psycopg2.extras
 
 from fastapi import FastAPI, File, Form, Request, UploadFile, Depends
 from fastapi.encoders import jsonable_encoder
@@ -63,8 +74,7 @@ from src import list_import as import_mod
 from src import data_quality as dqe_mod
 
 # Explicitly set oracle DB DSN so oracle database.py never picks up PG_MASTER_CONNECTION_STRING
-import os as _os
-_oracle_env = {}
+_oracle_env: Dict[str, str] = {}
 _dotenv_path = BASE_DIR / "oracle_intent_engine" / ".env"
 if _dotenv_path.exists():
     for _line in _dotenv_path.read_text().splitlines():
@@ -79,7 +89,7 @@ _oracle_pg_dsn = (
     f"user={_oracle_env.get('DB_USER','postgres')} "
     f"password={_oracle_env.get('DB_PASSWORD','')}"
 )
-_os.environ["ORACLE_PG_DSN"] = _oracle_pg_dsn
+os.environ["ORACLE_PG_DSN"] = _oracle_pg_dsn
 
 APOLLO_API_KEY           = os.getenv("APOLLO_API_KEY", "").strip()
 ZEROBOUNCE_API_KEY       = os.getenv("ZEROBOUNCE_API_KEY", "").strip()
@@ -91,8 +101,39 @@ PG_MASTER_CONNECTION_STRING = os.getenv("PG_MASTER_CONNECTION_STRING", "").strip
 PG_INPUT_TABLE           = os.getenv("PG_INPUT_TABLE", "leads").strip()
 PG_OUTPUT_TABLE          = os.getenv("PG_OUTPUT_TABLE", "enriched_leads").strip()
 
+# ── Application lifespan ─────────────────────────────────────────────────────
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Initialise resources on startup; clean up on shutdown."""
+    _startup_log = logging.getLogger("unified_app.startup")
+    try:
+        oracle_db.init_db()
+    except Exception as e:
+        _startup_log.warning("Oracle DB init warning: %s", e)
+    try:
+        tp_mod.seed_default_profile()
+    except Exception as e:
+        _startup_log.warning("Tech profile seed warning: %s", e)
+    try:
+        oracle_db.seed_engine_configs()
+    except Exception as e:
+        _startup_log.warning("Engine configs seed warning: %s", e)
+    (ENRICH_DIR / "input").mkdir(exist_ok=True)
+    (ENRICH_DIR / "output").mkdir(exist_ok=True)
+    (ORACLE_DIR / "output").mkdir(exist_ok=True)
+    yield  # Application runs here
+    # Shutdown — connection pools close automatically via psycopg2 GC
+
 # ── App ─────────────────────────────────────────────────────────────────────
-app = FastAPI(title="Oracle Intelligence Platform")
+app = FastAPI(title="Oracle Intelligence Platform", lifespan=lifespan)
+
+# ── Logging ──────────────────────────────────────────────────────────────────
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+logger = logging.getLogger("unified_app")
 
 app.add_middleware(
     CORSMiddleware,
@@ -116,29 +157,32 @@ _pg_master_lock = threading.Lock()
 
 def _cached_pg_master_contacts() -> int:
     """Return enriched contact count, cached for 60 s to avoid blocking every poll."""
-    import time, psycopg2
     now = time.monotonic()
     with _pg_master_lock:
         if now - _pg_master_cache["ts"] < 60:
             return _pg_master_cache["contacts"]  # type: ignore[return-value]
-    # Refresh in a thread so we don't block the event loop
+    # Refresh in a background thread so we don't block the event loop
     def _fetch():
         try:
             conn = psycopg2.connect(PG_MASTER_CONNECTION_STRING, connect_timeout=3)
             with conn:
                 with conn.cursor() as cur:
-                    cur.execute("SELECT COUNT(*) FROM contacts WHERE \"Validated_Email\" IS NOT NULL AND \"Validated_Email\" != ''")
+                    cur.execute(
+                        "SELECT COUNT(*) FROM contacts"
+                        " WHERE \"Validated_Email\" IS NOT NULL"
+                        " AND \"Validated_Email\" != ''"
+                    )
                     count = cur.fetchone()[0]
             conn.close()
             with _pg_master_lock:
                 _pg_master_cache["contacts"] = count
                 _pg_master_cache["ts"] = time.monotonic()
         except Exception:
+            logger.warning("Master contacts DB unreachable — will retry in 60 s")
             with _pg_master_lock:
                 _pg_master_cache["ts"] = time.monotonic()  # back-off 60 s on failure
-    import threading as _t
-    _t.Thread(target=_fetch, daemon=True).start()
-    # Return stale value immediately (0 on first call)
+
+    threading.Thread(target=_fetch, daemon=True).start()
     return _pg_master_cache["contacts"]  # type: ignore[return-value]
 
 
@@ -172,10 +216,10 @@ def _scan_current_status() -> dict:
                                 try:
                                     oracle_db.aggregate_product_intel()
                                 except Exception:
-                                    pass
+                                    logger.warning("aggregate_product_intel failed after scan completed", exc_info=True)
                 return st
     except Exception:
-        pass
+        logger.warning("Failed to read scan status file", exc_info=True)
     return dict(_IDLE_STATUS)
 
 
@@ -187,7 +231,7 @@ def _scan_get_log() -> list:
                 if line
             ]
     except Exception:
-        pass
+        logger.warning("Failed to read scan log file", exc_info=True)
     return []
 
 
@@ -252,7 +296,7 @@ def _stop_scan_subprocess() -> None:
                     capture_output=True,
                 )
             except Exception:
-                pass
+                logger.warning("Could not kill scan worker by saved PID", exc_info=True)
             finally:
                 _SCAN_PID_FILE.unlink(missing_ok=True)
 
@@ -264,7 +308,7 @@ def _stop_scan_subprocess() -> None:
                 st["progress"] = "Stopped by user."
                 _SCAN_STATUS_FILE.write_text(json.dumps(st), encoding="utf-8")
     except Exception:
-        pass
+        logger.warning("Failed to update scan status file after stop", exc_info=True)
 
 
 # ── Oracle enrichment subprocess state ──────────────────────────────────────
@@ -292,26 +336,26 @@ def _enrich_current_status() -> dict:
                         if st.get("status") == "running":
                             st["status"]   = "completed"
                             st["progress"] = "Done." if _enrich_proc.returncode == 0 else "Stopped."
-                return st
+                return st  # type: ignore[return-value]
     except Exception:
-        pass
+        logger.warning("Failed to read enrich status file", exc_info=True)
     return dict(_ENRICH_IDLE)
 
 
 def _enrich_get_log() -> list:
     try:
         if _ENRICH_LOG_FILE.exists():
-            return [l for l in _ENRICH_LOG_FILE.read_text(encoding="utf-8").splitlines() if l]
+            return [line for line in _ENRICH_LOG_FILE.read_text(encoding="utf-8").splitlines() if line]
     except Exception:
-        pass
+        logger.warning("Failed to read enrich log file", exc_info=True)
     return []
 
 
 def _start_enrich_subprocess(
     limit: int = 50,
     max_per_company: int = 10,
-    batch_size: int = None,
-    role_filters: list = None,
+    batch_size: Optional[int] = None,
+    role_filters: Optional[List[str]] = None,
 ) -> bool:
     """Spawn enrichment_worker.py. Returns False if already running."""
     global _enrich_proc
@@ -380,7 +424,7 @@ def _stop_enrich_subprocess() -> None:
                     capture_output=True,
                 )
             except Exception:
-                pass
+                logger.warning("Could not kill enrich worker by saved PID", exc_info=True)
             finally:
                 _ENRICH_PID_FILE.unlink(missing_ok=True)
 
@@ -393,7 +437,7 @@ def _stop_enrich_subprocess() -> None:
                 st["progress"] = "Stopped by user."
                 _ENRICH_STATUS_FILE.write_text(json.dumps(st), encoding="utf-8")
     except Exception:
-        pass
+        logger.warning("Failed to update enrich status file after stop", exc_info=True)
 
 
 # ── Shared job store (enrichment + prospect jobs) ───────────────────────────
@@ -467,7 +511,7 @@ async def stream_output(job_id: str):
     q = _jobs[job_id]["queue"]
 
     async def generate():
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         while True:
             try:
                 line = await loop.run_in_executor(None, lambda: q.get(timeout=1.0))
@@ -619,18 +663,16 @@ async def api_companies(phase: str = "", product: str = "", show_all: int = 0,
                     if ml_count:
                         c["contact_count"] = ml_count
         except Exception:
-            pass  # best-effort — don't break the response
+            logger.warning("master_leads augment failed — continuing without contact counts", exc_info=True)
 
         return [dict(c) for c in companies]
     except Exception as e:
-        import traceback
-        traceback.print_exc()
+        logger.exception("Unhandled error in GET /api/companies")
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
 @app.get("/api/stats")
 async def api_stats(show_all: int = 0, current_user: dict = Depends(oracle_auth.require_user)):
-    from collections import Counter
     run_id = 0 if show_all else None
     companies = list(oracle_db.get_all_companies_with_signals(run_id=run_id))
     companies = _annotate_and_sort(companies)
@@ -741,7 +783,10 @@ async def api_enrich_contacts(company_id: int, current_user: dict = Depends(orac
     Step 2: if master_leads found nothing, call the external contact finder.
     Saves results into company_contacts so they persist.
     """
-    company = oracle_db.get_company_by_id(company_id)
+    try:
+        company = oracle_db.get_company_by_id(company_id)
+    except Exception as e:
+        return JSONResponse({"error": f"DB lookup failed: {e}"}, status_code=500)
     if not company:
         return JSONResponse({"error": "Company not found"}, status_code=404)
 
@@ -793,8 +838,8 @@ async def api_enrich_contacts(company_id: int, current_user: dict = Depends(orac
                 })
             oracle_db.save_contacts(company_id, contacts_to_save)
             imported = len(contacts_to_save)
-    except Exception as e:
-        pass  # fall through to external finder
+    except Exception:
+        logger.warning("master_leads lookup failed for company_id=%s — falling through to external finder", company_id, exc_info=True)
 
     if imported:
         return {"contacts": [], "count": imported,
@@ -808,6 +853,75 @@ async def api_enrich_contacts(company_id: int, current_user: dict = Depends(orac
                 "message": f"Found {len(contacts)} contacts via external search"}
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
+
+
+# ── Bulk enrich ───────────────────────────────────────────────────────────────
+_bulk_enrich_state: Dict[str, object] = {"running": False, "done": 0, "total": 0, "errors": 0}
+
+def _bulk_enrich_worker(company_ids: list):
+    _bulk_enrich_state.update({"running": True, "done": 0, "total": len(company_ids), "errors": 0})
+    for cid in company_ids:
+        try:
+            company = oracle_db.get_company_by_id(cid)
+            if not company:
+                continue
+            cname  = (company.get("name") or "").strip()
+            domain = (company.get("domain") or "").strip().lower() or \
+                     oracle_contact_finder.infer_domain(cname)
+            # master_leads first
+            imported = 0
+            try:
+                with oracle_db.db_cursor(commit=False) as cur:
+                    if domain:
+                        cur.execute("""SELECT first_name, last_name, job_title, email, linkedin_url,
+                                              email_validation_status, company AS company_name, domain
+                                       FROM master_leads WHERE LOWER(domain)=%s LIMIT 100""", (domain,))
+                    else:
+                        cur.execute("""SELECT first_name, last_name, job_title, email, linkedin_url,
+                                              email_validation_status, company AS company_name, domain
+                                       FROM master_leads WHERE LOWER(company_normalized)=LOWER(%s) LIMIT 100""", (cname,))
+                    leads = cur.fetchall()
+                if leads:
+                    contacts_to_save = [{"first_name": d.get("first_name") or "", "last_name": d.get("last_name") or "",
+                        "title": d.get("job_title") or "", "email": d.get("email") or "",
+                        "linkedin_url": d.get("linkedin_url") or "",
+                        "confidence": 0.85 if (d.get("email_validation_status") or "") == "valid" else 0.55,
+                        "source": "master_leads", "is_target": False} for d in [dict(r) for r in leads]]
+                    oracle_db.save_contacts(cid, contacts_to_save)
+                    imported = len(contacts_to_save)
+            except Exception:
+                logger.warning("master_leads lookup failed for company_id=%s", cid, exc_info=True)
+            if not imported:
+                try:
+                    contacts = oracle_contact_finder.find_contacts(cname, domain)
+                    if contacts:
+                        oracle_db.save_contacts(cid, contacts)
+                except Exception:
+                    logger.warning("Apollo contact search failed for company_id=%s (%s)", cid, cname, exc_info=True)
+                    _bulk_enrich_state["errors"] = _bulk_enrich_state["errors"] + 1
+        except Exception:
+            logger.exception("Unexpected error enriching company_id=%s", cid)
+            _bulk_enrich_state["errors"] = _bulk_enrich_state["errors"] + 1
+        _bulk_enrich_state["done"] = _bulk_enrich_state["done"] + 1
+    _bulk_enrich_state["running"] = False
+
+
+@app.post("/api/companies/bulk-enrich")
+async def api_bulk_enrich(request: Request, current_user: dict = Depends(oracle_auth.require_analyst)):
+    body = await request.json()
+    company_ids = body.get("company_ids", [])
+    if not company_ids:
+        return JSONResponse({"error": "No company IDs provided"}, status_code=400)
+    if _bulk_enrich_state.get("running"):
+        return JSONResponse({"error": "Enrichment already running", "progress": _bulk_enrich_state}, status_code=409)
+    t = threading.Thread(target=_bulk_enrich_worker, args=(company_ids,), daemon=True)
+    t.start()
+    return {"message": f"Bulk enrichment started for {len(company_ids)} companies", "total": len(company_ids)}
+
+
+@app.get("/api/companies/bulk-enrich/progress")
+async def api_bulk_enrich_progress(current_user: dict = Depends(oracle_auth.require_user)):
+    return dict(_bulk_enrich_state)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -910,8 +1024,6 @@ async def get_config(current_user: dict = Depends(oracle_auth.require_user)):
 @app.get("/config/status")
 async def config_status(current_user: dict = Depends(oracle_auth.require_user)):
     """Return real connection status for each API key — used by Settings page."""
-    import httpx
-
     async def _test_hubspot(key: str) -> str:
         if not key or key.startswith("•"):
             return "unconfigured"
@@ -981,7 +1093,6 @@ async def config_status(current_user: dict = Depends(oracle_auth.require_user)):
 async def config_test(service: str, request: Request,
                       current_user: dict = Depends(oracle_auth.require_admin)):
     """Test a single API key supplied in the request body."""
-    import httpx
     data = await request.json()
     key  = (data.get("key") or "").strip()
 
@@ -1131,7 +1242,6 @@ async def run_pipeline(
 
 @app.get("/api/leads")
 async def get_leads(current_user: dict = Depends(oracle_auth.require_analyst)):
-    import pandas as pd
     path = ENRICH_DIR / "output" / "final_outreach_ready.csv"
     if not path.exists():
         return JSONResponse({"error": "No output available — run the pipeline first"}, status_code=404)
@@ -1173,15 +1283,14 @@ def _load_prospect_results(job_id: str):
     if not result_path.exists():
         return
     try:
-        import json as _json
-        data = _json.loads(result_path.read_text(encoding="utf-8"))
+        data = json.loads(result_path.read_text(encoding="utf-8"))
         _prospect_results          = data.get("contacts", [])
         _prospect_stats            = data.get("stats", {})
         _jobs[job_id]["stats"]     = _prospect_stats
         _jobs[job_id]["contacts"]  = len(_prospect_results)
         result_path.unlink(missing_ok=True)
-    except Exception as e:
-        print(f"[prospect] Failed to load results: {e}")
+    except Exception:
+        logger.exception("Failed to load prospect results for job_id=%s", job_id)
 
 
 @app.post("/prospect/estimate")
@@ -1200,7 +1309,7 @@ async def prospect_estimate(request: Request, current_user: dict = Depends(oracl
             if row and oracle_db.get_contacts_for_company(row["id"]):
                 db_hits += 1
     except Exception:
-        pass
+        logger.warning("DB hit count failed during prospect estimate", exc_info=True)
 
     apollo_needed = max(len(companies) - db_hits, 0)
     est_seconds   = db_hits * 0.5 + apollo_needed * 2.5
@@ -1246,13 +1355,11 @@ async def prospect_db_search(request: Request, current_user: dict = Depends(orac
                         "source":                  c.get("source", "oracle_db"),
                     })
         except Exception:
-            pass
+            logger.warning("Oracle DB lookup failed for company '%s'", name, exc_info=True)
 
         # 2. Contacts table (280k-contacts-db) if oracle company_contacts came up empty
         if not found:
             try:
-                import psycopg2
-                import psycopg2.extras
                 conn = psycopg2.connect(PG_MASTER_CONNECTION_STRING, connect_timeout=5)
                 with conn:
                     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
@@ -1284,7 +1391,7 @@ async def prospect_db_search(request: Request, current_user: dict = Depends(orac
                             })
                 conn.close()
             except Exception:
-                pass
+                logger.warning("Master contacts DB lookup failed for company '%s'", name, exc_info=True)
 
         per_company[name] = len(found)
         all_contacts.extend(found)
@@ -1386,11 +1493,10 @@ async def prospect_results(current_user: dict = Depends(oracle_auth.require_anal
 async def prospect_download_csv(current_user: dict = Depends(oracle_auth.require_analyst)):
     if not _prospect_results:
         return JSONResponse({"error": "No results to download"}, status_code=404)
-    import io, csv as csv_mod
     buf = io.StringIO()
     fieldnames = ["first_name", "last_name", "company", "job_title",
                   "email", "email_validation_status", "linkedin_url", "domain", "source"]
-    writer = csv_mod.DictWriter(buf, fieldnames=fieldnames, extrasaction="ignore")
+    writer = csv.DictWriter(buf, fieldnames=fieldnames, extrasaction="ignore")
     writer.writeheader()
     writer.writerows(_prospect_results)
     filename = f"prospect_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
@@ -1405,8 +1511,6 @@ async def prospect_download_csv(current_user: dict = Depends(oracle_auth.require
 async def prospect_download_excel(current_user: dict = Depends(oracle_auth.require_analyst)):
     if not _prospect_results:
         return JSONResponse({"error": "No results to download"}, status_code=404)
-    import io
-    import pandas as pd
     df  = pd.DataFrame(_prospect_results)
     buf = io.BytesIO()
     df.to_excel(buf, index=False)
@@ -1451,7 +1555,7 @@ async def api_dashboard(current_user: dict = Depends(oracle_auth.require_user)):
                 evaluating        = row["evaluating"]        or 0
                 researching       = row["researching"]       or 0
     except Exception:
-        pass
+        logger.warning("Dashboard signal query failed — returning zeros", exc_info=True)
 
     # Count enriched contacts — cached to avoid blocking on unreachable remote host
     enriched_contacts = _cached_pg_master_contacts()
@@ -1470,9 +1574,9 @@ async def api_dashboard(current_user: dict = Depends(oracle_auth.require_user)):
 
 
 @app.get("/api/contacts")
-async def api_contacts(company: str = "", limit: int = 200,
+async def api_contacts(company: str = "",
                        current_user: dict = Depends(oracle_auth.require_user)):
-    """Enriched contacts from company_contacts table."""
+    """Enriched contacts from company_contacts table — no limit."""
     try:
         with oracle_db.db_cursor(commit=False) as cur:
             if company:
@@ -1486,9 +1590,8 @@ async def api_contacts(company: str = "", limit: int = 200,
                        FROM company_contacts cc
                        JOIN companies c ON cc.company_id = c.id
                        WHERE LOWER(c.name) LIKE %s
-                       ORDER BY cc.is_target DESC, cc.confidence DESC
-                       LIMIT %s""",
-                    (f"%{company.lower()}%", min(limit, 500)),
+                       ORDER BY cc.is_target DESC, cc.confidence DESC""",
+                    (f"%{company.lower()}%",),
                 )
             else:
                 cur.execute(
@@ -1500,13 +1603,12 @@ async def api_contacts(company: str = "", limit: int = 200,
                               c.name AS company_name, c.domain AS company_domain
                        FROM company_contacts cc
                        JOIN companies c ON cc.company_id = c.id
-                       ORDER BY cc.is_target DESC, cc.confidence DESC
-                       LIMIT %s""",
-                    (min(limit, 500),),
+                       ORDER BY cc.is_target DESC, cc.confidence DESC"""
                 )
             rows = [dict(r) for r in cur.fetchall()]
         return JSONResponse(rows)
     except Exception as e:
+        logger.exception("Unhandled error in GET /api/contacts")
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
@@ -1534,6 +1636,7 @@ async def api_signals(limit: int = 200, current_user: dict = Depends(oracle_auth
             rows = [dict(r) for r in cur.fetchall()]
         return JSONResponse(rows)
     except Exception as e:
+        logger.exception("Unhandled error in GET /api/signals")
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
@@ -1562,7 +1665,6 @@ async def push_contact_to_hubspot_endpoint(
 @app.get("/api/reporting")
 async def api_reporting(current_user: dict = Depends(oracle_auth.require_user)):
     """Reporting stats: phase distribution, scan-run history, source breakdown."""
-    from collections import Counter
     companies = list(oracle_db.get_all_companies_with_signals(run_id=0))
     companies = _annotate_and_sort(companies)
 
@@ -1654,6 +1756,7 @@ async def enrich_preflight(current_user: dict = Depends(oracle_auth.require_anal
             "zerobounce_configured": bool(ZEROBOUNCE_API_KEY),
         }
     except Exception as e:
+        logger.exception("Unhandled error in GET /api/enrich/preflight")
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
@@ -1714,6 +1817,7 @@ async def enrich_stats(current_user: dict = Depends(oracle_auth.require_user)):
             "zerobounce_configured": bool(ZEROBOUNCE_API_KEY),
         }
     except Exception as e:
+        logger.exception("Unhandled error in GET /api/enrich/stats")
         return {"error": str(e)}
 
 
@@ -2024,7 +2128,8 @@ async def api_company_mfr(company_id: int):
 
 @app.get("/api/import/fields/{entity_type}")
 async def api_import_fields(entity_type: str):
-    fields = import_mod._FIELD_LISTS.get(entity_type, [])
+    raw = import_mod._FIELD_LISTS.get(entity_type.lower(), [])
+    fields = [{"value": f["key"], "label": f["label"], "required": f.get("required", False)} for f in raw]
     return {"fields": fields}
 
 
@@ -2034,7 +2139,7 @@ async def api_parse_headers(
     entity_type: str = Form("company"),
 ):
     content = await file.read()
-    return import_mod.parse_csv_headers(content, entity_type)
+    return import_mod.parse_csv_headers(content, entity_type.lower())
 
 
 @app.post("/api/import/upload")
@@ -2044,10 +2149,15 @@ async def api_import_upload(
     mappings: str = Form("{}"),
     template_name: str = Form(""),
     template_id: int = Form(0),
+    default_product: str = Form(""),
 ):
     content  = await file.read()
+    entity_type = entity_type.lower()
     mappings_dict = json.loads(mappings)
-    row_count = content.count(b"\n")
+    if import_mod._is_xlsx(content):
+        row_count = len(import_mod._parse_xlsx_rows(content))
+    else:
+        row_count = max(0, content.count(b"\n") - 1)
 
     batch = import_mod.create_batch(
         file_name    = file.filename,
@@ -2060,7 +2170,7 @@ async def api_import_upload(
     if template_name and mappings_dict:
         import_mod.save_template(template_name, entity_type, mappings_dict)
 
-    result = import_mod.process_import(content, entity_type, mappings_dict, batch["id"])
+    result = import_mod.process_import(content, entity_type, mappings_dict, batch["id"], default_product=default_product)
     return {"batch_id": batch["id"], **result}
 
 
@@ -2249,7 +2359,6 @@ async def test_hubspot_connection(
     current_user: dict = Depends(oracle_auth.require_admin),
 ):
     """Test HubSpot API key by calling /crm/v3/objects/contacts?limit=1."""
-    import httpx
     body    = await request.json()
     api_key = body.get("api_key") or os.getenv("HUBSPOT_API_KEY", "")
     cfg     = oracle_db.get_hubspot_config()
@@ -2531,28 +2640,8 @@ async def refresh_product_intelligence(
         result = oracle_db.aggregate_product_intel()
         return {"ok": True, **result}
     except Exception as e:
+        logger.exception("Unhandled error in POST /api/product-intelligence/refresh")
         return JSONResponse({"error": str(e)}, status_code=500)
-
-
-@app.on_event("startup")
-async def startup():
-    try:
-        oracle_db.init_db()
-    except Exception as e:
-        print(f"[startup] Oracle DB init warning: {e}")
-    # Seed Oracle/JDE default technology profile if none exists
-    try:
-        tp_mod.seed_default_profile()
-    except Exception as e:
-        print(f"[startup] Tech profile seed warning: {e}")
-    try:
-        oracle_db.seed_engine_configs()
-    except Exception as e:
-        print(f"[startup] Engine configs seed warning: {e}")
-    # Ensure output dirs exist
-    (ENRICH_DIR / "input").mkdir(exist_ok=True)
-    (ENRICH_DIR / "output").mkdir(exist_ok=True)
-    (ORACLE_DIR / "output").mkdir(exist_ok=True)
 
 
 # ── Static assets (JS/CSS chunks) ───────────────────────────────────────────

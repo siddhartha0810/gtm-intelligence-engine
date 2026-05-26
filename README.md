@@ -1,6 +1,25 @@
-# Oracle Intelligence Platform
+# Inoapps Oracle Intelligence Platform
 
-A full-stack B2B intent intelligence tool that detects Oracle/JDE buying signals, enriches leads via Apollo.io, validates emails via ZeroBounce, and pushes qualified contacts to HubSpot CRM.
+> AI-powered B2B intelligence platform for Oracle/JDE go-to-market teams. Identifies companies actively using or evaluating Oracle products, enriches them with validated contacts, and pushes qualified leads directly into HubSpot CRM.
+
+[![Python](https://img.shields.io/badge/Python-3.11+-blue)](https://python.org)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-green)](https://fastapi.tiangolo.com)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-14+-blue)](https://postgresql.org)
+[![License](https://img.shields.io/badge/License-Proprietary-red)]()
+
+---
+
+## What It Does
+
+| Module | Description |
+|---|---|
+| **Oracle Intent Engine** | Scans 15+ sources (job boards, SEC filings, Oracle community, news) for companies actively hiring JDE/Oracle staff or running Oracle projects |
+| **Lead Enrichment** | Enriches companies with decision-maker contacts via Apollo.io, validates emails via ZeroBounce, scores by seniority and Oracle alignment |
+| **Prospect Search** | On-demand Apollo people search by company name — streams results live, exports as CSV/Excel |
+| **HubSpot Sync** | Two-way sync — push approved companies and contacts to HubSpot, pull back engagement data |
+| **Data Quality Engine** | Deduplication, source standardisation, review queue, and full audit trail on every change |
+
+**Current database:** 3,221 JDE companies · 58,000+ validated contacts · 221K+ email validations
 
 ---
 
@@ -148,18 +167,62 @@ Single PostgreSQL database (`oracle_intent`):
 
 ---
 
+## User Roles
+
+| Role | Access |
+|---|---|
+| `viewer` | Read-only across all modules |
+| `analyst` | All data modules — search, enrich, prospect, export |
+| `admin` | User management, purge, reset, HubSpot config |
+| `owner` | Full access, cannot be demoted by other admins |
+
+Register the first user at `/api/auth/register` — the first account created automatically becomes **Owner**.
+
+---
+
+## Data Standardisation Rules
+
+All imports enforce these rules at the code level:
+
+| Field | Stored As |
+|---|---|
+| Source: `master_leads` / `contacts_db` | `master db` |
+| Source: `csv_import` / `import` / `apollo` | `apollo` |
+| Source: `zoominfo_import` / `zoominfo` | `zoominfo` |
+| `email_validation_status` on import | Always `valid` (catch-all included) |
+| `full_name` | Always `TRIM(first_name \|\| ' ' \|\| last_name)` |
+| `status` on raw import | `staged` |
+| `status` on ZB-validated import | `approved` |
+
+---
+
+## Running Tests
+
+```bash
+pip install pytest pytest-asyncio httpx
+pytest tests/ -v
+```
+
+---
+
 ## Production Checklist
 
-- [ ] Change `FLASK_SECRET_KEY` to a random 32-byte hex string
-- [ ] Set `CORS` `allow_origins` to your specific domain (not `"*"`)
-- [ ] Add authentication middleware (the API is currently open)
+- [x] JWT authentication with RBAC on all endpoints
+- [x] Environment variables for all credentials — never hardcoded
+- [x] PostgreSQL connection pool (max 10) — no saturation
+- [x] Subprocess isolation for long-running jobs
 - [ ] Run behind a reverse proxy (nginx/Caddy) with TLS
 - [ ] Set `uvicorn --workers 2` for multi-core throughput
-- [ ] Set up PostgreSQL connection pooling (PgBouncer) for high concurrency
-- [ ] Configure log rotation for scan/enrichment logs
+- [ ] Set up PgBouncer for high-concurrency connection pooling
+- [ ] Configure log rotation for scan/enrichment log files
+- [ ] Set CORS `allow_origins` to your production domain
 
 ---
 
 ## License
 
 Proprietary — Inoapps. All rights reserved.
+
+---
+
+*Built by the Inoapps Oracle Intelligence Team*

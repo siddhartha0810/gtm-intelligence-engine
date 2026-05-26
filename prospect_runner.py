@@ -24,18 +24,11 @@ import sys
 import time
 from pathlib import Path
 
-# ── CLI args ────────────────────────────────────────────────────────────────
-parser = argparse.ArgumentParser()
-parser.add_argument("--companies-file",   required=True)
-parser.add_argument("--max-per-company",  type=int, default=25)
-parser.add_argument("--job-id",           default="")
-args = parser.parse_args()
-
 APOLLO_API_KEY = os.environ.get("APOLLO_API_KEY", "").strip()
 PG_CONN_STR    = os.environ.get("PG_MASTER_CONNECTION_STRING", "").strip()
-ORACLE_PG_DSN  = os.environ.get("ORACLE_PG_DSN", "").strip()   # oracle_intent PG connection
-MAX_PER        = args.max_per_company
-JOB_ID            = args.job_id
+ORACLE_PG_DSN  = os.environ.get("ORACLE_PG_DSN", "").strip()
+
+# MAX_PER and JOB_ID are resolved inside main() once args are parsed
 
 APOLLO_SEARCH_URL = "https://api.apollo.io/v1/mixed_people/api_search"
 APOLLO_REVEAL_URL = "https://api.apollo.io/v1/people/match"
@@ -90,13 +83,13 @@ def _apollo_reveal_email(person_id: str) -> str:
         return ""
 
 
-def _apollo_search(company: str) -> list:
+def _apollo_search(company: str, max_per: int = 25) -> list:
     try:
         import urllib.request
         payload = json.dumps({
             "q_organization_name": company,
             "person_titles":       ORACLE_JDE_TITLES,
-            "per_page":            min(MAX_PER, 25),
+            "per_page":            min(max_per, 25),
             "page":                1,
         }).encode()
         req = urllib.request.Request(
@@ -252,12 +245,25 @@ def _pg_lookup(company_names: list) -> dict:
 # ── Main ─────────────────────────────────────────────────────────────────────
 
 def main():
+    parser = argparse.ArgumentParser(description="Apollo-based prospect runner")
+    parser.add_argument("--companies-file",  required=True)
+    parser.add_argument("--max-per-company", type=int, default=25)
+    parser.add_argument("--job-id",          default="")
+    args = parser.parse_args()
+
+    max_per = args.max_per_company
+    job_id  = args.job_id
+
     companies_file = Path(args.companies_file)
     if not companies_file.exists():
         _log(f"ERROR: companies file not found: {companies_file}")
         sys.exit(1)
 
-    companies = [l.strip() for l in companies_file.read_text(encoding="utf-8").splitlines() if l.strip()]
+    companies = [
+        line.strip()
+        for line in companies_file.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
     if not companies:
         _log("ERROR: No companies in list")
         sys.exit(1)
@@ -284,7 +290,7 @@ def main():
     for company in companies:
         if company in pg_results:
             contacts = pg_results[company]
-            _log(f"✓ {company} → {len(contacts)} contacts from DB (free)")
+            _log(f"[DB] {company} -> {len(contacts)} contacts (free)")
             all_contacts.extend(contacts)
             stats["pg_hits"] += 1
             continue
@@ -292,16 +298,17 @@ def main():
         # Oracle Intent PG fallback
         oracle_contacts = _oracle_pg_lookup(company)
         if oracle_contacts:
-            _log(f"✓ {company} → {len(oracle_contacts)} contacts from DB (free)")
+            _log(f"[DB] {company} -> {len(oracle_contacts)} contacts (free)")
             all_contacts.extend(oracle_contacts)
             stats["pg_hits"] += 1
             continue
 
         # Apollo people search
-        _log(f"⟳ {company} → searching Apollo...")
-        contacts = _apollo_search(company)
+        _log(f"[Apollo] {company} -> searching...")
+        contacts = _apollo_search(company, max_per=max_per)
         found = len(contacts)
-        _log(f"{'✓' if found else '—'} {company} → {found} contacts via Apollo")
+        status_tag = "found" if found else "none"
+        _log(f"[Apollo] {company} -> {found} contacts ({status_tag})")
         all_contacts.extend(contacts)
         stats["apollo_searched"] += 1
         time.sleep(RATE_LIMIT_DELAY)
@@ -309,11 +316,11 @@ def main():
     stats["total_contacts"] = len(all_contacts)
 
     # ── Write results to file the server can pick up ──────────────────────
-    out_path = companies_file.parent / f"_prospect_results_{JOB_ID}.json"
-    out_path.write_text(json.dumps({
-        "contacts": all_contacts,
-        "stats":    stats,
-    }), encoding="utf-8")
+    out_path = companies_file.parent / f"_prospect_results_{job_id}.json"
+    out_path.write_text(
+        json.dumps({"contacts": all_contacts, "stats": stats}),
+        encoding="utf-8",
+    )
 
     _log(f"Saved {len(all_contacts)} contacts across {len(companies)} companies")
     _log(f"__PROSPECT_DONE__:{len(all_contacts)}")

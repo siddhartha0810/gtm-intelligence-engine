@@ -17,6 +17,8 @@ import json
 import re
 from typing import Optional
 
+import openpyxl
+
 import oracle_intent_engine.src.database as db
 from oracle_intent_engine.src.data_quality import run_dqe_on_company, run_dqe_on_contact
 
@@ -69,7 +71,6 @@ HS_CONTACT_FIELDS = [
     {"key": "suffix",          "label": "Suffix",           "required": False},
     {"key": "do_not_call",     "label": "Do Not Call",      "required": False},
     {"key": "do_not_email",    "label": "Do Not Email",     "required": False},
-    {"key": "creation_source", "label": "Creation Source",  "required": False},
     {"key": "oracle_alignment", "label": "Oracle Alignment","required": False},
     {"key": "oracle_department","label": "Oracle Department","required": False},
     {"key": "oracle_team",     "label": "Oracle Team",      "required": False},
@@ -84,7 +85,7 @@ _FIELD_LISTS = {
 
 def _fuzzy_suggest(header: str, entity_type: str) -> Optional[str]:
     """Auto-suggest a HubSpot field key from a CSV column header."""
-    fields = _FIELD_LISTS.get(entity_type, [])
+    fields = _FIELD_LISTS.get(entity_type.lower(), [])
     h = re.sub(r"[^a-z0-9]", "", header.lower())
     best, best_score = None, 0
     for f in fields:
@@ -139,27 +140,82 @@ def delete_template(template_id: int) -> bool:
 
 # ── CSV parsing ───────────────────────────────────────────────────────────────
 
+def _is_xlsx(content: bytes) -> bool:
+    """Detect Excel .xlsx by its PK zip magic bytes."""
+    return content[:4] == b"PK\x03\x04"
+
+
+def _parse_xlsx_headers(content: bytes) -> list:
+    wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+    ws = wb.active
+    headers = []
+    for row in ws.iter_rows(min_row=1, max_row=1, values_only=True):
+        headers = [str(c).strip() if c is not None else "" for c in row]
+        break
+    wb.close()
+    return [h for h in headers if h]
+
+
+def _parse_xlsx_rows(content: bytes) -> list:
+    wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+    ws = wb.active
+    rows_iter = ws.iter_rows(values_only=True)
+    try:
+        header_row = next(rows_iter)
+    except StopIteration:
+        wb.close()
+        return []
+    headers = [str(c).strip() if c is not None else "" for c in header_row]
+    result = []
+    for row in rows_iter:
+        record = {}
+        for col, val in zip(headers, row):
+            if col:
+                record[col] = str(val).strip() if val is not None else ""
+        result.append(record)
+    wb.close()
+    return result
+
+
 def parse_csv_headers(content: bytes, entity_type: str) -> dict:
     """
-    Parse the first row of a CSV and return header list + auto-suggested mappings.
+    Parse a CSV or Excel (.xlsx) file and return:
+      headers      — list of {csv_header, suggested_field} for the frontend mapping UI
+      record_count — number of data rows (excluding header)
+      fields       — available HubSpot field definitions
     """
-    text = content.decode("utf-8-sig", errors="replace")
-    reader = csv.reader(io.StringIO(text))
-    try:
-        headers = next(reader)
-    except StopIteration:
-        return {"headers": [], "suggestions": {}, "fields": _FIELD_LISTS.get(entity_type, [])}
+    et = entity_type.lower()
+    if _is_xlsx(content):
+        raw_headers = _parse_xlsx_headers(content)
+        wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+        ws = wb.active
+        record_count = max(0, ws.max_row - 1) if ws.max_row else 0
+        wb.close()
+    else:
+        text = content.decode("utf-8-sig", errors="replace")
+        lines = [l for l in io.StringIO(text)]
+        record_count = max(0, len(lines) - 1)
+        reader = csv.reader(io.StringIO(text))
+        try:
+            raw_headers = next(reader)
+        except StopIteration:
+            raw_headers = []
 
-    suggestions = {}
-    for h in headers:
-        suggestion = _fuzzy_suggest(h, entity_type)
-        if suggestion:
-            suggestions[h] = suggestion
+    if not raw_headers:
+        return {"headers": [], "record_count": 0, "fields": _FIELD_LISTS.get(et, [])}
+
+    headers = []
+    for h in raw_headers:
+        h = h.strip()
+        if not h:
+            continue
+        suggested = _fuzzy_suggest(h, et)
+        headers.append({"csv_header": h, "suggested_field": suggested or ""})
 
     return {
-        "headers":     headers,
-        "suggestions": suggestions,
-        "fields":      _FIELD_LISTS.get(entity_type, []),
+        "headers":      headers,
+        "record_count": record_count,
+        "fields":       _FIELD_LISTS.get(et, []),
     }
 
 
@@ -169,6 +225,7 @@ def process_import(
     mappings: dict,
     batch_id: int,
     user_id: int = None,
+    default_product: str = "",
 ) -> dict:
     """
     Run the ETL pipeline for an uploaded CSV.
@@ -176,9 +233,12 @@ def process_import(
 
     Returns { success_count, error_count, errors[] }
     """
-    text = content.decode("utf-8-sig", errors="replace")
-    reader = csv.DictReader(io.StringIO(text))
-    rows = list(reader)
+    if _is_xlsx(content):
+        rows = _parse_xlsx_rows(content)
+    else:
+        text = content.decode("utf-8-sig", errors="replace")
+        reader = csv.DictReader(io.StringIO(text))
+        rows = list(reader)
 
     success, errors = 0, []
 
@@ -192,6 +252,8 @@ def process_import(
 
         try:
             if entity_type == "company":
+                if default_product and not record.get("target_product"):
+                    record["target_product"] = default_product
                 _import_company(record, user_id)
             elif entity_type == "contact":
                 _import_contact(record, user_id)
@@ -231,7 +293,7 @@ def _import_company(record: dict, user_id: int = None) -> None:
                     oracle_relationship_type, oracle_version,
                     inoapps_account_manager, inoapps_account_tier,
                     target_product, source, status)
-               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'import','staged')
+               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'apollo','staged')
                ON CONFLICT (name) DO UPDATE SET
                    domain = COALESCE(EXCLUDED.domain, companies.domain),
                    industry = COALESCE(EXCLUDED.industry, companies.industry),
@@ -239,13 +301,19 @@ def _import_company(record: dict, user_id: int = None) -> None:
                    last_updated = NOW()""",
             (
                 name,
-                record.get("domain"), record.get("industry"),
-                record.get("size"), record.get("location"),
-                record.get("phone"), record.get("number_of_employees"),
-                record.get("billing_city"), record.get("billing_country"),
-                record.get("oracle_relationship_type"), record.get("oracle_version"),
-                record.get("inoapps_account_manager"), record.get("inoapps_account_tier"),
-                record.get("target_product", ""),
+                record.get("domain") or None,   # nullable
+                record.get("industry") or None,  # nullable
+                record.get("size") or None,      # nullable
+                record.get("location") or None,  # nullable
+                record.get("phone") or "",
+                record.get("number_of_employees") or None,  # nullable integer
+                record.get("billing_city") or "",
+                record.get("billing_country") or "",
+                record.get("oracle_relationship_type") or "",
+                record.get("oracle_version") or "",
+                record.get("inoapps_account_manager") or "",
+                record.get("inoapps_account_tier") or "",
+                record.get("target_product") or "",
             ),
         )
 
@@ -267,30 +335,31 @@ def _import_contact(record: dict, user_id: int = None) -> None:
     if company_name:
         with db.db_cursor() as cur:
             cur.execute(
-                "INSERT INTO companies (name, source, status) VALUES (%s,'import','staged') "
+                "INSERT INTO companies (name, source, status) VALUES (%s,'apollo','staged') "
                 "ON CONFLICT (name) DO UPDATE SET last_updated=NOW() RETURNING id",
                 (company_name,),
             )
             company_id = cur.fetchone()["id"]
 
+    full_name = f"{first} {last}".strip()
     with db.db_cursor() as cur:
         cur.execute(
             """INSERT INTO company_contacts
-                   (company_id, first_name, last_name, title, email, phone,
+                   (company_id, first_name, last_name, full_name, title, email, phone,
                     mobile_phone, linkedin_url, city, state, country,
                     job_function, level, oracle_alignment, oracle_department,
-                    oracle_team, creation_source, source, status)
-               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'import','staged')
+                    oracle_team, source, email_validation_status, status)
+               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'apollo','valid','staged')
                ON CONFLICT DO NOTHING""",
             (
-                company_id, first, last,
+                company_id, first, last, full_name,
                 record.get("title"), record.get("email"),
                 record.get("phone"), record.get("mobile_phone"),
                 record.get("linkedin_url"), record.get("city"),
                 record.get("state"), record.get("country"),
                 record.get("job_function"), record.get("level"),
                 record.get("oracle_alignment"), record.get("oracle_department"),
-                record.get("oracle_team"), record.get("creation_source"),
+                record.get("oracle_team"),
             ),
         )
 
