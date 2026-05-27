@@ -1550,113 +1550,149 @@ async def prospect_download_excel(current_user: dict = Depends(oracle_auth.requi
 # DASHBOARD — combined stats for the React frontend
 # ═══════════════════════════════════════════════════════════════════════════
 
-@app.get("/api/dashboard")
-async def api_dashboard(current_user: dict = Depends(oracle_auth.require_user)):
-    """Single endpoint that powers the Dashboard page KPI cards."""
-    companies_tracked = 0
-    contacts_enriched = 0
-    total_signals     = 0
-    implementing      = 0
-    evaluating        = 0
-    researching       = 0
-    pushed_to_hubspot = 0
+# ── Dashboard TTL cache — 60 s so 5-s polling never hits the DB ────────────
+_dashboard_cache: Dict[str, object] = {}
+_DASHBOARD_TTL = 60  # seconds
+
+
+def _invalidate_dashboard_cache() -> None:
+    _dashboard_cache.clear()
+
+
+def _fetch_dashboard_stats() -> dict:
+    """Run all dashboard queries in a SINGLE connection, using fast subqueries."""
+    companies_tracked = contacts_enriched = total_signals = 0
+    implementing = evaluating = researching = pushed_to_hubspot = 0
     try:
         with oracle_db.db_cursor(commit=False) as cur:
-            # Total JDE companies in the DB
-            cur.execute("""
-                SELECT COUNT(*) AS n
-                FROM companies
-                WHERE target_product = 'JD Edwards'
-            """)
-            row = cur.fetchone()
-            companies_tracked = int(row["n"]) if row else 0
-
-            # Total JDE contacts in the DB
-            cur.execute("""
-                SELECT COUNT(*) AS n
-                FROM company_contacts cc
-                JOIN companies c ON c.id = cc.company_id
-                WHERE c.target_product = 'JD Edwards'
-            """)
-            row = cur.fetchone()
-            contacts_enriched = int(row["n"]) if row else 0
-
-            # Intent signals + phase breakdown
             cur.execute("""
                 SELECT
-                    COUNT(s.id)                                                                AS total_signals,
-                    COUNT(DISTINCT CASE WHEN s.phase = 'implementing' THEN s.company_id END)   AS implementing,
-                    COUNT(DISTINCT CASE WHEN s.phase = 'evaluating'   THEN s.company_id END)   AS evaluating,
-                    COUNT(DISTINCT CASE WHEN s.phase = 'researching'  THEN s.company_id END)   AS researching
-                FROM oracle_signals s
+                    (SELECT COUNT(*) FROM companies
+                     WHERE target_product = 'JD Edwards')                                      AS companies_tracked,
+                    (SELECT COUNT(*) FROM company_contacts
+                     WHERE company_id IN
+                       (SELECT id FROM companies WHERE target_product = 'JD Edwards'))         AS contacts_enriched,
+                    (SELECT COUNT(*) FROM oracle_signals)                                       AS total_signals,
+                    (SELECT COUNT(DISTINCT CASE WHEN phase='implementing' THEN company_id END)
+                     FROM oracle_signals)                                                       AS implementing,
+                    (SELECT COUNT(DISTINCT CASE WHEN phase='evaluating'   THEN company_id END)
+                     FROM oracle_signals)                                                       AS evaluating,
+                    (SELECT COUNT(DISTINCT CASE WHEN phase='researching'  THEN company_id END)
+                     FROM oracle_signals)                                                       AS researching,
+                    (SELECT COUNT(*) FROM company_contacts
+                     WHERE status = 'pushed_to_hubspot'
+                       AND company_id IN
+                         (SELECT id FROM companies WHERE target_product = 'JD Edwards'))        AS pushed_to_hubspot
             """)
             row = cur.fetchone()
             if row:
-                total_signals = row["total_signals"] or 0
-                implementing  = row["implementing"]  or 0
-                evaluating    = row["evaluating"]    or 0
-                researching   = row["researching"]   or 0
-
-            # Contacts pushed to HubSpot
-            cur.execute("""
-                SELECT COUNT(*) AS n
-                FROM company_contacts cc
-                JOIN companies c ON c.id = cc.company_id
-                WHERE c.target_product = 'JD Edwards'
-                  AND cc.status = 'pushed_to_hubspot'
-            """)
-            row = cur.fetchone()
-            pushed_to_hubspot = int(row["n"]) if row else 0
-
+                companies_tracked = int(row["companies_tracked"] or 0)
+                contacts_enriched = int(row["contacts_enriched"] or 0)
+                total_signals     = int(row["total_signals"]     or 0)
+                implementing      = int(row["implementing"]      or 0)
+                evaluating        = int(row["evaluating"]        or 0)
+                researching       = int(row["researching"]       or 0)
+                pushed_to_hubspot = int(row["pushed_to_hubspot"] or 0)
     except Exception:
         logger.warning("Dashboard query failed — returning zeros", exc_info=True)
+    return dict(
+        companies_tracked=companies_tracked,
+        contacts_enriched=contacts_enriched,
+        total_signals=total_signals,
+        implementing=implementing,
+        evaluating=evaluating,
+        researching=researching,
+        pushed_to_hubspot=pushed_to_hubspot,
+    )
+
+
+@app.get("/api/dashboard")
+async def api_dashboard(current_user: dict = Depends(oracle_auth.require_user)):
+    """Single endpoint that powers the Dashboard page KPI cards.
+    Results are cached for 60 s so the 5-second frontend poll never hits the DB
+    more than once per minute.
+    """
+    cached = _dashboard_cache.get("stats")
+    if not cached or (time.time() - cached["ts"]) > _DASHBOARD_TTL:
+        stats = _fetch_dashboard_stats()
+        _dashboard_cache["stats"] = {"ts": time.time(), "data": stats}
+    else:
+        stats = cached["data"]
 
     return {
-        "companies_tracked":    companies_tracked,
-        "contacts_enriched":    contacts_enriched,
-        "intent_signals":       total_signals,
-        "pushed_to_hubspot":    pushed_to_hubspot,
-        "implementing":         implementing,
-        "evaluating":           evaluating,
-        "researching":          researching,
-        "scan_status":          _scan_current_status(),
+        "companies_tracked": stats["companies_tracked"],
+        "contacts_enriched": stats["contacts_enriched"],
+        "intent_signals":    stats["total_signals"],
+        "pushed_to_hubspot": stats["pushed_to_hubspot"],
+        "implementing":      stats["implementing"],
+        "evaluating":        stats["evaluating"],
+        "researching":       stats["researching"],
+        "scan_status":       _scan_current_status(),
     }
 
 
 @app.get("/api/contacts")
-async def api_contacts(company: str = "",
-                       current_user: dict = Depends(oracle_auth.require_user)):
-    """Enriched contacts from company_contacts table — no limit."""
+async def api_contacts(
+    company: str = "",
+    search:  str = "",
+    limit:   int = 500,
+    offset:  int = 0,
+    current_user: dict = Depends(oracle_auth.require_user),
+):
+    """Enriched contacts — paginated (default 500 per page).
+    Pass ?search=name/title/email for server-side filtering.
+    Pass ?limit=0 to fetch all (use with caution on large datasets).
+    """
     try:
+        page_limit = min(limit, 5000) if limit > 0 else 5000
+
         with oracle_db.db_cursor(commit=False) as cur:
+            conditions = []
+            params: List = []
+
             if company:
-                cur.execute(
-                    """SELECT cc.id, cc.first_name, cc.last_name, cc.title,
-                              cc.email, cc.linkedin_url, cc.confidence,
-                              cc.is_target, cc.source, cc.email_source,
-                              cc.email_validation_status, cc.email_prediction_pattern,
-                              cc.fetched_at::text AS created_at,
-                              c.name AS company_name, c.domain AS company_domain
-                       FROM company_contacts cc
-                       JOIN companies c ON cc.company_id = c.id
-                       WHERE LOWER(c.name) LIKE %s
-                       ORDER BY cc.is_target DESC, cc.confidence DESC""",
-                    (f"%{company.lower()}%",),
+                conditions.append("LOWER(c.name) LIKE %s")
+                params.append(f"%{company.lower()}%")
+            if search:
+                conditions.append(
+                    "(LOWER(cc.first_name || ' ' || cc.last_name) LIKE %s "
+                    " OR LOWER(COALESCE(cc.title,'')) LIKE %s "
+                    " OR LOWER(COALESCE(cc.email,'')) LIKE %s "
+                    " OR LOWER(COALESCE(c.name,'')) LIKE %s)"
                 )
-            else:
-                cur.execute(
-                    """SELECT cc.id, cc.first_name, cc.last_name, cc.title,
-                              cc.email, cc.linkedin_url, cc.confidence,
-                              cc.is_target, cc.source, cc.email_source,
-                              cc.email_validation_status, cc.email_prediction_pattern,
-                              cc.fetched_at::text AS created_at,
-                              c.name AS company_name, c.domain AS company_domain
-                       FROM company_contacts cc
-                       JOIN companies c ON cc.company_id = c.id
-                       ORDER BY cc.is_target DESC, cc.confidence DESC"""
-                )
+                s = f"%{search.lower()}%"
+                params.extend([s, s, s, s])
+
+            where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+
+            # total count (fast — uses indexes)
+            cur.execute(
+                f"""SELECT COUNT(*) AS n
+                    FROM company_contacts cc
+                    JOIN companies c ON cc.company_id = c.id
+                    {where}""",
+                params,
+            )
+            total = cur.fetchone()["n"]
+
+            # paginated rows
+            cur.execute(
+                f"""SELECT cc.id, cc.first_name, cc.last_name, cc.title,
+                           cc.email, cc.linkedin_url, cc.confidence,
+                           cc.is_target, cc.source, cc.email_source,
+                           cc.email_validation_status, cc.email_prediction_pattern,
+                           cc.fetched_at::text AS created_at,
+                           c.name AS company_name, c.domain AS company_domain
+                    FROM company_contacts cc
+                    JOIN companies c ON cc.company_id = c.id
+                    {where}
+                    ORDER BY cc.is_target DESC, cc.confidence DESC
+                    LIMIT %s OFFSET %s""",
+                params + [page_limit, offset],
+            )
             rows = [dict(r) for r in cur.fetchall()]
-        return JSONResponse(rows)
+
+        return JSONResponse({"total": total, "offset": offset, "limit": page_limit, "rows": rows})
     except Exception as e:
         logger.exception("Unhandled error in GET /api/contacts")
         return JSONResponse({"error": str(e)}, status_code=500)

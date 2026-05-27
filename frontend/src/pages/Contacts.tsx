@@ -92,25 +92,42 @@ function ActionMenu({ onClose, anchorRef, contact }: {
 
 export default function Contacts() {
   const [contacts, setContacts] = useState<Contact[]>([])
-  const [loading, setLoading]   = useState(true)
-  const [error, setError]       = useState('')
-  const [search, setSearch]     = useState('')
-  const [selected, setSelected] = useState<number[]>([])
-  const [openMenu, setOpenMenu] = useState<number | null>(null)
+  const [loading, setLoading]     = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [error, setError]         = useState('')
+  const [search, setSearch]       = useState('')
+  const [searchInput, setSearchInput] = useState('')  // debounced
+  const [total, setTotal]         = useState(0)
+  const [selected, setSelected]   = useState<number[]>([])
+  const [openMenu, setOpenMenu]   = useState<number | null>(null)
   const [sourceFilter, setSourceFilter] = useState<'all' | 'apollo' | 'master_leads'>('all')
   const menuRefs = useRef<Map<number, HTMLButtonElement>>(new Map())
+  const PAGE_SIZE = 500
 
   const isApollo = (src: string) => src === 'apollo' || src === 'apollo.io'
 
-  const load = async () => {
+  // Debounce search input — only fire API after 300 ms of no typing
+  useEffect(() => {
+    const t = setTimeout(() => setSearch(searchInput), 300)
+    return () => clearTimeout(t)
+  }, [searchInput])
+
+  const buildUrl = (offset = 0, q = search) => {
+    const params = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(offset) })
+    if (q) params.set('search', q)
+    return `/api/contacts?${params}`
+  }
+
+  const load = async (q = search) => {
     setLoading(true)
     setError('')
     try {
-      const r = await fetch('/api/contacts', { headers: authH() })
+      const r = await fetch(buildUrl(0, q), { headers: authH() })
       if (!r.ok) throw new Error(`HTTP ${r.status}`)
-      const data: Contact[] = await r.json()
-      if (!Array.isArray(data)) throw new Error((data as any).error || 'Invalid response')
-      setContacts(data)
+      const data = await r.json()
+      if (data.error) throw new Error(data.error)
+      setTotal(data.total ?? 0)
+      setContacts(Array.isArray(data.rows) ? data.rows : Array.isArray(data) ? data : [])
     } catch (e: any) {
       setError(e.message || 'Failed to load contacts')
     } finally {
@@ -118,7 +135,22 @@ export default function Contacts() {
     }
   }
 
+  const loadMore = async () => {
+    setLoadingMore(true)
+    try {
+      const r = await fetch(buildUrl(contacts.length), { headers: authH() })
+      if (!r.ok) return
+      const data = await r.json()
+      const newRows = Array.isArray(data.rows) ? data.rows : []
+      setContacts(prev => [...prev, ...newRows])
+    } finally {
+      setLoadingMore(false)
+    }
+  }
+
   useEffect(() => { load() }, [])
+  // Re-fetch when search changes (debounced)
+  useEffect(() => { if (search !== undefined) load(search) }, [search])
 
   const filtered = contacts
     .filter(c =>
@@ -126,18 +158,6 @@ export default function Contacts() {
       (sourceFilter === 'apollo' && isApollo(c.source || '')) ||
       (sourceFilter === 'master_leads' && !isApollo(c.source || ''))
     )
-    .filter(c =>
-      `${c.first_name} ${c.last_name}`.toLowerCase().includes(search.toLowerCase()) ||
-      (c.company_name || '').toLowerCase().includes(search.toLowerCase()) ||
-      (c.title || '').toLowerCase().includes(search.toLowerCase())
-    )
-    .sort((a, b) => {
-      // Apollo contacts (with role) first, then master_leads
-      const aScore = isApollo(a.source || '') ? 1 : 0
-      const bScore = isApollo(b.source || '') ? 1 : 0
-      if (bScore !== aScore) return bScore - aScore
-      return (b.confidence || 0) - (a.confidence || 0)
-    })
 
   const toggleSelect = (id: number) => setSelected(s => s.includes(id) ? s.filter(x => x !== id) : [...s, id])
   const allSelected = filtered.length > 0 && filtered.every(c => selected.includes(c.id))
@@ -204,7 +224,7 @@ export default function Contacts() {
               </button>
             </>
           )}
-          <button onClick={load} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 8, border: '1px solid #e2e8f0', background: 'transparent', color: '#94a3b8', fontSize: 13, cursor: 'pointer' }}>
+          <button onClick={() => load()} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 8, border: '1px solid #e2e8f0', background: 'transparent', color: '#94a3b8', fontSize: 13, cursor: 'pointer' }}>
             <RefreshCw size={13} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} />
           </button>
           <button onClick={exportCSV} disabled={filtered.length === 0} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 8, border: '1px solid #e2e8f0', background: 'transparent', color: '#94a3b8', fontSize: 13, cursor: 'pointer' }}
@@ -225,7 +245,7 @@ export default function Contacts() {
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
         <div style={{ position: 'relative', flex: '1 1 260px', maxWidth: 360 }}>
           <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#475569', pointerEvents: 'none' }} />
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search contacts, roles, companies..."
+          <input value={searchInput} onChange={e => setSearchInput(e.target.value)} placeholder="Search contacts, roles, companies..."
             style={{ width: '100%', padding: '8px 12px 8px 36px', borderRadius: 8, background: '#ffffff', border: '1px solid #d1d5db', color: '#0f172a', fontSize: 13, outline: 'none', boxSizing: 'border-box' }} />
         </div>
         <div style={{ display: 'flex', padding: 3, borderRadius: 8, background: '#f8fafc', border: '1px solid #e2e8f0', gap: 2 }}>
@@ -353,7 +373,15 @@ export default function Contacts() {
           </table>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: '#f8fafc', borderTop: '1px solid #e2e8f0', fontSize: 12, color: '#64748b' }}>
-          <span>Showing {filtered.length} of {contacts.length} contacts</span>
+          <span>Showing {filtered.length} of {total.toLocaleString()} contacts</span>
+          {contacts.length < total && (
+            <button
+              onClick={loadMore}
+              disabled={loadingMore}
+              style={{ padding: '5px 16px', borderRadius: 7, border: '1px solid #d1d5db', background: '#fff', color: '#3b82f6', fontSize: 12, fontWeight: 600, cursor: loadingMore ? 'not-allowed' : 'pointer', opacity: loadingMore ? 0.6 : 1 }}>
+              {loadingMore ? 'Loading…' : `Load more (${(total - contacts.length).toLocaleString()} remaining)`}
+            </button>
+          )}
         </div>
       </div>
     </div>

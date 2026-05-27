@@ -128,12 +128,12 @@ export default function Dashboard() {
     }
   }
 
-  // ── polling — 5 s stats, 5 s log ──────────────────────────────────────────
+  // ── polling — 30 s stats (cached server-side 60 s), 15 s log ────────────
   useEffect(() => {
     fetchStats(true)
     fetchLog()
-    const si = setInterval(() => fetchStats(true), 5000)
-    const li = setInterval(fetchLog, 5000)
+    const si = setInterval(() => fetchStats(true), 30000)  // KPIs don't change by the second
+    const li = setInterval(fetchLog, 15000)                // log refreshes more often
     return () => { clearInterval(si); clearInterval(li) }
   }, [fetchStats, fetchLog])
 
