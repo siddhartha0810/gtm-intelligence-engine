@@ -48,6 +48,7 @@ import psycopg2.extras
 from fastapi import FastAPI, File, Form, Request, UploadFile, Depends
 from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -135,6 +136,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("unified_app")
 
+app.add_middleware(GZipMiddleware, minimum_size=500)   # compress responses > 500 bytes
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:8000", "http://localhost:5173", "http://127.0.0.1:8000"],

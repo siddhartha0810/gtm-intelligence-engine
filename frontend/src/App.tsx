@@ -1,32 +1,44 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import Sidebar from './components/Sidebar'
 import Topbar from './components/Topbar'
 import CommandPalette from './components/CommandPalette'
 import { ToastContainer } from './components/Toast'
 
-// Existing pages
-import Dashboard from './pages/Dashboard'
-import Companies from './pages/Companies'
-import Contacts from './pages/Contacts'
-import EngineControl from './pages/EngineControl'
-import ReviewQueue from './pages/ReviewQueue'
-import IntentData from './pages/IntentData'
-import Settings from './pages/Settings'
-import Reporting from './pages/Reporting'
-
-// New pages
+// Login is eager — must render before BrowserRouter even mounts
 import Login from './pages/Login'
-import TechnologyProfiles from './pages/TechnologyProfiles'
-import ListImport from './pages/ListImport'
-import Events from './pages/Events'
-import ManufacturerIntel from './pages/ManufacturerIntel'
-import AuditLogs from './pages/AuditLogs'
-import UserManagement from './pages/UserManagement'
-import HubSpotSync from './pages/HubSpotSync'
-import ProductIntelligence from './pages/ProductIntelligence'
-import Recruitment from './pages/Recruitment'
-import Profile from './pages/Profile'
+
+// All route pages are lazy-loaded — each becomes its own JS chunk
+const Dashboard           = lazy(() => import('./pages/Dashboard'))
+const Companies           = lazy(() => import('./pages/Companies'))
+const Contacts            = lazy(() => import('./pages/Contacts'))
+const EngineControl       = lazy(() => import('./pages/EngineControl'))
+const ReviewQueue         = lazy(() => import('./pages/ReviewQueue'))
+const IntentData          = lazy(() => import('./pages/IntentData'))
+const Settings            = lazy(() => import('./pages/Settings'))
+const Reporting           = lazy(() => import('./pages/Reporting'))
+const TechnologyProfiles  = lazy(() => import('./pages/TechnologyProfiles'))
+const ListImport          = lazy(() => import('./pages/ListImport'))
+const Events              = lazy(() => import('./pages/Events'))
+const ManufacturerIntel   = lazy(() => import('./pages/ManufacturerIntel'))
+const AuditLogs           = lazy(() => import('./pages/AuditLogs'))
+const UserManagement      = lazy(() => import('./pages/UserManagement'))
+const HubSpotSync         = lazy(() => import('./pages/HubSpotSync'))
+const ProductIntelligence = lazy(() => import('./pages/ProductIntelligence'))
+const Recruitment         = lazy(() => import('./pages/Recruitment'))
+const Profile             = lazy(() => import('./pages/Profile'))
+
+function PageLoader() {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#64748b' }}>
+      <div style={{ textAlign: 'center' }}>
+        <div style={{ width: 32, height: 32, border: '3px solid #e2e8f0', borderTopColor: '#6366f1', borderRadius: '50%', animation: 'spin 0.6s linear infinite', margin: '0 auto 12px' }} />
+        <span style={{ fontSize: 14 }}>Loading…</span>
+      </div>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </div>
+  )
+}
 
 export default function App() {
   const [cmdOpen, setCmdOpen]                   = useState(false)
@@ -79,34 +91,39 @@ export default function App() {
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, overflow: 'hidden' }}>
           <Topbar onCmdK={() => setCmdOpen(true)} user={user} onLogout={handleLogout} />
           <main style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: 24, background: '#f1f5f9' }}>
-            <Routes>
-              <Route path="/"                       element={<Navigate to="/dashboard" replace />} />
-              <Route path="/dashboard"              element={<Dashboard />} />
-              <Route path="/companies"              element={<Companies />} />
-              <Route path="/contacts"               element={<Contacts />} />
-              <Route path="/engine"                 element={<EngineControl />} />
-              <Route path="/engine-control"         element={<EngineControl />} />
-              <Route path="/review"                 element={<ReviewQueue />} />
-              <Route path="/review-queue"           element={<ReviewQueue />} />
-              <Route path="/intent"                 element={<IntentData />} />
-              <Route path="/intent-data"            element={<IntentData />} />
-              <Route path="/reporting"              element={<Reporting />} />
-              <Route path="/settings"               element={<Settings />} />
-              <Route path="/profile"                element={<Profile user={user} />} />
-              {/* New unified platform pages */}
-              <Route path="/technology-profiles"    element={<TechnologyProfiles />} />
-              <Route path="/list-import"            element={<ListImport />} />
-              <Route path="/events"                 element={<Events />} />
-              <Route path="/manufacturer-intel"          element={<ManufacturerIntel />} />
-              <Route path="/manufacturer-intelligence"  element={<ManufacturerIntel />} />
-              <Route path="/audit-logs"             element={<AuditLogs />} />
-              {isAdmin && <Route path="/user-management" element={<UserManagement />} />}
-              <Route path="/hubspot-sync"           element={<HubSpotSync />} />
-              <Route path="/product-intelligence"   element={<ProductIntelligence />} />
-              {(user?.role === 'admin' || user?.role === 'owner' || user?.role === 'recruitment') && (
-                <Route path="/recruitment"          element={<Recruitment />} />
-              )}
-            </Routes>
+            <Suspense fallback={<PageLoader />}>
+              <Routes>
+                <Route path="/"                       element={<Navigate to="/dashboard" replace />} />
+                {/* /login when already authenticated → redirect to dashboard */}
+                <Route path="/login"                  element={<Navigate to="/dashboard" replace />} />
+                <Route path="/dashboard"              element={<Dashboard />} />
+                <Route path="/companies"              element={<Companies />} />
+                <Route path="/contacts"               element={<Contacts />} />
+                <Route path="/engine"                 element={<EngineControl />} />
+                <Route path="/engine-control"         element={<EngineControl />} />
+                <Route path="/review"                 element={<ReviewQueue />} />
+                <Route path="/review-queue"           element={<ReviewQueue />} />
+                <Route path="/intent"                 element={<IntentData />} />
+                <Route path="/intent-data"            element={<IntentData />} />
+                <Route path="/reporting"              element={<Reporting />} />
+                <Route path="/settings"               element={<Settings />} />
+                <Route path="/profile"                element={<Profile user={user} />} />
+                <Route path="/technology-profiles"    element={<TechnologyProfiles />} />
+                <Route path="/list-import"            element={<ListImport />} />
+                <Route path="/events"                 element={<Events />} />
+                <Route path="/manufacturer-intel"         element={<ManufacturerIntel />} />
+                <Route path="/manufacturer-intelligence"  element={<ManufacturerIntel />} />
+                <Route path="/audit-logs"             element={<AuditLogs />} />
+                {isAdmin && <Route path="/user-management" element={<UserManagement />} />}
+                <Route path="/hubspot-sync"           element={<HubSpotSync />} />
+                <Route path="/product-intelligence"   element={<ProductIntelligence />} />
+                {(user?.role === 'admin' || user?.role === 'owner' || user?.role === 'recruitment') && (
+                  <Route path="/recruitment"          element={<Recruitment />} />
+                )}
+                {/* Catch-all: any unknown URL → dashboard */}
+                <Route path="*"                       element={<Navigate to="/dashboard" replace />} />
+              </Routes>
+            </Suspense>
           </main>
         </div>
         {cmdOpen && <CommandPalette onClose={() => setCmdOpen(false)} />}
