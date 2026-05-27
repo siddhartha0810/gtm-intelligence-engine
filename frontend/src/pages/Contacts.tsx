@@ -106,7 +106,7 @@ export default function Contacts() {
     setLoading(true)
     setError('')
     try {
-      const r = await fetch('/api/contacts?limit=500', { headers: authH() })
+      const r = await fetch('/api/contacts', { headers: authH() })
       if (!r.ok) throw new Error(`HTTP ${r.status}`)
       const data: Contact[] = await r.json()
       if (!Array.isArray(data)) throw new Error((data as any).error || 'Invalid response')

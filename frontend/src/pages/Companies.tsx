@@ -484,12 +484,20 @@ export default function Companies() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span style={{ fontSize: 13, color: '#64748b' }}>{selected.length} selected</span>
               <button onClick={async () => {
-                  let ok = 0
-                  for (const id of selected) {
-                    try { const r = await fetch(`/api/company/${id}/contacts/enrich`, { method: 'POST', headers: authH() }); if (r.ok) ok++ } catch {}
-                  }
-                  toast.success(`Enrichment started for ${ok}/${selected.length} companies`)
-                  setSelected([])
+                  try {
+                    const r = await fetch('/api/companies/bulk-enrich', { method: 'POST', headers: { ...authH(), 'Content-Type': 'application/json' }, body: JSON.stringify({ company_ids: selected }) })
+                    const d = await r.json()
+                    if (r.ok) {
+                      toast.success(`Enrichment running for ${selected.length} companies — check back in a few minutes`)
+                      setSelected([])
+                      // Poll progress
+                      const poll = setInterval(async () => {
+                        const pr = await fetch('/api/companies/bulk-enrich/progress', { headers: authH() })
+                        const p = await pr.json()
+                        if (!p.running) { clearInterval(poll); toast.success(`Enrichment complete: ${p.done} done, ${p.errors} errors`); fetchCompanies() }
+                      }, 5000)
+                    } else { toast.error(d.error || 'Bulk enrich failed') }
+                  } catch { toast.error('Network error') }
                 }}
                 style={{ padding: '7px 14px', borderRadius: 8, border: 'none', background: '#3b82f6', color: 'white', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
                 Enrich Selected

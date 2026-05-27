@@ -1530,40 +1530,67 @@ async def prospect_download_excel(current_user: dict = Depends(oracle_auth.requi
 @app.get("/api/dashboard")
 async def api_dashboard(current_user: dict = Depends(oracle_auth.require_user)):
     """Single endpoint that powers the Dashboard page KPI cards."""
-    # Use fast aggregate queries instead of fetching all rows
     companies_tracked = 0
+    contacts_enriched = 0
     total_signals     = 0
     implementing      = 0
     evaluating        = 0
     researching       = 0
+    pushed_to_hubspot = 0
     try:
         with oracle_db.db_cursor(commit=False) as cur:
+            # Total JDE companies in the DB
+            cur.execute("""
+                SELECT COUNT(*) AS n
+                FROM companies
+                WHERE target_product = 'JD Edwards'
+            """)
+            row = cur.fetchone()
+            companies_tracked = int(row["n"]) if row else 0
+
+            # Total JDE contacts in the DB
+            cur.execute("""
+                SELECT COUNT(*) AS n
+                FROM company_contacts cc
+                JOIN companies c ON c.id = cc.company_id
+                WHERE c.target_product = 'JD Edwards'
+            """)
+            row = cur.fetchone()
+            contacts_enriched = int(row["n"]) if row else 0
+
+            # Intent signals + phase breakdown
             cur.execute("""
                 SELECT
-                    COUNT(DISTINCT s.company_id)                                          AS companies_tracked,
-                    COUNT(s.id)                                                            AS total_signals,
-                    COUNT(DISTINCT CASE WHEN s.phase = 'implementing' THEN s.company_id END) AS implementing,
-                    COUNT(DISTINCT CASE WHEN s.phase = 'evaluating'   THEN s.company_id END) AS evaluating,
-                    COUNT(DISTINCT CASE WHEN s.phase = 'researching'  THEN s.company_id END) AS researching
+                    COUNT(s.id)                                                                AS total_signals,
+                    COUNT(DISTINCT CASE WHEN s.phase = 'implementing' THEN s.company_id END)   AS implementing,
+                    COUNT(DISTINCT CASE WHEN s.phase = 'evaluating'   THEN s.company_id END)   AS evaluating,
+                    COUNT(DISTINCT CASE WHEN s.phase = 'researching'  THEN s.company_id END)   AS researching
                 FROM oracle_signals s
             """)
             row = cur.fetchone()
             if row:
-                companies_tracked = row["companies_tracked"] or 0
-                total_signals     = row["total_signals"]     or 0
-                implementing      = row["implementing"]      or 0
-                evaluating        = row["evaluating"]        or 0
-                researching       = row["researching"]       or 0
-    except Exception:
-        logger.warning("Dashboard signal query failed — returning zeros", exc_info=True)
+                total_signals = row["total_signals"] or 0
+                implementing  = row["implementing"]  or 0
+                evaluating    = row["evaluating"]    or 0
+                researching   = row["researching"]   or 0
 
-    # Count enriched contacts — cached to avoid blocking on unreachable remote host
-    enriched_contacts = _cached_pg_master_contacts()
-    pushed_to_hubspot = 0
+            # Contacts pushed to HubSpot
+            cur.execute("""
+                SELECT COUNT(*) AS n
+                FROM company_contacts cc
+                JOIN companies c ON c.id = cc.company_id
+                WHERE c.target_product = 'JD Edwards'
+                  AND cc.status = 'pushed_to_hubspot'
+            """)
+            row = cur.fetchone()
+            pushed_to_hubspot = int(row["n"]) if row else 0
+
+    except Exception:
+        logger.warning("Dashboard query failed — returning zeros", exc_info=True)
 
     return {
         "companies_tracked":    companies_tracked,
-        "contacts_enriched":    enriched_contacts,
+        "contacts_enriched":    contacts_enriched,
         "intent_signals":       total_signals,
         "pushed_to_hubspot":    pushed_to_hubspot,
         "implementing":         implementing,

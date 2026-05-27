@@ -744,7 +744,7 @@ def save_contacts(company_id: int, contacts: list):
                      email_validation_status, email_source, email_prediction_pattern,
                      unique_key)
                 VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-                ON CONFLICT (company_id, email) WHERE email IS NOT NULL DO UPDATE SET
+                ON CONFLICT (company_id, email) WHERE email IS NOT NULL AND email != '' DO UPDATE SET
                     title      = CASE WHEN EXCLUDED.title <> '' THEN EXCLUDED.title
                                       ELSE company_contacts.title END,
                     linkedin_url = COALESCE(EXCLUDED.linkedin_url, company_contacts.linkedin_url),
@@ -998,9 +998,9 @@ def get_all_companies_with_signals(run_id: int = None):
                      WHERE cc.company_id = c.id
                        AND cc.email IS NOT NULL AND cc.email != '') AS contact_count
                 FROM companies c
-                JOIN oracle_signals s ON s.company_id = c.id
+                LEFT JOIN oracle_signals s ON s.company_id = c.id
                 GROUP BY c.id
-                ORDER BY signal_count DESC
+                ORDER BY signal_count DESC, c.last_updated DESC
             """)
         else:
             return []

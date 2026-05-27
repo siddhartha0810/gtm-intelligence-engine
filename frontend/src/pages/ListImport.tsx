@@ -13,7 +13,8 @@ interface ParsedHeader { csv_header: string; suggested_field: string }
 interface HubSpotField { value: string; label: string }
 interface ImportBatch { id: number; file_name: string; entity_type: string; status: string; record_count: number; success_count: number; created_at: string }
 interface Template { id: number; name: string; entity_type: string; mappings: Record<string, string> }
-interface ImportResult { success_count: number; error_count: number; errors: string[] }
+interface ImportError { row: number; error: string; data: Record<string, string> }
+interface ImportResult { success_count: number; error_count: number; errors: ImportError[] }
 
 const statusColor = (s: string) => {
   if (s === 'completed') return { bg: 'rgba(16,185,129,0.1)', color: '#34d399' }
@@ -38,6 +39,9 @@ export default function ListImport() {
   const [saveAsTemplate, setSaveAsTemplate] = useState(false)
   const [templateName, setTemplateName] = useState('')
   const [selectedTemplateId, setSelectedTemplateId] = useState<number | undefined>()
+  const [defaultProduct, setDefaultProduct] = useState('')
+
+  const ORACLE_PRODUCTS = ['JD Edwards', 'Oracle Cloud ERP', 'Oracle EBS', 'Oracle HCM', 'Oracle SCM', 'Oracle EPM', 'NetSuite', 'Oracle DB', 'Other Oracle']
   const [result, setResult] = useState<ImportResult | null>(null)
   const [processing, setProcessing] = useState(false)
   const [batches, setBatches] = useState<ImportBatch[]>([])
@@ -57,7 +61,8 @@ export default function ListImport() {
   useEffect(() => { loadHistory() }, [])
 
   const handleFile = (f: File) => {
-    if (!f.name.endsWith('.csv')) { toast.error('Only CSV files are supported'); return }
+    const lower = f.name.toLowerCase()
+    if (!lower.endsWith('.csv') && !lower.endsWith('.xlsx')) { toast.error('Only CSV or Excel (.xlsx) files are supported'); return }
     setFile(f)
   }
 
@@ -98,6 +103,7 @@ export default function ListImport() {
       fd.append('mappings', JSON.stringify(mappings))
       if (saveAsTemplate && templateName) fd.append('template_name', templateName)
       if (selectedTemplateId) fd.append('template_id', String(selectedTemplateId))
+      if (defaultProduct) fd.append('default_product', defaultProduct)
       const r = await fetch('/api/import/upload', { method: 'POST', body: fd, headers: { 'Authorization': `Bearer ${localStorage.getItem('token') || ''}` } })
       if (!r.ok) throw new Error(`HTTP ${r.status}`)
       const data: ImportResult = await r.json()
@@ -117,7 +123,7 @@ export default function ListImport() {
     } catch { toast.error('Delete failed') }
   }
 
-  const reset = () => { setStep(1); setFile(null); setHeaders([]); setMappings({}); setResult(null); setSaveAsTemplate(false); setTemplateName(''); setSelectedTemplateId(undefined) }
+  const reset = () => { setStep(1); setFile(null); setHeaders([]); setMappings({}); setResult(null); setSaveAsTemplate(false); setTemplateName(''); setSelectedTemplateId(undefined); setDefaultProduct('') }
 
   const inp: React.CSSProperties = { width: '100%', padding: '8px 12px', borderRadius: 8, background: '#ffffff', border: '1px solid #d1d5db', color: '#0f172a', fontSize: 13, outline: 'none', boxSizing: 'border-box' }
   const stepActive = (n: number) => step === n
@@ -169,7 +175,7 @@ export default function ListImport() {
               onDrop={e => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files[0]; if (f) handleFile(f) }}
               onClick={() => fileInputRef.current?.click()}
               style={{ border: `2px dashed ${dragging ? '#3b82f6' : file ? '#10b981' : '#d1d5db'}`, borderRadius: 12, padding: '40px 20px', textAlign: 'center', cursor: 'pointer', background: dragging ? 'rgba(59,130,246,0.04)' : file ? 'rgba(16,185,129,0.04)' : '#f8fafc', transition: 'all 0.15s' }}>
-              <input ref={fileInputRef} type="file" accept=".csv" style={{ display: 'none' }} onChange={e => { if (e.target.files?.[0]) handleFile(e.target.files[0]) }} />
+              <input ref={fileInputRef} type="file" accept=".csv,.xlsx" style={{ display: 'none' }} onChange={e => { if (e.target.files?.[0]) handleFile(e.target.files[0]) }} />
               {file ? (
                 <div>
                   <CheckCircle2 size={32} color="#10b981" style={{ marginBottom: 12 }} />
@@ -179,11 +185,22 @@ export default function ListImport() {
               ) : (
                 <div>
                   <Upload size={32} color="#475569" style={{ marginBottom: 12 }} />
-                  <div style={{ fontSize: 15, fontWeight: 500, color: '#64748b' }}>Drop CSV here or click to browse</div>
-                  <div style={{ fontSize: 13, color: '#475569', marginTop: 6 }}>Only .csv files are supported</div>
+                  <div style={{ fontSize: 15, fontWeight: 500, color: '#64748b' }}>Drop CSV or Excel file here, or click to browse</div>
+                  <div style={{ fontSize: 13, color: '#475569', marginTop: 6 }}>.csv and .xlsx files supported</div>
                 </div>
               )}
             </div>
+
+            {entityType === 'Company' && (
+              <div>
+                <label style={{ fontSize: 12, color: '#64748b', fontWeight: 600, letterSpacing: '0.04em', display: 'block', marginBottom: 8 }}>DEFAULT TARGET PRODUCT (OPTIONAL)</label>
+                <select style={{ ...inp, cursor: 'pointer' }} value={defaultProduct} onChange={e => setDefaultProduct(e.target.value)}>
+                  <option value="">— No default (map from file) —</option>
+                  {ORACLE_PRODUCTS.map(p => <option key={p} value={p}>{p}</option>)}
+                </select>
+                {defaultProduct && <div style={{ fontSize: 12, color: '#60a5fa', marginTop: 6 }}>All imported companies will be tagged as <strong>{defaultProduct}</strong></div>}
+              </div>
+            )}
 
             {templates.length > 0 && (
               <div>
@@ -301,7 +318,7 @@ export default function ListImport() {
                   {result.errors.map((e, i) => (
                     <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 12px', background: 'rgba(239,68,68,0.06)', borderRadius: 6, border: '1px solid rgba(239,68,68,0.15)' }}>
                       <AlertCircle size={13} color="#f87171" style={{ marginTop: 1, flexShrink: 0 }} />
-                      <span style={{ fontSize: 12, color: '#f87171' }}>{e}</span>
+                      <span style={{ fontSize: 12, color: '#f87171' }}>Row {e.row}: {e.error}</span>
                     </div>
                   ))}
                 </div>
