@@ -761,7 +761,7 @@ def save_contacts(company_id: int, contacts: list):
                 c.get("full_name", ""),
                 c.get("first_name", ""),
                 c.get("last_name", ""),
-                c.get("title", ""),
+                c.get("title") or c.get("job_title") or "",
                 c.get("email", "") or None,
                 c.get("linkedin_url", "") or None,
                 c.get("seniority", ""),
