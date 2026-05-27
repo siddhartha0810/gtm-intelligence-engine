@@ -954,52 +954,82 @@ def get_all_companies_with_signals(run_id: int = None):
 
     with db_cursor(commit=False) as cur:
         if run_id:
+            # CTE approach: pre-aggregate signals and contacts once — eliminates
+            # per-row correlated subqueries that caused O(n) extra round-trips.
             cur.execute("""
+                WITH sig AS (
+                    SELECT company_id,
+                           COUNT(*)                                  AS signal_count,
+                           STRING_AGG(DISTINCT oracle_product, ',')  AS products,
+                           STRING_AGG(DISTINCT phase, ',')           AS phases,
+                           STRING_AGG(DISTINCT source, ',')          AS sources,
+                           MAX(confidence)                           AS max_confidence,
+                           (ARRAY_AGG(url ORDER BY confidence DESC)
+                            FILTER (WHERE url LIKE 'http%%'))[1]     AS source_url
+                    FROM oracle_signals
+                    WHERE scan_run_id = %s
+                    GROUP BY company_id
+                ),
+                ct AS (
+                    SELECT company_id, COUNT(*) AS contact_count
+                    FROM company_contacts
+                    WHERE email IS NOT NULL AND email != ''
+                    GROUP BY company_id
+                )
                 SELECT
                     c.id, c.name, c.domain, c.industry, c.size,
                     c.location, c.website, c.first_seen::text AS first_seen,
                     c.first_scan_run_id, c.source AS import_source,
-                    COALESCE(NULLIF(c.target_product,''), STRING_AGG(DISTINCT s.oracle_product, ',')) AS target_product,
-                    COUNT(s.id)                                  AS signal_count,
-                    STRING_AGG(DISTINCT s.oracle_product, ',')   AS products,
-                    STRING_AGG(DISTINCT s.phase, ',')            AS phases,
-                    STRING_AGG(DISTINCT s.source, ',')           AS sources,
-                    MAX(s.confidence)                            AS max_confidence,
-                    (SELECT s2.url FROM oracle_signals s2
-                     WHERE s2.company_id = c.id
-                       AND s2.scan_run_id = %s
-                       AND s2.url LIKE 'http%%'
-                     ORDER BY s2.confidence DESC LIMIT 1)       AS source_url,
-                    (SELECT COUNT(*) FROM company_contacts cc
-                     WHERE cc.company_id = c.id
-                       AND cc.email IS NOT NULL AND cc.email != '') AS contact_count
+                    COALESCE(NULLIF(c.target_product,''), sig.products) AS target_product,
+                    COALESCE(sig.signal_count, 0)   AS signal_count,
+                    COALESCE(sig.products, '')       AS products,
+                    COALESCE(sig.phases, '')         AS phases,
+                    COALESCE(sig.sources, '')        AS sources,
+                    sig.max_confidence,
+                    sig.source_url,
+                    COALESCE(ct.contact_count, 0)   AS contact_count
                 FROM companies c
-                JOIN oracle_signals s ON s.company_id = c.id
+                JOIN sig ON sig.company_id = c.id
+                LEFT JOIN ct ON ct.company_id = c.id
                 WHERE c.first_scan_run_id = %s
-                GROUP BY c.id
                 ORDER BY signal_count DESC, c.last_updated DESC
             """, (run_id, run_id))
         elif run_id == 0:
+            # All companies (show_all=1): CTE approach — pre-aggregate once.
             cur.execute("""
+                WITH sig AS (
+                    SELECT company_id,
+                           COUNT(*)                                  AS signal_count,
+                           STRING_AGG(DISTINCT oracle_product, ',')  AS products,
+                           STRING_AGG(DISTINCT phase, ',')           AS phases,
+                           STRING_AGG(DISTINCT source, ',')          AS sources,
+                           MAX(confidence)                           AS max_confidence,
+                           (ARRAY_AGG(url ORDER BY confidence DESC)
+                            FILTER (WHERE url LIKE 'http%%'))[1]     AS source_url
+                    FROM oracle_signals
+                    GROUP BY company_id
+                ),
+                ct AS (
+                    SELECT company_id, COUNT(*) AS contact_count
+                    FROM company_contacts
+                    WHERE email IS NOT NULL AND email != ''
+                    GROUP BY company_id
+                )
                 SELECT
                     c.id, c.name, c.domain, c.industry, c.size,
                     c.location, c.website, c.first_seen::text AS first_seen,
                     c.first_scan_run_id, c.source AS import_source,
-                    COALESCE(NULLIF(c.target_product,''), STRING_AGG(DISTINCT s.oracle_product, ',')) AS target_product,
-                    COUNT(s.id)                                  AS signal_count,
-                    STRING_AGG(DISTINCT s.oracle_product, ',')   AS products,
-                    STRING_AGG(DISTINCT s.phase, ',')            AS phases,
-                    STRING_AGG(DISTINCT s.source, ',')           AS sources,
-                    MAX(s.confidence)                            AS max_confidence,
-                    (SELECT s2.url FROM oracle_signals s2
-                     WHERE s2.company_id = c.id AND s2.url LIKE 'http%%'
-                     ORDER BY s2.confidence DESC LIMIT 1)       AS source_url,
-                    (SELECT COUNT(*) FROM company_contacts cc
-                     WHERE cc.company_id = c.id
-                       AND cc.email IS NOT NULL AND cc.email != '') AS contact_count
+                    COALESCE(NULLIF(c.target_product,''), sig.products) AS target_product,
+                    COALESCE(sig.signal_count, 0)   AS signal_count,
+                    COALESCE(sig.products, '')       AS products,
+                    COALESCE(sig.phases, '')         AS phases,
+                    COALESCE(sig.sources, '')        AS sources,
+                    sig.max_confidence,
+                    sig.source_url,
+                    COALESCE(ct.contact_count, 0)   AS contact_count
                 FROM companies c
-                LEFT JOIN oracle_signals s ON s.company_id = c.id
-                GROUP BY c.id
+                LEFT JOIN sig ON sig.company_id = c.id
+                LEFT JOIN ct  ON ct.company_id  = c.id
                 ORDER BY signal_count DESC, c.last_updated DESC
             """)
         else:

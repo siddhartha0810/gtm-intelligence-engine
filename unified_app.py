@@ -615,59 +615,80 @@ def _annotate_and_sort(companies: list) -> list:
     return companies
 
 
+# ── In-process TTL cache for /api/companies ──────────────────────────────────
+# Key: show_all (0 or 1).  Value: (timestamp, list[dict]).
+# TTL: 60 s — keeps the page instant on repeated visits / tab switches.
+# Invalidated automatically by _invalidate_companies_cache() on writes.
+_companies_cache: Dict[int, tuple] = {}
+_COMPANIES_CACHE_TTL = 60  # seconds
+
+
+def _invalidate_companies_cache() -> None:
+    _companies_cache.clear()
+
+
 @app.get("/api/companies")
 async def api_companies(phase: str = "", product: str = "", show_all: int = 0,
                         current_user: dict = Depends(oracle_auth.require_user)):
     try:
-        run_id = 0 if show_all else None
-        companies = list(oracle_db.get_all_companies_with_signals(run_id=run_id))
-        companies = _annotate_and_sort(companies)
+        cached = _companies_cache.get(show_all)
+        if cached and (time.time() - cached[0]) < _COMPANIES_CACHE_TTL:
+            companies = cached[1]
+        else:
+            run_id = 0 if show_all else None
+            companies = list(oracle_db.get_all_companies_with_signals(run_id=run_id))
+            companies = _annotate_and_sort(companies)
+
+            # ── Augment contact_count with master_leads fallback ──────────────
+            # Only query master_leads for companies with 0 contacts in oracle_intent
+            # — reduces ANY() list from ~4k to ~few hundred and keeps it fast.
+            try:
+                zero_contact = [c for c in companies if not int(c.get("contact_count") or 0)]
+                if zero_contact:
+                    domains = list({(c.get("domain") or "").strip().lower()
+                                    for c in zero_contact if (c.get("domain") or "").strip()})
+                    names   = list({(c.get("name") or "").strip().lower()
+                                    for c in zero_contact if (c.get("name") or "").strip()})
+                    with oracle_db.db_cursor(commit=False) as cur:
+                        domain_counts: dict = {}
+                        if domains:
+                            cur.execute(
+                                "SELECT LOWER(domain) AS d, COUNT(*) AS cnt FROM master_leads "
+                                "WHERE LOWER(domain) = ANY(%s) GROUP BY LOWER(domain)",
+                                (domains,),
+                            )
+                            for row in cur.fetchall():
+                                domain_counts[row["d"]] = row["cnt"]
+                        name_counts: dict = {}
+                        if names:
+                            cur.execute(
+                                "SELECT LOWER(company_normalized) AS n, COUNT(*) AS cnt FROM master_leads "
+                                "WHERE LOWER(company_normalized) = ANY(%s) GROUP BY LOWER(company_normalized)",
+                                (names,),
+                            )
+                            for row in cur.fetchall():
+                                name_counts[row["n"]] = row["cnt"]
+
+                    for c in zero_contact:
+                        d = (c.get("domain") or "").strip().lower()
+                        n = (c.get("name") or "").strip().lower()
+                        ml_count = domain_counts.get(d) or name_counts.get(n) or 0
+                        if ml_count:
+                            c["contact_count"] = ml_count
+            except Exception:
+                logger.warning("master_leads augment failed — continuing without contact counts", exc_info=True)
+
+            companies = [dict(c) for c in companies]
+            _companies_cache[show_all] = (time.time(), companies)
+
+        # Apply filters after cache (filters are fast, in-memory)
+        result = companies
         if phase:
-            companies = [c for c in companies if phase in (c.get("phases") or [])]
+            result = [c for c in result if phase in (c.get("phases") or [])]
         if product:
-            companies = [c for c in companies if product in (c.get("products") or [])]
+            result = [c for c in result if product in (c.get("products") or [])]
 
-        # ── Augment contact_count with master_leads fallback ──────────────────
-        # Build a single query for all domains + names to avoid N+1 calls
-        try:
-            domains = list({(c.get("domain") or "").strip().lower()
-                            for c in companies if (c.get("domain") or "").strip()})
-            names   = list({(c.get("name") or "").strip().lower()
-                            for c in companies if (c.get("name") or "").strip()})
-            with oracle_db.db_cursor(commit=False) as cur:
-                # Count by domain
-                domain_counts: dict = {}
-                if domains:
-                    cur.execute(
-                        "SELECT LOWER(domain) AS d, COUNT(*) AS cnt FROM master_leads "
-                        "WHERE LOWER(domain) = ANY(%s) GROUP BY LOWER(domain)",
-                        (domains,),
-                    )
-                    for row in cur.fetchall():
-                        domain_counts[row["d"]] = row["cnt"]
-                # Count by normalized name (for companies with no domain)
-                name_counts: dict = {}
-                if names:
-                    cur.execute(
-                        "SELECT LOWER(company_normalized) AS n, COUNT(*) AS cnt FROM master_leads "
-                        "WHERE LOWER(company_normalized) = ANY(%s) GROUP BY LOWER(company_normalized)",
-                        (names,),
-                    )
-                    for row in cur.fetchall():
-                        name_counts[row["n"]] = row["cnt"]
-
-            for c in companies:
-                existing = int(c.get("contact_count") or 0)
-                if existing == 0:
-                    d = (c.get("domain") or "").strip().lower()
-                    n = (c.get("name") or "").strip().lower()
-                    ml_count = domain_counts.get(d) or name_counts.get(n) or 0
-                    if ml_count:
-                        c["contact_count"] = ml_count
-        except Exception:
-            logger.warning("master_leads augment failed — continuing without contact counts", exc_info=True)
-
-        return [dict(c) for c in companies]
+        return result
     except Exception as e:
         logger.exception("Unhandled error in GET /api/companies")
         return JSONResponse({"error": str(e)}, status_code=500)
@@ -2278,6 +2299,7 @@ async def api_company_product(
     data    = await request.json()
     product = data.get("target_product", "").strip()
     oracle_db.set_company_target_product(company_id, product)
+    _invalidate_companies_cache()
     log_audit(current_user, "set_target_product", "company", str(company_id),
               new_value={"target_product": product})
     return {"id": company_id, "target_product": product}
@@ -2318,6 +2340,7 @@ async def api_company_status(
     if not row:
         return JSONResponse({"error": "Company not found"}, status_code=404)
 
+    _invalidate_companies_cache()
     log_audit(current_user, f"status_{new_status}", "company", str(company_id),
               new_value={"status": new_status})
     return dict(row)
