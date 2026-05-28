@@ -475,12 +475,18 @@ _DDL = [
     # ── scan_runs: link to technology profile ────────────────────────────────
     "ALTER TABLE scan_runs ADD COLUMN IF NOT EXISTS technology_profile_id BIGINT REFERENCES technology_profiles(id) ON DELETE SET NULL",
 
+    # ── Denormalized signal/contact counts for fast ORDER BY ─────────────────
+    # These avoid full aggregation scans on every page load.
+    "ALTER TABLE companies ADD COLUMN IF NOT EXISTS signal_count  INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE companies ADD COLUMN IF NOT EXISTS contact_count INTEGER NOT NULL DEFAULT 0",
+
     # ── Indexes on new columns ───────────────────────────────────────────────
-    "CREATE INDEX IF NOT EXISTS idx_companies_status    ON companies(status)",
-    "CREATE INDEX IF NOT EXISTS idx_companies_profile   ON companies(technology_profile_id)",
-    "CREATE INDEX IF NOT EXISTS idx_companies_hubspot   ON companies(hubspot_id) WHERE hubspot_id != ''",
-    "CREATE INDEX IF NOT EXISTS idx_contacts_status     ON company_contacts(status)",
-    "CREATE INDEX IF NOT EXISTS idx_contacts_hubspot    ON company_contacts(hubspot_id) WHERE hubspot_id != ''",
+    "CREATE INDEX IF NOT EXISTS idx_companies_status       ON companies(status)",
+    "CREATE INDEX IF NOT EXISTS idx_companies_profile      ON companies(technology_profile_id)",
+    "CREATE INDEX IF NOT EXISTS idx_companies_hubspot      ON companies(hubspot_id) WHERE hubspot_id != ''",
+    "CREATE INDEX IF NOT EXISTS idx_companies_signal_count ON companies(signal_count DESC, last_updated DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_contacts_status        ON company_contacts(status)",
+    "CREATE INDEX IF NOT EXISTS idx_contacts_hubspot       ON company_contacts(hubspot_id) WHERE hubspot_id != ''",
 
     # ── hubspot_config table ─────────────────────────────────────────────────
     """
@@ -568,6 +574,7 @@ def init_db():
             cur.execute(stmt)
     logger.info("PostgreSQL schema initialised")
     _backfill_unique_keys()
+    _backfill_signal_counts()
 
 
 def _backfill_unique_keys():
@@ -601,6 +608,43 @@ def _backfill_unique_keys():
                     (_gen_unique_key(), cid),
                 )
             logger.info("Backfilled unique_key for %d contacts", cc_missing)
+
+
+def _backfill_signal_counts() -> None:
+    """Sync denormalized signal_count / contact_count for any company that has 0
+    but actually has rows — happens on first boot after the columns were added."""
+    with db_cursor(commit=False) as cur:
+        cur.execute("""
+            SELECT COUNT(*) AS n FROM companies c
+            WHERE c.signal_count = 0
+              AND EXISTS (SELECT 1 FROM oracle_signals s WHERE s.company_id = c.id)
+        """)
+        need_backfill = cur.fetchone()["n"]
+
+    if need_backfill == 0:
+        return
+
+    logger.info("Backfilling signal_count / contact_count for %d companies …", need_backfill)
+    with db_cursor() as cur:
+        cur.execute("""
+            UPDATE companies c
+            SET signal_count  = COALESCE(s.cnt, 0),
+                contact_count = COALESCE(cc.cnt, 0)
+            FROM (
+                SELECT company_id, COUNT(*) AS cnt
+                FROM oracle_signals
+                GROUP BY company_id
+            ) s
+            LEFT JOIN (
+                SELECT company_id, COUNT(*) AS cnt
+                FROM company_contacts
+                WHERE email IS NOT NULL AND email != ''
+                GROUP BY company_id
+            ) cc ON cc.company_id = s.company_id
+            WHERE s.company_id = c.id
+              AND c.signal_count = 0
+        """)
+        logger.info("signal_count / contact_count backfill complete")
 
 
 # ── Company operations ───────────────────────────────────────────────────────
@@ -680,7 +724,15 @@ def insert_signal(company_id: int, oracle_product: str, phase: str, source: str,
             RETURNING id
         """, (company_id, scan_run_id, oracle_product, phase, source,
               signal_type, job_title, evidence, url, confidence))
-        return cur.fetchone()["id"]
+        signal_id = cur.fetchone()["id"]
+        # Keep denormalized count in sync
+        cur.execute("""
+            UPDATE companies
+            SET signal_count = (SELECT COUNT(*) FROM oracle_signals WHERE company_id = %s),
+                last_updated = NOW()
+            WHERE id = %s
+        """, (company_id, company_id))
+        return signal_id
 
 
 def get_signals_for_company(company_id: int):
@@ -773,6 +825,15 @@ def save_contacts(company_id: int, contacts: list):
                 c.get("email_prediction_pattern", "") or "",
                 _gen_unique_key(),
             ))
+        # Keep denormalized contact_count in sync after batch insert
+        cur.execute("""
+            UPDATE companies
+            SET contact_count = (
+                SELECT COUNT(*) FROM company_contacts
+                WHERE company_id = %s AND email IS NOT NULL AND email != ''
+            )
+            WHERE id = %s
+        """, (company_id, company_id))
 
 
 def get_companies_needing_enrichment(limit: int = 50) -> list:

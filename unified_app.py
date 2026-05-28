@@ -700,7 +700,7 @@ async def api_companies(
                 SELECT c.id, c.name, c.domain, c.industry, c.size, c.location, c.website,
                        c.target_product, c.status, c.source AS import_source,
                        c.first_scan_run_id, c.first_seen::text AS first_seen,
-                       c.signal_count, c.contact_count, c.last_updated
+                       c.signal_count, c.contact_count, c.last_updated::text AS last_updated
                 FROM companies c
                 WHERE c.id = ANY(%s)
             """, (page_ids,))
