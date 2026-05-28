@@ -12,7 +12,6 @@ from contextlib import contextmanager
 from typing import Optional
 from src.utils import get_logger
 
-
 def _gen_unique_key() -> str:
     """64-char URL-safe unique key (doc §6.1 — nanoid equivalent)."""
     return secrets.token_urlsafe(48)  # 48 bytes → 64-char base64url string
@@ -23,10 +22,9 @@ import psycopg2.pool
 
 logger = get_logger(__name__)
 
-# ── Connection pool ──────────────────────────────────────────────────────────
+# connection pool
 _pool: Optional[psycopg2.pool.ThreadedConnectionPool] = None
 _pool_lock = threading.Lock()
-
 
 def _dsn() -> str:
     """Resolve DSN at call-time so env vars set after import are respected.
@@ -39,7 +37,6 @@ def _dsn() -> str:
             f"user={DB_USER} password={DB_PASSWORD}"
         )
     return dsn
-
 
 def _get_pool() -> psycopg2.pool.ThreadedConnectionPool:
     global _pool
@@ -60,17 +57,14 @@ def _get_pool() -> psycopg2.pool.ThreadedConnectionPool:
             logger.info(f"PostgreSQL pool ready (max=10) — {host_part}")
     return _pool
 
-
 def close_pool():
-    """Call on application shutdown to release all connections."""
     global _pool
     with _pool_lock:
         if _pool and not _pool.closed:
             _pool.closeall()
             _pool = None
 
-
-# ── DDL ─────────────────────────────────────────────────────────────────────
+# ddl
 _DDL = [
     """
     CREATE TABLE IF NOT EXISTS companies (
@@ -217,11 +211,9 @@ _DDL = [
         WHERE linkedin_url IS NOT NULL AND linkedin_url != ''
     """,
 
-    # ═══════════════════════════════════════════════════════════════════════════
     # NEW TABLES — Unified Platform Expansion (Phase 1-4)
-    # ═══════════════════════════════════════════════════════════════════════════
 
-    # ── Users & RBAC ────────────────────────────────────────────────────────
+    # users & rbac
     """
     CREATE TABLE IF NOT EXISTS users (
         id            BIGSERIAL PRIMARY KEY,
@@ -239,7 +231,7 @@ _DDL = [
     "CREATE INDEX IF NOT EXISTS idx_users_email  ON users(email)",
     "CREATE INDEX IF NOT EXISTS idx_users_role   ON users(role)",
 
-    # ── Technology Profiles ─────────────────────────────────────────────────
+    # technology profiles
     """
     CREATE TABLE IF NOT EXISTS technology_profiles (
         id                   BIGSERIAL PRIMARY KEY,
@@ -258,7 +250,7 @@ _DDL = [
     """,
     "CREATE INDEX IF NOT EXISTS idx_tp_active ON technology_profiles(is_active)",
 
-    # ── Product Taxonomy ────────────────────────────────────────────────────
+    # product taxonomy
     """
     CREATE TABLE IF NOT EXISTS product_taxonomy (
         id                    BIGSERIAL PRIMARY KEY,
@@ -275,7 +267,7 @@ _DDL = [
     """,
     "CREATE INDEX IF NOT EXISTS idx_pt_profile ON product_taxonomy(technology_profile_id)",
 
-    # ── Audit Logs ──────────────────────────────────────────────────────────
+    # audit logs
     """
     CREATE TABLE IF NOT EXISTS audit_logs (
         id           BIGSERIAL PRIMARY KEY,
@@ -295,7 +287,7 @@ _DDL = [
     "CREATE INDEX IF NOT EXISTS idx_al_created   ON audit_logs(created_at DESC)",
     "CREATE INDEX IF NOT EXISTS idx_al_action    ON audit_logs(action)",
 
-    # ── Events Intelligence ─────────────────────────────────────────────────
+    # events intelligence
     """
     CREATE TABLE IF NOT EXISTS events (
         id                    BIGSERIAL PRIMARY KEY,
@@ -329,7 +321,7 @@ _DDL = [
     "CREATE INDEX IF NOT EXISTS idx_ea_event   ON event_attendees(event_id)",
     "CREATE INDEX IF NOT EXISTS idx_ea_contact ON event_attendees(contact_id)",
 
-    # ── Manufacturer Intelligence ───────────────────────────────────────────
+    # manufacturer intelligence
     """
     CREATE TABLE IF NOT EXISTS manufacturer_contacts (
         id                    BIGSERIAL PRIMARY KEY,
@@ -367,7 +359,7 @@ _DDL = [
     "CREATE INDEX IF NOT EXISTS idx_ml2_company ON manufacturer_links(company_id)",
     "CREATE INDEX IF NOT EXISTS idx_ml2_mfr     ON manufacturer_links(manufacturer_contact_id)",
 
-    # ── List Import ─────────────────────────────────────────────────────────
+    # list import
     """
     CREATE TABLE IF NOT EXISTS import_mapping_templates (
         id          BIGSERIAL PRIMARY KEY,
@@ -403,12 +395,10 @@ _DDL = [
     "CREATE INDEX IF NOT EXISTS idx_ib_type   ON import_batches(entity_type)",
     "CREATE INDEX IF NOT EXISTS idx_ib_user   ON import_batches(created_by)",
 
-    # ═══════════════════════════════════════════════════════════════════════════
     # MIGRATIONS — Expand existing tables with new columns
     # All use ADD COLUMN IF NOT EXISTS — safe to run on existing DBs
-    # ═══════════════════════════════════════════════════════════════════════════
 
-    # ── companies: add 27 HubSpot MVP fields + lifecycle + profile link ──────
+    # companies: add 27 hubspot mvp fields + lifecycle + profile link
     "ALTER TABLE companies ADD COLUMN IF NOT EXISTS technology_profile_id  BIGINT REFERENCES technology_profiles(id) ON DELETE SET NULL",
     "ALTER TABLE companies ADD COLUMN IF NOT EXISTS status                 TEXT NOT NULL DEFAULT 'staged' CHECK (status IN ('staged','pending_review','approved','pushed_to_hubspot','rejected'))",
     "ALTER TABLE companies ADD COLUMN IF NOT EXISTS unique_key             TEXT NOT NULL DEFAULT ''",
@@ -450,7 +440,7 @@ _DDL = [
     "ALTER TABLE companies ADD COLUMN IF NOT EXISTS product_confidence_scores    JSONB NOT NULL DEFAULT '{}'",
     "ALTER TABLE companies ADD COLUMN IF NOT EXISTS enrichment_data              JSONB NOT NULL DEFAULT '{}'",
 
-    # ── company_contacts: add 22 HubSpot MVP fields + lifecycle ─────────────
+    # company_contacts: add 22 hubspot mvp fields + lifecycle
     "ALTER TABLE company_contacts ADD COLUMN IF NOT EXISTS salutation           TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE company_contacts ADD COLUMN IF NOT EXISTS suffix               TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE company_contacts ADD COLUMN IF NOT EXISTS phone                TEXT NOT NULL DEFAULT ''",
@@ -472,15 +462,15 @@ _DDL = [
     "ALTER TABLE company_contacts ADD COLUMN IF NOT EXISTS status               TEXT NOT NULL DEFAULT 'staged' CHECK (status IN ('staged','pending_review','approved','pushed_to_hubspot','rejected'))",
     "ALTER TABLE company_contacts ADD COLUMN IF NOT EXISTS hubspot_synced_at    TIMESTAMPTZ",
 
-    # ── scan_runs: link to technology profile ────────────────────────────────
+    # scan_runs: link to technology profile
     "ALTER TABLE scan_runs ADD COLUMN IF NOT EXISTS technology_profile_id BIGINT REFERENCES technology_profiles(id) ON DELETE SET NULL",
 
-    # ── Denormalized signal/contact counts for fast ORDER BY ─────────────────
+    # denormalized signal/contact counts for fast order by
     # These avoid full aggregation scans on every page load.
     "ALTER TABLE companies ADD COLUMN IF NOT EXISTS signal_count  INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE companies ADD COLUMN IF NOT EXISTS contact_count INTEGER NOT NULL DEFAULT 0",
 
-    # ── Indexes on new columns ───────────────────────────────────────────────
+    # indexes on new columns
     "CREATE INDEX IF NOT EXISTS idx_companies_status       ON companies(status)",
     "CREATE INDEX IF NOT EXISTS idx_companies_profile      ON companies(technology_profile_id)",
     "CREATE INDEX IF NOT EXISTS idx_companies_hubspot      ON companies(hubspot_id) WHERE hubspot_id != ''",
@@ -488,7 +478,7 @@ _DDL = [
     "CREATE INDEX IF NOT EXISTS idx_contacts_status        ON company_contacts(status)",
     "CREATE INDEX IF NOT EXISTS idx_contacts_hubspot       ON company_contacts(hubspot_id) WHERE hubspot_id != ''",
 
-    # ── hubspot_config table ─────────────────────────────────────────────────
+    # hubspot_config table
     """
 CREATE TABLE IF NOT EXISTS hubspot_config (
     id              BIGSERIAL PRIMARY KEY,
@@ -547,8 +537,7 @@ CREATE TABLE IF NOT EXISTS review_queue (
     "CREATE INDEX IF NOT EXISTS idx_engine_configs_type ON engine_configs(engine_type)",
 ]
 
-
-# ── Core context manager ─────────────────────────────────────────────────────
+# core context manager
 @contextmanager
 def db_cursor(commit: bool = True):
     """Check out a pooled connection, yield a RealDictCursor, then return it."""
@@ -566,8 +555,7 @@ def db_cursor(commit: bool = True):
     finally:
         pool.putconn(conn)
 
-
-# ── Schema init ──────────────────────────────────────────────────────────────
+# schema init
 def init_db():
     with db_cursor() as cur:
         for stmt in _DDL:
@@ -575,7 +563,6 @@ def init_db():
     logger.info("PostgreSQL schema initialised")
     _backfill_unique_keys()
     _backfill_signal_counts()
-
 
 def _backfill_unique_keys():
     """One-time backfill: assign unique_key to any existing rows that have an empty value."""
@@ -608,7 +595,6 @@ def _backfill_unique_keys():
                     (_gen_unique_key(), cid),
                 )
             logger.info("Backfilled unique_key for %d contacts", cc_missing)
-
 
 def _backfill_signal_counts() -> None:
     """Sync denormalized signal_count / contact_count for any company that has 0
@@ -646,8 +632,7 @@ def _backfill_signal_counts() -> None:
         """)
         logger.info("signal_count / contact_count backfill complete")
 
-
-# ── Company operations ───────────────────────────────────────────────────────
+# company operations
 def upsert_company(name: str, domain: str = None, industry: str = None,
                    size: str = None, location: str = None, website: str = None,
                    first_scan_run_id: int = None) -> int:
@@ -672,18 +657,15 @@ def upsert_company(name: str, domain: str = None, industry: str = None,
               first_scan_run_id, _gen_unique_key()))
         return cur.fetchone()["id"]
 
-
 def get_company_by_id(company_id: int) -> Optional[dict]:
     with db_cursor(commit=False) as cur:
         cur.execute("SELECT * FROM companies WHERE id = %s", (company_id,))
         return cur.fetchone()
 
-
 def get_company_by_name(name: str) -> Optional[dict]:
     with db_cursor(commit=False) as cur:
         cur.execute("SELECT * FROM companies WHERE name = %s", (name,))
         return cur.fetchone()
-
 
 def purge_invalid_companies(is_valid_fn) -> int:
     with db_cursor(commit=False) as cur:
@@ -697,7 +679,6 @@ def purge_invalid_companies(is_valid_fn) -> int:
     logger.info(f"Purged {len(to_delete)} invalid company names")
     return len(to_delete)
 
-
 def reset_all_data():
     with db_cursor() as cur:
         cur.execute("DELETE FROM company_contacts")
@@ -710,8 +691,7 @@ def reset_all_data():
     logger.info("Oracle intent data reset")
     return {"companies": 0, "signals": 0}
 
-
-# ── Signal operations ────────────────────────────────────────────────────────
+# signal operations
 def insert_signal(company_id: int, oracle_product: str, phase: str, source: str,
                   signal_type: str, job_title: str, evidence: str,
                   url: str, confidence: float, scan_run_id: int = None) -> int:
@@ -734,7 +714,6 @@ def insert_signal(company_id: int, oracle_product: str, phase: str, source: str,
         """, (company_id, company_id))
         return signal_id
 
-
 def get_signals_for_company(company_id: int):
     with db_cursor(commit=False) as cur:
         cur.execute("""
@@ -744,8 +723,7 @@ def get_signals_for_company(company_id: int):
         """, (company_id,))
         return cur.fetchall()
 
-
-# ── Scan run tracking ────────────────────────────────────────────────────────
+# scan run tracking
 def start_scan_run(queries: str) -> int:
     with db_cursor() as cur:
         cur.execute(
@@ -753,7 +731,6 @@ def start_scan_run(queries: str) -> int:
             (queries,),
         )
         return cur.fetchone()["id"]
-
 
 def finish_scan_run(run_id: int, total_signals: int, total_companies: int,
                     status: str = "completed"):
@@ -765,7 +742,6 @@ def finish_scan_run(run_id: int, total_signals: int, total_companies: int,
             WHERE id = %s
         """, (status, total_signals, total_companies, run_id))
 
-
 def get_latest_completed_run_id() -> Optional[int]:
     with db_cursor(commit=False) as cur:
         cur.execute("""
@@ -776,7 +752,6 @@ def get_latest_completed_run_id() -> Optional[int]:
         row = cur.fetchone()
         return row["id"] if row else None
 
-
 def get_recent_scan_runs(limit: int = 10):
     with db_cursor(commit=False) as cur:
         cur.execute("""
@@ -784,8 +759,7 @@ def get_recent_scan_runs(limit: int = 10):
         """, (limit,))
         return cur.fetchall()
 
-
-# ── Contact operations ───────────────────────────────────────────────────────
+# contact operations
 def save_contacts(company_id: int, contacts: list):
     with db_cursor() as cur:
         for c in contacts:
@@ -835,7 +809,6 @@ def save_contacts(company_id: int, contacts: list):
             WHERE id = %s
         """, (company_id, company_id))
 
-
 def get_companies_needing_enrichment(limit: int = 50) -> list:
     """Return companies without contacts yet — signal-backed first, then CSV imports."""
     with db_cursor(commit=False) as cur:
@@ -855,7 +828,6 @@ def get_companies_needing_enrichment(limit: int = 50) -> list:
             LIMIT %s
         """, (limit,))
         return cur.fetchall()
-
 
 def get_enrichment_stats() -> dict:
     """Return counts for the enrichment dashboard."""
@@ -883,8 +855,7 @@ def get_enrichment_stats() -> dict:
             "contacts_valid_email": row["valid_email"],
         }
 
-
-# ── Product Intelligence aggregation ─────────────────────────────────────────
+# product intelligence aggregation
 # Products that are primarily cloud-delivered
 _CLOUD_PRODUCTS = {
     "Oracle Cloud ERP", "Oracle HCM", "Oracle SCM", "Oracle EPM",
@@ -898,7 +869,6 @@ _ONPREM_PRODUCTS = {
 _BOTH_PRODUCTS = {
     "Oracle Database",  # can be cloud-hosted too
 }
-
 
 def aggregate_product_intel() -> dict:
     """
@@ -953,7 +923,6 @@ def aggregate_product_intel() -> dict:
 
     return {"updated": updated, "companies_processed": len(company_products)}
 
-
 def backfill_target_product() -> int:
     """Set target_product from the dominant oracle_signal product for companies that have none."""
     with db_cursor() as cur:
@@ -973,14 +942,12 @@ def backfill_target_product() -> int:
         """)
         return cur.rowcount
 
-
 def set_company_target_product(company_id: int, product: str) -> None:
     with db_cursor() as cur:
         cur.execute(
             "UPDATE companies SET target_product = %s WHERE id = %s",
             (product.strip(), company_id),
         )
-
 
 def get_contacts_for_company(company_id: int) -> list:
     with db_cursor(commit=False) as cur:
@@ -990,7 +957,6 @@ def get_contacts_for_company(company_id: int) -> list:
             ORDER BY is_target DESC, confidence DESC
         """, (company_id,))
         return cur.fetchall()
-
 
 def get_contacts_for_company_names(names: list) -> list:
     if not names:
@@ -1007,8 +973,7 @@ def get_contacts_for_company_names(names: list) -> list:
         """, (names,))
         return cur.fetchall()
 
-
-# ── Company + signals (read) ─────────────────────────────────────────────────
+# company + signals (read)
 def get_all_companies_with_signals(run_id: int = None):
     if run_id is None:
         run_id = get_latest_completed_run_id()
@@ -1105,7 +1070,6 @@ def get_all_companies_with_signals(run_id: int = None):
 
     return rows
 
-
 def test_connection() -> bool:
     try:
         with db_cursor(commit=False) as cur:
@@ -1115,9 +1079,7 @@ def test_connection() -> bool:
         logger.error(f"Connection test failed: {e}")
         return False
 
-
-# ── master_leads operations ──────────────────────────────────────────────────
-
+# master_leads operations
 def _norm_company(name: str) -> str:
     """Lowercase + strip common legal suffixes for consistent company matching."""
     import re
@@ -1128,7 +1090,6 @@ def _norm_company(name: str) -> str:
         if n.endswith(suf):
             n = n[: -len(suf)].strip()
     return re.sub(r"\s+", " ", n).strip()
-
 
 def upsert_master_leads(records: list) -> int:
     """
@@ -1187,7 +1148,6 @@ def upsert_master_leads(records: list) -> int:
         )
     return len(rows)
 
-
 def get_master_leads_by_email(emails: list) -> dict:
     """
     Look up master_leads by email address (case-insensitive).
@@ -1209,7 +1169,6 @@ def get_master_leads_by_email(emails: list) -> dict:
         )
         return {row["email"].lower(): dict(row) for row in cur.fetchall()}
 
-
 def get_master_leads_by_company(company_normalized: str) -> list:
     """Return all master_leads for a given normalised company name."""
     with db_cursor(commit=False) as cur:
@@ -1228,7 +1187,6 @@ def get_master_leads_by_company(company_normalized: str) -> list:
         )
         return cur.fetchall()
 
-
 def master_leads_stats() -> dict:
     """Row counts for the master_leads table."""
     with db_cursor(commit=False) as cur:
@@ -1243,9 +1201,7 @@ def master_leads_stats() -> dict:
         row = cur.fetchone()
         return dict(row)
 
-
-# ── Email pattern operations ─────────────────────────────────────────────────
-
+# email pattern operations
 def load_domain_patterns(domains: list = None) -> dict:
     """
     Load email naming patterns from the email_patterns reference table.
@@ -1279,7 +1235,6 @@ def load_domain_patterns(domains: list = None) -> dict:
         result.setdefault(r["domain"], []).append(r["pattern"])
     return result
 
-
 def upsert_email_patterns(rows: list) -> int:
     """
     Bulk upsert (domain, pattern, sample_count) tuples into email_patterns.
@@ -1302,7 +1257,6 @@ def upsert_email_patterns(rows: list) -> int:
         )
     return len(rows)
 
-
 def email_patterns_stats() -> dict:
     """Row counts for the email_patterns reference table."""
     with db_cursor(commit=False) as cur:
@@ -1317,9 +1271,7 @@ def email_patterns_stats() -> dict:
         dist = [dict(r) for r in cur.fetchall()]
     return {"total_rows": row["total_rows"], "domains": row["domains"], "distribution": dist}
 
-
-# ── hubspot_config helpers ────────────────────────────────────────────────────
-
+# hubspot_config helpers
 def get_hubspot_config() -> dict:
     with db_cursor(commit=False) as cur:
         cur.execute("SELECT * FROM hubspot_config ORDER BY id LIMIT 1")
@@ -1356,9 +1308,7 @@ def update_hubspot_sync_status(status: str, companies: int = 0, contacts: int = 
             (status, companies, contacts),
         )
 
-
-# ── engine_configs helpers ────────────────────────────────────────────────────
-
+# engine_configs helpers
 def seed_engine_configs():
     """Seed default engine configs if not present."""
     engines = ['scraping','enrichment','skills_parsing','fuzzy_matching','data_quality','hubspot_sync']
@@ -1397,9 +1347,7 @@ def update_engine_config(engine_type: str, is_enabled: bool = None,
         cur.execute("SELECT * FROM engine_configs WHERE engine_type=%s", (engine_type,))
         return dict(cur.fetchone())
 
-
-# ── review_queue helpers ──────────────────────────────────────────────────────
-
+# review_queue helpers
 def add_to_review_queue(entity_type: str, entity_id: int, issue_type: str,
                          severity: str = 'warning', issue_detail: dict = None) -> dict:
     import json

@@ -106,7 +106,6 @@ export default function Contacts() {
 
   const isApollo = (src: string) => src === 'apollo' || src === 'apollo.io'
 
-  // Debounce search input — only fire API after 300 ms of no typing
   useEffect(() => {
     const t = setTimeout(() => setSearch(searchInput), 300)
     return () => clearTimeout(t)
@@ -128,8 +127,8 @@ export default function Contacts() {
       if (data.error) throw new Error(data.error)
       setTotal(data.total ?? 0)
       setContacts(Array.isArray(data.rows) ? data.rows : Array.isArray(data) ? data : [])
-    } catch (e: any) {
-      setError(e.message || 'Failed to load contacts')
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to load contacts')
     } finally {
       setLoading(false)
     }
@@ -149,7 +148,6 @@ export default function Contacts() {
   }
 
   useEffect(() => { load() }, [])
-  // Re-fetch when search changes (debounced)
   useEffect(() => { if (search !== undefined) load(search) }, [search])
 
   const filtered = contacts
@@ -199,8 +197,6 @@ export default function Contacts() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20, width: '100%', minWidth: 0 }}>
       <style>{`@keyframes spin { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }`}</style>
-
-      {/* Header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
         <div>
           <h1 style={{ fontSize: 20, fontWeight: 600, color: '#0f172a', margin: 0 }}>Contacts</h1>
@@ -240,8 +236,6 @@ export default function Contacts() {
           {error}
         </div>
       )}
-
-      {/* Filters */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
         <div style={{ position: 'relative', flex: '1 1 260px', maxWidth: 360 }}>
           <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#475569', pointerEvents: 'none' }} />
@@ -259,8 +253,6 @@ export default function Contacts() {
           ))}
         </div>
       </div>
-
-      {/* Table */}
       <div style={{ border: '1px solid #e2e8f0', borderRadius: 12, overflow: 'hidden' }}>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 700 }}>

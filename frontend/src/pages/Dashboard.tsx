@@ -50,7 +50,6 @@ export default function Dashboard() {
   const retryTimer  = useRef<ReturnType<typeof setInterval> | null>(null)
   const navigate    = useNavigate()
 
-  // ── fetch helpers ──────────────────────────────────────────────────────────
   const fetchStats = useCallback(async (silent = false) => {
     try {
       const res = await fetch('/api/dashboard', { headers: authH() })
@@ -128,7 +127,6 @@ export default function Dashboard() {
     }
   }
 
-  // ── polling — 30 s stats (cached server-side 60 s), 15 s log ────────────
   useEffect(() => {
     fetchStats(true)
     fetchLog()
@@ -137,7 +135,6 @@ export default function Dashboard() {
     return () => { clearInterval(si); clearInterval(li) }
   }, [fetchStats, fetchLog])
 
-  // ── countdown when offline ─────────────────────────────────────────────────
   useEffect(() => {
     if (backendState === 'offline' && !retryTimer.current) {
       setRetryIn(5)
@@ -160,7 +157,6 @@ export default function Dashboard() {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight
   }, [logs])
 
-  // ── derived ────────────────────────────────────────────────────────────────
   const badgeStyle = (state: BackendState) => ({
     fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 999,
     background: state === 'online'  ? 'rgba(16,185,129,0.12)'
@@ -199,8 +195,6 @@ export default function Dashboard() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24, width: '100%' }}>
-
-      {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div>
           <h1 style={{ fontSize: 20, fontWeight: 600, color: '#0f172a', margin: 0 }}>Control Panel</h1>
@@ -220,8 +214,6 @@ export default function Dashboard() {
           {refreshing ? 'Refreshing…' : 'Refresh All'}
         </button>
       </div>
-
-      {/* Offline banner — only after confirmed offline, never during initial load */}
       {backendState === 'offline' && (
         <div style={{ padding: '12px 16px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: 10, fontSize: 13, color: '#f87171', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <span>Backend unreachable. Ensure uvicorn is running on port 8000.</span>
@@ -230,8 +222,6 @@ export default function Dashboard() {
           </button>
         </div>
       )}
-
-      {/* KPI Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
         {kpis.map(k => (
           <div key={k.label} style={card}>
@@ -246,11 +236,7 @@ export default function Dashboard() {
           </div>
         ))}
       </div>
-
-      {/* Middle row */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, alignItems: 'start' }}>
-
-        {/* Engine Status */}
         <div style={card}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
             <span style={{ fontSize: 13, fontWeight: 600, color: '#0f172a' }}>Engine Status</span>
@@ -279,8 +265,6 @@ export default function Dashboard() {
             ))}
           </div>
         </div>
-
-        {/* Review Queue */}
         <div style={card}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
             <span style={{ fontSize: 13, fontWeight: 600, color: '#0f172a' }}>Review Queue</span>
@@ -318,8 +302,6 @@ export default function Dashboard() {
             </div>
           )}
         </div>
-
-        {/* Live Stats */}
         <div style={card}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
             <span style={{ fontSize: 13, fontWeight: 600, color: '#0f172a' }}>Live Stats</span>
@@ -337,8 +319,6 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
-
-      {/* System Log */}
       <div style={{ background: '#080c14', border: '1px solid #1f2d45', borderRadius: 12, overflow: 'hidden' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', borderBottom: '1px solid #1f2d45' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>

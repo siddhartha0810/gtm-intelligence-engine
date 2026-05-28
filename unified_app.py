@@ -30,7 +30,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
 
-# ── Path setup ─────────────────────────────────────────────────────────────
+# path setup
 BASE_DIR    = Path(__file__).parent
 ORACLE_DIR  = BASE_DIR / "oracle_intent_engine"
 ENRICH_DIR  = BASE_DIR / "lead_enrichment_engine"
@@ -52,13 +52,13 @@ from starlette.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-# ── Dotenv MUST load before oracle engine imports so JWT_SECRET and DB vars
+# Dotenv MUST load before oracle engine imports so JWT_SECRET and DB vars
 #    are in the environment when auth.py / database.py read them at import time.
 from dotenv import load_dotenv
 load_dotenv(BASE_DIR / "oracle_intent_engine"   / ".env")           # oracle DB vars + JWT_SECRET first
 load_dotenv(BASE_DIR / "lead_enrichment_engine" / ".env", override=False)  # enrichment vars
 
-# ── Oracle engine imports (after path setup) ────────────────────────────────
+# oracle engine imports (after path setup)
 from src import config as oracle_cfg
 from src import database as oracle_db
 from src import exporter as oracle_exporter
@@ -102,7 +102,7 @@ PG_MASTER_CONNECTION_STRING = os.getenv("PG_MASTER_CONNECTION_STRING", "").strip
 PG_INPUT_TABLE           = os.getenv("PG_INPUT_TABLE", "leads").strip()
 PG_OUTPUT_TABLE          = os.getenv("PG_OUTPUT_TABLE", "enriched_leads").strip()
 
-# ── Application lifespan ─────────────────────────────────────────────────────
+# application lifespan
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Initialise resources on startup; clean up on shutdown."""
@@ -125,10 +125,10 @@ async def lifespan(app: FastAPI):
     yield  # Application runs here
     # Shutdown — connection pools close automatically via psycopg2 GC
 
-# ── App ─────────────────────────────────────────────────────────────────────
+# app
 app = FastAPI(title="Oracle Intelligence Platform", lifespan=lifespan)
 
-# ── Logging ──────────────────────────────────────────────────────────────────
+# logging
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
@@ -145,7 +145,7 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type", "Accept"],
 )
 
-# ── Static file serving ──────────────────────────────────────────────────────
+# static file serving
 # Production: React build output at frontend/dist
 # Dev:        Vite runs on :5173 and proxies to us — no static mount needed
 REACT_DIST   = BASE_DIR / "frontend" / "dist"
@@ -153,7 +153,7 @@ STATIC_DIR   = ENRICH_DIR / "static"   # old unified.html (fallback)
 
 # SPA mount added at end of file after all API routes
 
-# ── PG Master contact count cache (remote host may be unreachable) ───────────
+# pg master contact count cache (remote host may be unreachable)
 _pg_master_cache: Dict[str, object] = {"contacts": 0, "ts": 0.0}
 _pg_master_lock = threading.Lock()
 
@@ -187,8 +187,7 @@ def _cached_pg_master_contacts() -> int:
     threading.Thread(target=_fetch, daemon=True).start()
     return _pg_master_cache["contacts"]  # type: ignore[return-value]
 
-
-# ── Oracle scan subprocess state ────────────────────────────────────────────
+# oracle scan subprocess state
 _SCAN_STATUS_FILE = BASE_DIR / "_scan_status.json"
 _SCAN_LOG_FILE    = BASE_DIR / "_scan_log.txt"
 _SCAN_PID_FILE    = BASE_DIR / "_scan_worker.pid"
@@ -199,7 +198,6 @@ _IDLE_STATUS = {
     "status": "idle", "progress": "",
     "run_id": None, "raw_signals": 0, "companies_found": 0,
 }
-
 
 def _scan_current_status() -> dict:
     try:
@@ -224,7 +222,6 @@ def _scan_current_status() -> dict:
         logger.warning("Failed to read scan status file", exc_info=True)
     return dict(_IDLE_STATUS)
 
-
 def _scan_get_log() -> list:
     try:
         if _SCAN_LOG_FILE.exists():
@@ -235,7 +232,6 @@ def _scan_get_log() -> list:
     except Exception:
         logger.warning("Failed to read scan log file", exc_info=True)
     return []
-
 
 def _start_scan_subprocess(sources: list, location: str, max_pages: int,
                            jde_manufacturing: bool = False) -> bool:
@@ -279,7 +275,6 @@ def _start_scan_subprocess(sources: list, location: str, max_pages: int,
         _SCAN_PID_FILE.write_text(str(_scan_proc.pid), encoding="utf-8")
         return True
 
-
 def _stop_scan_subprocess() -> None:
     global _scan_proc
     with _scan_proc_lock:
@@ -312,8 +307,7 @@ def _stop_scan_subprocess() -> None:
     except Exception:
         logger.warning("Failed to update scan status file after stop", exc_info=True)
 
-
-# ── Oracle enrichment subprocess state ──────────────────────────────────────
+# oracle enrichment subprocess state
 _ENRICH_STATUS_FILE = BASE_DIR / "_enrich_status.json"
 _ENRICH_LOG_FILE    = BASE_DIR / "_enrich_log.txt"
 _ENRICH_PID_FILE    = BASE_DIR / "_enrich_worker.pid"
@@ -325,7 +319,6 @@ _ENRICH_IDLE = {
     "companies_processed": 0, "companies_total": 0,
     "contacts_found": 0, "contacts_validated": 0,
 }
-
 
 def _enrich_current_status() -> dict:
     try:
@@ -343,7 +336,6 @@ def _enrich_current_status() -> dict:
         logger.warning("Failed to read enrich status file", exc_info=True)
     return dict(_ENRICH_IDLE)
 
-
 def _enrich_get_log() -> list:
     try:
         if _ENRICH_LOG_FILE.exists():
@@ -351,7 +343,6 @@ def _enrich_get_log() -> list:
     except Exception:
         logger.warning("Failed to read enrich log file", exc_info=True)
     return []
-
 
 def _start_enrich_subprocess(
     limit: int = 50,
@@ -403,7 +394,6 @@ def _start_enrich_subprocess(
         _ENRICH_PID_FILE.write_text(str(_enrich_proc.pid), encoding="utf-8")
         return True
 
-
 def _stop_enrich_subprocess() -> None:
     global _enrich_proc
 
@@ -441,26 +431,21 @@ def _stop_enrich_subprocess() -> None:
     except Exception:
         logger.warning("Failed to update enrich status file after stop", exc_info=True)
 
-
-# ── Shared job store (enrichment + prospect jobs) ───────────────────────────
+# shared job store (enrichment + prospect jobs)
 _jobs: Dict[str, dict] = {}
-
 
 def _cleanup_old_jobs(keep: int = 10) -> None:
     done = [jid for jid, j in _jobs.items() if j["status"] in ("done", "error", "cancelled")]
     for jid in done[:-keep]:
         _jobs.pop(jid, None)
 
-
 def _running_jobs() -> list:
     return [jid for jid, j in _jobs.items() if j["status"] == "running"]
-
 
 def _make_job() -> tuple[str, queue.Queue]:
     jid = str(uuid.uuid4())[:8]
     q: queue.Queue = queue.Queue()
     return jid, q
-
 
 def _launch_subprocess(cmd: list, cwd: Path, env: dict, job_id: str, q: queue.Queue):
     proc = subprocess.Popen(
@@ -488,23 +473,18 @@ def _launch_subprocess(cmd: list, cwd: Path, env: dict, job_id: str, q: queue.Qu
     threading.Thread(target=_read, args=(proc, q), daemon=True).start()
     return proc
 
-
-# ═══════════════════════════════════════════════════════════════════════════
+# ---
 # ROOT — serve React app (production) or redirect to Vite (dev)
-# ═══════════════════════════════════════════════════════════════════════════
-
+# ---
 def _react_index() -> HTMLResponse:
     """Return the React index.html, falling back to old unified.html."""
     if REACT_DIST.exists():
         return HTMLResponse((REACT_DIST / "index.html").read_text(encoding="utf-8"))
     return HTMLResponse((STATIC_DIR / "unified.html").read_text(encoding="utf-8"))
 
-
-
-# ═══════════════════════════════════════════════════════════════════════════
+# ---
 # SHARED: SSE STREAM + STATUS + CANCEL
-# ═══════════════════════════════════════════════════════════════════════════
-
+# ---
 @app.get("/stream/{job_id}")
 async def stream_output(job_id: str):
     if job_id not in _jobs:
@@ -532,14 +512,12 @@ async def stream_output(job_id: str):
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
 
-
 @app.get("/status/{job_id}")
 async def get_status(job_id: str):
     if job_id not in _jobs:
         return {"status": "not_found"}
     j = _jobs[job_id]
     return {"status": j["status"], "exit_code": j.get("exit_code")}
-
 
 @app.post("/cancel/{job_id}")
 async def cancel_job(job_id: str):
@@ -551,11 +529,9 @@ async def cancel_job(job_id: str):
         _jobs[job_id]["status"] = "cancelled"
     return {"status": "cancelled"}
 
-
-# ═══════════════════════════════════════════════════════════════════════════
+# ---
 # ORACLE INTENT — scan control
-# ═══════════════════════════════════════════════════════════════════════════
-
+# ---
 @app.get("/oracle/config")
 async def oracle_config(current_user: dict = Depends(oracle_auth.require_user)):
     try:
@@ -564,7 +540,6 @@ async def oracle_config(current_user: dict = Depends(oracle_auth.require_user)):
     except Exception:
         db_ok = False
     return {"db_ok": db_ok}
-
 
 @app.post("/scan/start")
 async def start_scan(request: Request, current_user: dict = Depends(oracle_auth.require_analyst)):
@@ -586,27 +561,22 @@ async def start_scan(request: Request, current_user: dict = Depends(oracle_auth.
         return JSONResponse({"error": "Scan already running."}, status_code=409)
     return {"message": "Scan started.", "sources": sources, "jde_manufacturing": jde_manufacturing}
 
-
 @app.get("/scan/status")
 async def scan_status(current_user: dict = Depends(oracle_auth.require_user)):
     return _scan_current_status()
-
 
 @app.post("/scan/stop")
 async def stop_scan(current_user: dict = Depends(oracle_auth.require_analyst)):
     _stop_scan_subprocess()
     return {"message": "Stop signal sent."}
 
-
 @app.get("/scan/log")
 async def scan_log(current_user: dict = Depends(oracle_auth.require_user)):
     return _scan_get_log()
 
-
-# ═══════════════════════════════════════════════════════════════════════════
+# ---
 # ORACLE INTENT — data / companies
-# ═══════════════════════════════════════════════════════════════════════════
-
+# ---
 def _annotate_and_sort(companies: list) -> list:
     from src import lead_scorer
     for c in companies:
@@ -614,18 +584,15 @@ def _annotate_and_sort(companies: list) -> list:
     companies.sort(key=lambda c: c.get("priority_score", 0), reverse=True)
     return companies
 
-
-# ── In-process TTL cache for /api/companies ──────────────────────────────────
+# in-process ttl cache for /api/companies
 # Key: show_all (0 or 1).  Value: (timestamp, list[dict]).
 # TTL: 60 s — keeps the page instant on repeated visits / tab switches.
 # Invalidated automatically by _invalidate_companies_cache() on writes.
 _companies_cache: Dict[int, tuple] = {}
 _COMPANIES_CACHE_TTL = 60  # seconds
 
-
 def _invalidate_companies_cache() -> None:
     _companies_cache.clear()
-
 
 @app.get("/api/companies")
 async def api_companies(
@@ -646,7 +613,7 @@ async def api_companies(
         page_limit = min(limit, 500) if limit > 0 else 500
 
         with oracle_db.db_cursor(commit=False) as cur:
-            # ── Build WHERE clause ────────────────────────────────────────────
+
             conditions: List[str] = []
             params: List = []
 
@@ -664,11 +631,9 @@ async def api_companies(
 
             where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
 
-            # ── Total count (fast — indexed) ──────────────────────────────────
             cur.execute(f"SELECT COUNT(*) AS n FROM companies c {where}", params)
             total = cur.fetchone()["n"]
 
-            # ── Page of company IDs ordered by denormalized signal_count ──────
             cur.execute(
                 f"""SELECT c.id FROM companies c {where}
                     ORDER BY c.signal_count DESC, c.last_updated DESC
@@ -680,7 +645,6 @@ async def api_companies(
             if not page_ids:
                 return JSONResponse({"total": total, "offset": offset, "limit": page_limit, "rows": []})
 
-            # ── Signal details only for page IDs ──────────────────────────────
             cur.execute("""
                 SELECT company_id,
                        STRING_AGG(DISTINCT oracle_product, ',') AS products,
@@ -695,7 +659,6 @@ async def api_companies(
             """, (page_ids,))
             sig_map = {r["company_id"]: r for r in cur.fetchall()}
 
-            # ── Full company rows for page IDs ────────────────────────────────
             cur.execute("""
                 SELECT c.id, c.name, c.domain, c.industry, c.size, c.location, c.website,
                        c.target_product, c.status, c.source AS import_source,
@@ -706,7 +669,6 @@ async def api_companies(
             """, (page_ids,))
             co_map = {r["id"]: dict(r) for r in cur.fetchall()}
 
-        # ── Assemble results in sort order ────────────────────────────────────
         rows = []
         for cid in page_ids:
             co = co_map.get(cid)
@@ -736,7 +698,6 @@ async def api_companies(
         logger.exception("Unhandled error in GET /api/companies")
         return JSONResponse({"error": str(e)}, status_code=500)
 
-
 @app.get("/api/stats")
 async def api_stats(show_all: int = 0, current_user: dict = Depends(oracle_auth.require_user)):
     run_id = 0 if show_all else None
@@ -765,11 +726,9 @@ async def api_stats(show_all: int = 0, current_user: dict = Depends(oracle_auth.
         "phase_colors":    PHASE_COLORS,
     }
 
-
 @app.get("/api/company/{company_id}/signals")
 async def api_company_signals(company_id: int, current_user: dict = Depends(oracle_auth.require_user)):
     return JSONResponse(jsonable_encoder([dict(s) for s in oracle_db.get_signals_for_company(company_id)]))
-
 
 @app.get("/api/company/{company_id}/contacts")
 async def api_company_contacts(company_id: int, current_user: dict = Depends(oracle_auth.require_user)):
@@ -782,7 +741,7 @@ async def api_company_contacts(company_id: int, current_user: dict = Depends(ora
     if rows:
         return JSONResponse(rows)
 
-    # ── Fallback: pull from master_leads ─────────────────────────────────────
+    # fallback: pull from master_leads
     company = oracle_db.get_company_by_id(company_id)
     if not company:
         return JSONResponse([])
@@ -841,7 +800,6 @@ async def api_company_contacts(company_id: int, current_user: dict = Depends(ora
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
 
-
 @app.post("/api/company/{company_id}/contacts/enrich")
 async def api_enrich_contacts(company_id: int, current_user: dict = Depends(oracle_auth.require_analyst)):
     """Enrich contacts for a company.
@@ -860,7 +818,7 @@ async def api_enrich_contacts(company_id: int, current_user: dict = Depends(orac
     domain = (company.get("domain") or "").strip().lower() or \
              oracle_contact_finder.infer_domain(cname)
 
-    # ── Step 1: pull from master_leads ───────────────────────────────────────
+    # step 1: pull from master_leads
     imported = 0
     try:
         with oracle_db.db_cursor(commit=False) as cur:
@@ -911,7 +869,7 @@ async def api_enrich_contacts(company_id: int, current_user: dict = Depends(orac
         return {"contacts": [], "count": imported,
                 "message": f"Imported {imported} contacts from master database"}
 
-    # ── Step 2: external contact finder ──────────────────────────────────────
+    # step 2: external contact finder
     try:
         contacts = oracle_contact_finder.find_contacts(cname, domain)
         oracle_db.save_contacts(company_id, contacts)
@@ -920,8 +878,7 @@ async def api_enrich_contacts(company_id: int, current_user: dict = Depends(orac
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
 
-
-# ── Bulk enrich ───────────────────────────────────────────────────────────────
+# bulk enrich
 _bulk_enrich_state: Dict[str, object] = {"running": False, "done": 0, "total": 0, "errors": 0}
 
 def _bulk_enrich_worker(company_ids: list):
@@ -971,7 +928,6 @@ def _bulk_enrich_worker(company_ids: list):
         _bulk_enrich_state["done"] = _bulk_enrich_state["done"] + 1
     _bulk_enrich_state["running"] = False
 
-
 @app.post("/api/companies/bulk-enrich")
 async def api_bulk_enrich(request: Request, current_user: dict = Depends(oracle_auth.require_analyst)):
     body = await request.json()
@@ -984,22 +940,18 @@ async def api_bulk_enrich(request: Request, current_user: dict = Depends(oracle_
     t.start()
     return {"message": f"Bulk enrichment started for {len(company_ids)} companies", "total": len(company_ids)}
 
-
 @app.get("/api/companies/bulk-enrich/progress")
 async def api_bulk_enrich_progress(current_user: dict = Depends(oracle_auth.require_user)):
     return dict(_bulk_enrich_state)
 
-
-# ═══════════════════════════════════════════════════════════════════════════
+# ---
 # ORACLE INTENT — admin
-# ═══════════════════════════════════════════════════════════════════════════
-
+# ---
 @app.post("/admin/purge-invalid")
 async def purge_invalid(current_user: dict = Depends(oracle_auth.require_admin)):
     count = oracle_db.purge_invalid_companies(is_valid_company_name)
     log_audit(current_user, "purge_invalid", "system", "", new_value={"deleted": count})
     return {"deleted": count, "message": f"Purged {count} invalid company names."}
-
 
 @app.post("/admin/reset-all")
 async def reset_all(current_user: dict = Depends(oracle_auth.require_admin)):
@@ -1007,11 +959,9 @@ async def reset_all(current_user: dict = Depends(oracle_auth.require_admin)):
     log_audit(current_user, "reset_all", "system", "")
     return {"message": "All data cleared. Ready for a fresh scan."}
 
-
-# ═══════════════════════════════════════════════════════════════════════════
+# ---
 # ORACLE INTENT — export
-# ═══════════════════════════════════════════════════════════════════════════
-
+# ---
 def _companies_to_export_format(db_rows) -> list:
     result = []
     for row in db_rows:
@@ -1038,13 +988,11 @@ def _companies_to_export_format(db_rows) -> list:
         })
     return result
 
-
 @app.get("/export/csv")
 async def export_csv(current_user: dict = Depends(oracle_auth.require_analyst)):
     companies = oracle_db.get_all_companies_with_signals()
     path = oracle_exporter.export_csv(_companies_to_export_format(companies))
     return FileResponse(path, filename=os.path.basename(path), media_type="text/csv")
-
 
 @app.get("/export/excel")
 async def export_excel(current_user: dict = Depends(oracle_auth.require_analyst)):
@@ -1052,7 +1000,6 @@ async def export_excel(current_user: dict = Depends(oracle_auth.require_analyst)
     path = oracle_exporter.export_excel(_companies_to_export_format(companies))
     return FileResponse(path, filename=os.path.basename(path),
                         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-
 
 @app.get("/export/excel/all")
 async def export_excel_all(current_user: dict = Depends(oracle_auth.require_analyst)):
@@ -1062,7 +1009,6 @@ async def export_excel_all(current_user: dict = Depends(oracle_auth.require_anal
     return FileResponse(path, filename=os.path.basename(path),
                         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
-
 @app.get("/export/csv/all")
 async def export_csv_all(current_user: dict = Depends(oracle_auth.require_analyst)):
     companies = oracle_db.get_all_companies_with_signals(run_id=0)
@@ -1070,11 +1016,9 @@ async def export_csv_all(current_user: dict = Depends(oracle_auth.require_analys
     path = oracle_exporter.export_csv(_companies_to_export_format(companies), filename=filename)
     return FileResponse(path, filename=os.path.basename(path), media_type="text/csv")
 
-
-# ═══════════════════════════════════════════════════════════════════════════
+# ---
 # LEAD ENRICHMENT — config / upload / run / results / download
-# ═══════════════════════════════════════════════════════════════════════════
-
+# ---
 @app.get("/config")
 async def get_config(current_user: dict = Depends(oracle_auth.require_user)):
     return {
@@ -1085,7 +1029,6 @@ async def get_config(current_user: dict = Depends(oracle_auth.require_user)):
         "zb_key":         bool(ZEROBOUNCE_API_KEY),
         "apify_ready":    bool(APIFY_TOKEN and APIFY_LINKEDIN_ACTOR_ID and APIFY_EMAIL_ACTOR_ID),
     }
-
 
 @app.get("/config/status")
 async def config_status(current_user: dict = Depends(oracle_auth.require_user)):
@@ -1154,7 +1097,6 @@ async def config_status(current_user: dict = Depends(oracle_auth.require_user)):
     )
     return {"hubspot": hs, "apollo": ap, "zerobounce": zb, "apify": af}
 
-
 @app.post("/config/test/{service}")
 async def config_test(service: str, request: Request,
                       current_user: dict = Depends(oracle_auth.require_admin)):
@@ -1207,7 +1149,6 @@ async def config_test(service: str, request: Request,
     except Exception as e:
         return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
 
-
 @app.post("/config/save/{service}")
 async def config_save(service: str, request: Request,
                       current_user: dict = Depends(oracle_auth.require_admin)):
@@ -1256,7 +1197,6 @@ async def config_save(service: str, request: Request,
 
     return {"ok": True, "message": f"{service} key saved and active"}
 
-
 @app.post("/upload")
 async def upload_csv(file: UploadFile = File(...),
                      current_user: dict = Depends(oracle_auth.require_analyst)):
@@ -1271,7 +1211,6 @@ async def upload_csv(file: UploadFile = File(...),
     else:
         row_count = "?"
     return {"filename": file.filename, "rows": row_count, "saved_as": str(dest)}
-
 
 @app.post("/run")
 async def run_pipeline(
@@ -1305,7 +1244,6 @@ async def run_pipeline(
     _launch_subprocess(cmd, cwd=ENRICH_DIR, env=env, job_id=job_id, q=q)
     return {"job_id": job_id}
 
-
 @app.get("/api/leads")
 async def get_leads(current_user: dict = Depends(oracle_auth.require_analyst)):
     path = ENRICH_DIR / "output" / "final_outreach_ready.csv"
@@ -1317,9 +1255,7 @@ async def get_leads(current_user: dict = Depends(oracle_auth.require_analyst)):
     cols = [c for c in cols if c in df.columns]
     return JSONResponse(df[cols].to_dict("records"))
 
-
 _ALLOWED_DOWNLOADS = {"final_outreach_ready.csv", "audit_log.csv", "vendor_performance.csv"}
-
 
 @app.get("/download/{filename}")
 async def download_file(filename: str, current_user: dict = Depends(oracle_auth.require_analyst)):
@@ -1330,15 +1266,12 @@ async def download_file(filename: str, current_user: dict = Depends(oracle_auth.
         return JSONResponse({"error": "File not ready — run the pipeline first"}, status_code=404)
     return FileResponse(path, filename=filename, media_type="text/csv")
 
-
-# ═══════════════════════════════════════════════════════════════════════════
+# ---
 # PROSPECT — estimate / run / db-search / status / results / download
-# ═══════════════════════════════════════════════════════════════════════════
-
+# ---
 # In-memory store for the last prospect result set (single-user tool)
 _prospect_results: list = []
 _prospect_stats: dict   = {}
-
 
 def _load_prospect_results(job_id: str):
     """After prospect subprocess exits, read its JSON output into memory."""
@@ -1357,7 +1290,6 @@ def _load_prospect_results(job_id: str):
         result_path.unlink(missing_ok=True)
     except Exception:
         logger.exception("Failed to load prospect results for job_id=%s", job_id)
-
 
 @app.post("/prospect/estimate")
 async def prospect_estimate(request: Request, current_user: dict = Depends(oracle_auth.require_analyst)):
@@ -1386,7 +1318,6 @@ async def prospect_estimate(request: Request, current_user: dict = Depends(oracl
         "apollo_credits": apollo_needed,
         "est_seconds":    round(est_seconds),
     }
-
 
 @app.post("/prospect/db-search")
 async def prospect_db_search(request: Request, current_user: dict = Depends(oracle_auth.require_analyst)):
@@ -1478,7 +1409,6 @@ async def prospect_db_search(request: Request, current_user: dict = Depends(orac
         "contacts":         all_contacts,
     }
 
-
 @app.post("/prospect/run")
 async def prospect_run(request: Request, current_user: dict = Depends(oracle_auth.require_analyst)):
     """Launch Apollo prospecting as a subprocess; returns job_id for SSE streaming."""
@@ -1535,7 +1465,6 @@ async def prospect_run(request: Request, current_user: dict = Depends(oracle_aut
     _launch_subprocess(cmd, cwd=BASE_DIR, env=env, job_id=job_id, q=q)
     return {"job_id": job_id}
 
-
 @app.get("/prospect/status/{job_id}")
 async def prospect_status(job_id: str, current_user: dict = Depends(oracle_auth.require_user)):
     if job_id not in _jobs:
@@ -1547,13 +1476,11 @@ async def prospect_status(job_id: str, current_user: dict = Depends(oracle_auth.
         "contacts": j.get("contacts", 0),
     }
 
-
 @app.get("/prospect/results")
 async def prospect_results(current_user: dict = Depends(oracle_auth.require_analyst)):
     if not _prospect_results:
         return JSONResponse({"error": "No prospect results yet — run a search first"}, status_code=404)
     return JSONResponse(_prospect_results)
-
 
 @app.get("/prospect/download/csv")
 async def prospect_download_csv(current_user: dict = Depends(oracle_auth.require_analyst)):
@@ -1572,7 +1499,6 @@ async def prospect_download_csv(current_user: dict = Depends(oracle_auth.require
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
-
 @app.get("/prospect/download/excel")
 async def prospect_download_excel(current_user: dict = Depends(oracle_auth.require_analyst)):
     if not _prospect_results:
@@ -1588,19 +1514,15 @@ async def prospect_download_excel(current_user: dict = Depends(oracle_auth.requi
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
-
-# ═══════════════════════════════════════════════════════════════════════════
+# ---
 # DASHBOARD — combined stats for the React frontend
-# ═══════════════════════════════════════════════════════════════════════════
-
-# ── Dashboard TTL cache — 60 s so 5-s polling never hits the DB ────────────
+# ---
+# dashboard ttl cache — 60 s so 5-s polling never hits the db
 _dashboard_cache: Dict[str, object] = {}
 _DASHBOARD_TTL = 60  # seconds
 
-
 def _invalidate_dashboard_cache() -> None:
     _dashboard_cache.clear()
-
 
 def _fetch_dashboard_stats() -> dict:
     """Run all dashboard queries in a SINGLE connection, using fast subqueries."""
@@ -1648,7 +1570,6 @@ def _fetch_dashboard_stats() -> dict:
         pushed_to_hubspot=pushed_to_hubspot,
     )
 
-
 @app.get("/api/dashboard")
 async def api_dashboard(current_user: dict = Depends(oracle_auth.require_user)):
     """Single endpoint that powers the Dashboard page KPI cards.
@@ -1672,7 +1593,6 @@ async def api_dashboard(current_user: dict = Depends(oracle_auth.require_user)):
         "researching":       stats["researching"],
         "scan_status":       _scan_current_status(),
     }
-
 
 @app.get("/api/contacts")
 async def api_contacts(
@@ -1740,13 +1660,11 @@ async def api_contacts(
         logger.exception("Unhandled error in GET /api/contacts")
         return JSONResponse({"error": str(e)}, status_code=500)
 
-
-# ═══════════════════════════════════════════════════════════════════════════
+# ---
 # STARTUP
-# ═══════════════════════════════════════════════════════════════════════════
+# ---
 # SIGNALS  /  REVIEW QUEUE  /  REPORTING
-# ═══════════════════════════════════════════════════════════════════════════
-
+# ---
 @app.get("/api/signals")
 async def api_signals(limit: int = 200, current_user: dict = Depends(oracle_auth.require_user)):
     """All Oracle intent signals with company name, newest first."""
@@ -1768,7 +1686,6 @@ async def api_signals(limit: int = 200, current_user: dict = Depends(oracle_auth
         logger.exception("Unhandled error in GET /api/signals")
         return JSONResponse({"error": str(e)}, status_code=500)
 
-
 @app.post("/api/contacts/push-hubspot")
 async def push_contact_to_hubspot_endpoint(
     request: Request,
@@ -1789,7 +1706,6 @@ async def push_contact_to_hubspot_endpoint(
         log_audit(current_user, "push_to_hubspot", "contact", str(body.get("id","")),
                   new_value={"hubspot_id": result.get("hubspot_id"), "action": result.get("action")})
     return result
-
 
 @app.get("/api/reporting")
 async def api_reporting(current_user: dict = Depends(oracle_auth.require_user)):
@@ -1820,9 +1736,7 @@ async def api_reporting(current_user: dict = Depends(oracle_auth.require_user)):
         "scan_runs": [dict(r) for r in scan_runs],
     }
 
-
-# ─── Enrichment endpoints ────────────────────────────────────────────────────
-
+# enrichment endpoints
 @app.get("/api/enrich/preflight")
 async def enrich_preflight(current_user: dict = Depends(oracle_auth.require_analyst)):
     """
@@ -1888,7 +1802,6 @@ async def enrich_preflight(current_user: dict = Depends(oracle_auth.require_anal
         logger.exception("Unhandled error in GET /api/enrich/preflight")
         return JSONResponse({"error": str(e)}, status_code=500)
 
-
 @app.post("/api/enrich/start")
 async def enrich_start(request: Request, current_user: dict = Depends(oracle_auth.require_analyst)):
     """Launch the Apollo enrichment subprocess for companies without contacts."""
@@ -1918,22 +1831,18 @@ async def enrich_start(request: Request, current_user: dict = Depends(oracle_aut
     return {"started": True, "limit": limit, "max_per_company": max_per_company,
             "batch_size": batch_size, "role_filters_count": len(role_filters) if role_filters else 0}
 
-
 @app.post("/api/enrich/stop")
 async def enrich_stop(current_user: dict = Depends(oracle_auth.require_analyst)):
     _stop_enrich_subprocess()
     return {"stopped": True}
 
-
 @app.get("/api/enrich/status")
 async def enrich_status(current_user: dict = Depends(oracle_auth.require_user)):
     return _enrich_current_status()
 
-
 @app.get("/api/enrich/log")
 async def enrich_log(current_user: dict = Depends(oracle_auth.require_user)):
     return _enrich_get_log()
-
 
 @app.get("/api/enrich/stats")
 async def enrich_stats(current_user: dict = Depends(oracle_auth.require_user)):
@@ -1949,13 +1858,10 @@ async def enrich_stats(current_user: dict = Depends(oracle_auth.require_user)):
         logger.exception("Unhandled error in GET /api/enrich/stats")
         return {"error": str(e)}
 
-
-# ═══════════════════════════════════════════════════════════════════════════
-
-# ═══════════════════════════════════════════════════════════════════════════
+# ---
+# ---
 # AUTH / RBAC
-# ═══════════════════════════════════════════════════════════════════════════
-
+# ---
 @app.post("/api/auth/register")
 async def auth_register(request: Request):
     """Create a new user. First user ever becomes owner automatically."""
@@ -1972,7 +1878,6 @@ async def auth_register(request: Request):
     token = oracle_auth.create_token(user["id"], user["email"], user["role"])
     return {"token": token, "user": {k: v for k, v in user.items() if k != "password_hash"}}
 
-
 @app.post("/api/auth/login")
 async def auth_login(request: Request):
     data     = await request.json()
@@ -1986,14 +1891,12 @@ async def auth_login(request: Request):
     safe  = {k: v for k, v in user.items() if k != "password_hash"}
     return {"token": token, "user": safe}
 
-
 @app.get("/api/auth/me")
 async def auth_me(current_user: dict = Depends(oracle_auth.require_user)):
     user = oracle_auth.get_user_by_id(current_user["id"])
     if not user:
         return JSONResponse({"error": "User not found"}, status_code=404)
     return {k: v for k, v in user.items() if k != "password_hash"}
-
 
 @app.post("/api/auth/change-password")
 async def auth_change_password(request: Request,
@@ -2010,15 +1913,12 @@ async def auth_change_password(request: Request,
     log_audit(current_user, "change_password", "user", str(current_user["id"]))
     return {"ok": True}
 
-
-# ═══════════════════════════════════════════════════════════════════════════
+# ---
 # USER MANAGEMENT  (admin / owner only)
-# ═══════════════════════════════════════════════════════════════════════════
-
+# ---
 @app.get("/api/users")
 async def list_users(current_user: dict = Depends(oracle_auth.require_admin)):
     return oracle_auth.list_users()
-
 
 @app.patch("/api/users/{user_id}")
 async def update_user(user_id: int, request: Request,
@@ -2027,7 +1927,6 @@ async def update_user(user_id: int, request: Request,
     updated = oracle_auth.update_user(user_id, data)
     log_audit(current_user, "update_user", "user", str(user_id), new_value=data)
     return updated
-
 
 @app.delete("/api/users/{user_id}")
 async def deactivate_user(user_id: int,
@@ -2038,11 +1937,9 @@ async def deactivate_user(user_id: int,
     log_audit(current_user, "deactivate_user", "user", str(user_id))
     return {"ok": True}
 
-
-# ═══════════════════════════════════════════════════════════════════════════
+# ---
 # AUDIT LOGS
-# ═══════════════════════════════════════════════════════════════════════════
-
+# ---
 @app.get("/api/audit-logs")
 async def api_audit_logs(
     entity_type: str = "", entity_id: str = "",
@@ -2052,15 +1949,12 @@ async def api_audit_logs(
 ):
     return get_audit_logs(entity_type, entity_id, user_email, action, limit, offset)
 
-
-# ═══════════════════════════════════════════════════════════════════════════
+# ---
 # TECHNOLOGY PROFILES
-# ═══════════════════════════════════════════════════════════════════════════
-
+# ---
 @app.get("/api/technology-profiles")
 async def api_list_profiles(active_only: bool = False):
     return tp_mod.list_profiles(active_only=active_only)
-
 
 @app.get("/api/technology-profiles/{profile_id}")
 async def api_get_profile(profile_id: int):
@@ -2068,7 +1962,6 @@ async def api_get_profile(profile_id: int):
     if not p:
         return JSONResponse({"error": "Not found"}, status_code=404)
     return p
-
 
 @app.post("/api/technology-profiles")
 async def api_create_profile(request: Request,
@@ -2081,7 +1974,6 @@ async def api_create_profile(request: Request,
     log_audit(current_user, "create", "technology_profile", str(profile["id"]), new_value=data)
     return profile
 
-
 @app.patch("/api/technology-profiles/{profile_id}")
 async def api_update_profile(profile_id: int, request: Request,
                                current_user: dict = Depends(oracle_auth.require_analyst)):
@@ -2090,7 +1982,6 @@ async def api_update_profile(profile_id: int, request: Request,
     log_audit(current_user, "update", "technology_profile", str(profile_id), new_value=data)
     return updated
 
-
 @app.delete("/api/technology-profiles/{profile_id}")
 async def api_delete_profile(profile_id: int,
                                current_user: dict = Depends(oracle_auth.require_admin)):
@@ -2098,13 +1989,10 @@ async def api_delete_profile(profile_id: int,
     log_audit(current_user, "delete", "technology_profile", str(profile_id))
     return {"ok": True}
 
-
-# ── Product Taxonomy ─────────────────────────────────────────────────────────
-
+# product taxonomy
 @app.get("/api/technology-profiles/{profile_id}/taxonomy")
 async def api_list_taxonomy(profile_id: int):
     return tp_mod.list_taxonomy(profile_id)
-
 
 @app.post("/api/technology-profiles/{profile_id}/taxonomy")
 async def api_create_taxonomy(profile_id: int, request: Request,
@@ -2120,7 +2008,6 @@ async def api_create_taxonomy(profile_id: int, request: Request,
     log_audit(current_user, "create", "product_taxonomy", str(row["id"]), new_value=data)
     return row
 
-
 @app.patch("/api/taxonomy/{taxonomy_id}")
 async def api_update_taxonomy(taxonomy_id: int, request: Request,
                                current_user: dict = Depends(oracle_auth.require_analyst)):
@@ -2129,7 +2016,6 @@ async def api_update_taxonomy(taxonomy_id: int, request: Request,
     log_audit(current_user, "update", "product_taxonomy", str(taxonomy_id), new_value=data)
     return updated
 
-
 @app.delete("/api/taxonomy/{taxonomy_id}")
 async def api_delete_taxonomy(taxonomy_id: int,
                                current_user: dict = Depends(oracle_auth.require_admin)):
@@ -2137,15 +2023,12 @@ async def api_delete_taxonomy(taxonomy_id: int,
     log_audit(current_user, "delete", "product_taxonomy", str(taxonomy_id))
     return {"ok": True}
 
-
-# ═══════════════════════════════════════════════════════════════════════════
+# ---
 # EVENTS INTELLIGENCE
-# ═══════════════════════════════════════════════════════════════════════════
-
+# ---
 @app.get("/api/events")
 async def api_list_events(profile_id: int = 0, limit: int = 100):
     return events_mod.list_events(profile_id or None, limit)
-
 
 @app.post("/api/events")
 async def api_create_event(request: Request,
@@ -2157,7 +2040,6 @@ async def api_create_event(request: Request,
     log_audit(current_user, "create", "event", str(event["id"]), new_value=data)
     return event
 
-
 @app.patch("/api/events/{event_id}")
 async def api_update_event(event_id: int, request: Request,
                             current_user: dict = Depends(oracle_auth.require_analyst)):
@@ -2166,7 +2048,6 @@ async def api_update_event(event_id: int, request: Request,
     log_audit(current_user, "update", "event", str(event_id), new_value=data)
     return updated
 
-
 @app.delete("/api/events/{event_id}")
 async def api_delete_event(event_id: int,
                             current_user: dict = Depends(oracle_auth.require_admin)):
@@ -2174,11 +2055,9 @@ async def api_delete_event(event_id: int,
     log_audit(current_user, "delete", "event", str(event_id))
     return {"ok": True}
 
-
 @app.get("/api/events/{event_id}/attendees")
 async def api_event_attendees(event_id: int):
     return events_mod.list_attendees(event_id)
-
 
 @app.post("/api/events/{event_id}/attendees")
 async def api_add_attendee(event_id: int, request: Request,
@@ -2189,22 +2068,18 @@ async def api_add_attendee(event_id: int, request: Request,
               new_value={"contact_id": data["contact_id"]})
     return row
 
-
 @app.delete("/api/events/{event_id}/attendees/{contact_id}")
 async def api_remove_attendee(event_id: int, contact_id: int,
                                current_user: dict = Depends(oracle_auth.require_analyst)):
     events_mod.remove_attendee(event_id, contact_id)
     return {"ok": True}
 
-
-# ═══════════════════════════════════════════════════════════════════════════
+# ---
 # MANUFACTURER INTELLIGENCE
-# ═══════════════════════════════════════════════════════════════════════════
-
+# ---
 @app.get("/api/manufacturer-contacts")
 async def api_list_mfr(profile_id: int = 0, limit: int = 200):
     return mfr_mod.list_manufacturer_contacts(profile_id or None, limit)
-
 
 @app.post("/api/manufacturer-contacts")
 async def api_create_mfr(request: Request,
@@ -2214,7 +2089,6 @@ async def api_create_mfr(request: Request,
     log_audit(current_user, "create", "manufacturer_contact", str(contact["id"]), new_value=data)
     return contact
 
-
 @app.patch("/api/manufacturer-contacts/{contact_id}")
 async def api_update_mfr(contact_id: int, request: Request,
                           current_user: dict = Depends(oracle_auth.require_analyst)):
@@ -2223,7 +2097,6 @@ async def api_update_mfr(contact_id: int, request: Request,
     log_audit(current_user, "update", "manufacturer_contact", str(contact_id), new_value=data)
     return updated
 
-
 @app.delete("/api/manufacturer-contacts/{contact_id}")
 async def api_delete_mfr(contact_id: int,
                           current_user: dict = Depends(oracle_auth.require_admin)):
@@ -2231,13 +2104,11 @@ async def api_delete_mfr(contact_id: int,
     log_audit(current_user, "delete", "manufacturer_contact", str(contact_id))
     return {"ok": True}
 
-
 @app.post("/api/manufacturer-contacts/{contact_id}/link/{company_id}")
 async def api_link_mfr(contact_id: int, company_id: int, request: Request,
                         current_user: dict = Depends(oracle_auth.require_analyst)):
     data = await request.json()
     return mfr_mod.link_to_company(contact_id, company_id, data.get("link_type", "partner"))
-
 
 @app.delete("/api/manufacturer-contacts/{contact_id}/link/{company_id}")
 async def api_unlink_mfr(contact_id: int, company_id: int,
@@ -2245,22 +2116,18 @@ async def api_unlink_mfr(contact_id: int, company_id: int,
     mfr_mod.unlink_from_company(contact_id, company_id)
     return {"ok": True}
 
-
 @app.get("/api/companies/{company_id}/manufacturer-contacts")
 async def api_company_mfr(company_id: int):
     return mfr_mod.get_company_manufacturer_contacts(company_id)
 
-
-# ═══════════════════════════════════════════════════════════════════════════
+# ---
 # LIST IMPORT
-# ═══════════════════════════════════════════════════════════════════════════
-
+# ---
 @app.get("/api/import/fields/{entity_type}")
 async def api_import_fields(entity_type: str):
     raw = import_mod._FIELD_LISTS.get(entity_type.lower(), [])
     fields = [{"value": f["key"], "label": f["label"], "required": f.get("required", False)} for f in raw]
     return {"fields": fields}
-
 
 @app.post("/api/import/parse-headers")
 async def api_parse_headers(
@@ -2269,7 +2136,6 @@ async def api_parse_headers(
 ):
     content = await file.read()
     return import_mod.parse_csv_headers(content, entity_type.lower())
-
 
 @app.post("/api/import/upload")
 async def api_import_upload(
@@ -2302,16 +2168,13 @@ async def api_import_upload(
     result = import_mod.process_import(content, entity_type, mappings_dict, batch["id"], default_product=default_product)
     return {"batch_id": batch["id"], **result}
 
-
 @app.get("/api/import/batches")
 async def api_import_batches(limit: int = 50):
     return import_mod.list_batches(limit)
 
-
 @app.get("/api/import/templates")
 async def api_import_templates(entity_type: str = ""):
     return import_mod.list_templates(entity_type)
-
 
 @app.post("/api/import/templates")
 async def api_save_template(request: Request,
@@ -2321,31 +2184,26 @@ async def api_save_template(request: Request,
         data["name"], data["entity_type"], data["mappings"], current_user["id"]
     )
 
-
 @app.delete("/api/import/templates/{template_id}")
 async def api_delete_template(template_id: int,
                                current_user: dict = Depends(oracle_auth.require_analyst)):
     import_mod.delete_template(template_id)
     return {"ok": True}
 
-
-# ═══════════════════════════════════════════════════════════════════════════
+# ---
 # DATA QUALITY ENGINE
-# ═══════════════════════════════════════════════════════════════════════════
-
+# ---
 @app.post("/api/dqe/check/company")
 async def api_dqe_company(request: Request):
     data   = await request.json()
     issues = dqe_mod.run_dqe_on_company(data)
     return {"issues": issues, "has_critical": any(i["severity"] == "critical" for i in issues)}
 
-
 @app.post("/api/dqe/check/contact")
 async def api_dqe_contact(request: Request):
     data   = await request.json()
     issues = dqe_mod.run_dqe_on_contact(data)
     return {"issues": issues, "has_critical": any(i["severity"] == "critical" for i in issues)}
-
 
 @app.post("/api/dqe/promote-staged")
 async def api_promote_staged(
@@ -2358,11 +2216,9 @@ async def api_promote_staged(
     log_audit(current_user, "dqe_promote_staged", "company", "", new_value=result)
     return result
 
-
-# ═══════════════════════════════════════════════════════════════════════════
+# ---
 # COMPANY STATUS LIFECYCLE
-# ═══════════════════════════════════════════════════════════════════════════
-
+# ---
 ORACLE_PRODUCTS = [
     "JD Edwards", "Oracle Cloud ERP", "Oracle EBS", "Oracle HCM",
     "Oracle SCM", "Oracle EPM", "Oracle CX", "Oracle Database",
@@ -2383,19 +2239,16 @@ async def api_company_product(
               new_value={"target_product": product})
     return {"id": company_id, "target_product": product}
 
-
 @app.get("/api/companies/products")
 async def api_product_list(current_user: dict = Depends(oracle_auth.require_user)):
     """Return the canonical list of Oracle products for dropdowns."""
     return ORACLE_PRODUCTS
-
 
 @app.post("/api/companies/backfill-products")
 async def api_backfill_products(current_user: dict = Depends(oracle_auth.require_analyst)):
     """Auto-populate target_product from dominant oracle_signal for companies without one."""
     updated = oracle_db.backfill_target_product()
     return {"updated": updated}
-
 
 @app.patch("/api/companies/{company_id}/status")
 async def api_company_status(
@@ -2424,11 +2277,9 @@ async def api_company_status(
               new_value={"status": new_status})
     return dict(row)
 
-
-# ═══════════════════════════════════════════════════════════════════════════
+# ---
 # HUBSPOT SYNC PULL (two-way)
-# ═══════════════════════════════════════════════════════════════════════════
-
+# ---
 @app.post("/api/hubspot/sync-pull")
 async def api_hubspot_sync_pull(
     request: Request,
@@ -2451,9 +2302,7 @@ async def api_hubspot_sync_pull(
               new_value=result)
     return result
 
-
-# ── HubSpot Config ────────────────────────────────────────────────────────────
-
+# hubspot config
 @app.get("/api/hubspot/config")
 async def get_hubspot_config(current_user: dict = Depends(oracle_auth.require_admin)):
     """Get stored HubSpot config (API key masked)."""
@@ -2509,8 +2358,7 @@ async def test_hubspot_connection(
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
-# ── Company single push ───────────────────────────────────────────────────────
-
+# company single push
 @app.post("/api/companies/{company_id}/push-hubspot")
 async def push_company_to_hubspot_endpoint(
     company_id: int,
@@ -2534,8 +2382,7 @@ async def push_company_to_hubspot_endpoint(
                   new_value={"hubspot_id": result.get("hubspot_id"), "action": result.get("action")})
     return result
 
-# ── Bulk push ─────────────────────────────────────────────────────────────────
-
+# bulk push
 @app.post("/api/hubspot/bulk-push/companies")
 async def bulk_push_companies_endpoint(
     request: Request,
@@ -2570,8 +2417,7 @@ async def bulk_push_contacts_endpoint(
               new_value=result)
     return result
 
-# ── Engine Configs ────────────────────────────────────────────────────────────
-
+# engine configs
 @app.get("/api/engine-configs")
 async def get_engine_configs(current_user: dict = Depends(oracle_auth.require_analyst)):
     return oracle_db.list_engine_configs()
@@ -2601,8 +2447,7 @@ async def update_engine_config_endpoint(
     log_audit(current_user, "update_engine_config", "system", engine_type, new_value=body)
     return result
 
-# ── Review Queue (proper table) ───────────────────────────────────────────────
-
+# review queue (proper table)
 @app.get("/api/review-queue")
 async def get_review_queue(
     status: str = None,
@@ -2658,8 +2503,7 @@ async def bulk_resolve_review(
               new_value={"count": len(body["ids"])})
     return {"ok": True, "resolved": len(body["ids"])}
 
-# ── Product Intelligence ──────────────────────────────────────────────────────
-
+# product intelligence
 @app.get("/api/product-intelligence")
 async def get_product_intelligence(
     limit: int = 100,
@@ -2761,7 +2605,6 @@ async def get_product_intelligence(
         "products": products,
     }
 
-
 @app.post("/api/product-intelligence/refresh")
 async def refresh_product_intelligence(
     current_user: dict = Depends(oracle_auth.require_analyst),
@@ -2774,12 +2617,11 @@ async def refresh_product_intelligence(
         logger.exception("Unhandled error in POST /api/product-intelligence/refresh")
         return JSONResponse({"error": str(e)}, status_code=500)
 
-
-# ── Static assets (JS/CSS chunks) ───────────────────────────────────────────
+# static assets (js/css chunks)
 if REACT_DIST.exists() and (REACT_DIST / "assets").exists():
     app.mount("/assets", StaticFiles(directory=REACT_DIST / "assets"), name="assets")
 
-# ── React SPA catch-all — MUST be last so all API routes take priority ───────
+# react spa catch-all — must be last so all api routes take priority
 @app.get("/{full_path:path}", response_class=HTMLResponse, include_in_schema=False)
 async def spa_fallback(full_path: str):
     return _react_index()

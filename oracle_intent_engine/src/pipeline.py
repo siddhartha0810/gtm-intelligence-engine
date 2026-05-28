@@ -1,12 +1,4 @@
-"""
-Orchestrates the full scan:
-  1. Run all signal scrapers in sequence
-  2. Classify each signal (product + phase)
-  3. Aggregate by company
-  4. Persist to DB
-  5. Export CSV + Excel
-Returns a summary dict.
-"""
+"""Orchestrates the full Oracle intent scan: scrape, classify, aggregate, persist, export."""
 
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -55,20 +47,16 @@ _current_scan: dict = {
     "companies_found": 0,
 }
 
-
 def current_status() -> dict:
     return dict(_current_scan)
 
-
 def get_log() -> list:
     return list(_log_buffer)
-
 
 def stop_scan():
     global _stop_requested
     _stop_requested = True
     _log("⛔ Stop requested — finishing current step then stopping...")
-
 
 def _log(message: str):
     ts = datetime.now().strftime("%H:%M:%S")
@@ -76,10 +64,8 @@ def _log(message: str):
     _log_buffer.append(entry)
     logger.info(message)
 
-
 def _is_stopped() -> bool:
     return _stop_requested
-
 
 def run_scan(
     job_queries: list[str] = None,
@@ -148,7 +134,7 @@ def run_scan(
 
         raw_signals: list[dict] = []
 
-        # --- Job-posting sources ---
+        # job-posting sources
         job_sources = [s for s in sources if s in ("indeed", "linkedin", "ziprecruiter", "adzuna", "totaljobs", "cwjobs")]
         for source_name in job_sources:
             if _is_stopped():
@@ -175,7 +161,7 @@ def run_scan(
 
             _log(f"✓ {source_name.upper()} done — {len(raw_signals)} total signals so far")
 
-        # --- Oracle website ---
+        # oracle website
         if "oracle_website" in sources and not _is_stopped():
             _current_scan["progress"] = "Scanning oracle.com customer stories..."
             _log("▶ Starting ORACLE.COM (customer stories + press releases)")
@@ -192,7 +178,7 @@ def run_scan(
             except Exception as e:
                 _log(f"  [oracle_website] ERROR: {e}")
 
-        # --- News source ---
+        # news source
         if "news" in sources and not _is_stopped():
             _current_scan["progress"] = "Scanning news..."
             _log(f"▶ Starting NEWS ({len(news_queries)} queries)")
@@ -210,7 +196,7 @@ def run_scan(
                     _log(f"  [news] ERROR on \"{query}\": {e}")
             _log(f"✓ NEWS done")
 
-        # --- ERP Today ---
+        # erp today
         if "erp_today" in sources and not _is_stopped():
             _current_scan["progress"] = "Scanning ERP Today..."
             _log("▶ Starting ERP TODAY (oracle ERP news RSS)")
@@ -222,7 +208,7 @@ def run_scan(
             except Exception as e:
                 _log(f"  [erp_today] ERROR: {e}")
 
-        # --- SI Case Studies ---
+        # si case studies
         if "si_casestudy" in sources and not _is_stopped():
             _current_scan["progress"] = "Scanning SI case studies..."
             _log("▶ Starting SI CASE STUDIES (Accenture / Deloitte / PwC etc.)")
@@ -234,7 +220,7 @@ def run_scan(
             except Exception as e:
                 _log(f"  [si_casestudy] ERROR: {e}")
 
-        # --- Partner Case Studies ---
+        # partner case studies
         if "partner_casestudy" in sources and not _is_stopped():
             _current_scan["progress"] = "Scanning partner case studies..."
             _log("▶ Starting PARTNER CASE STUDIES (Oracle Gold/Platinum SIs)")
@@ -246,7 +232,7 @@ def run_scan(
             except Exception as e:
                 _log(f"  [partner_casestudy] ERROR: {e}")
 
-        # --- Oracle Community / Migration Stories ---
+        # oracle community / migration stories
         if "oracle_community" in sources and not _is_stopped():
             _current_scan["progress"] = "Scanning Oracle community stories..."
             _log("▶ Starting ORACLE COMMUNITY (migration stories + oracle.com news)")
@@ -258,7 +244,7 @@ def run_scan(
             except Exception as e:
                 _log(f"  [oracle_community] ERROR: {e}")
 
-        # --- Oracle Event Attendance ---
+        # oracle event attendance
         if "oracle_event" in sources and not _is_stopped():
             _current_scan["progress"] = "Scanning Oracle event signals..."
             _log("▶ Starting ORACLE EVENTS (CloudWorld / OpenWorld attendance)")
@@ -270,7 +256,7 @@ def run_scan(
             except Exception as e:
                 _log(f"  [oracle_event] ERROR: {e}")
 
-        # --- Company Press Releases ---
+        # company press releases
         if "company_pages" in sources and not _is_stopped():
             _current_scan["progress"] = "Scanning company press releases..."
             _log("▶ Starting COMPANY PAGES (press releases + announcements)")
@@ -282,7 +268,7 @@ def run_scan(
             except Exception as e:
                 _log(f"  [company_pages] ERROR: {e}")
 
-        # --- Home Builders (1,000+ closings, JDE-focused industries) ---
+        # home builders (1,000+ closings, jde-focused industries)
         if "home_builders" in sources and not _is_stopped():
             _current_scan["progress"] = "Scanning home builders (1,000+ closings)..."
             _log("▶ Starting HOME BUILDERS (1,000+ closings — construction, JDE signals)")
@@ -294,7 +280,7 @@ def run_scan(
             except Exception as e:
                 _log(f"  [home_builders] ERROR: {e}")
 
-        # --- Procurement / RFP Tenders ---
+        # procurement / rfp tenders
         if "procurement" in sources and not _is_stopped():
             _current_scan["progress"] = "Scanning procurement tenders..."
             _log("▶ Starting PROCUREMENT (Contracts Finder + SAM.gov + TED EU)")
@@ -306,7 +292,7 @@ def run_scan(
             except Exception as e:
                 _log(f"  [procurement] ERROR: {e}")
 
-        # --- SEC / Public Filings ---
+        # sec / public filings
         if "sec_filing" in sources and not _is_stopped():
             _current_scan["progress"] = "Scanning SEC filings..."
             _log("▶ Starting SEC FILINGS (EDGAR — 10-K/10-Q/8-K)")
@@ -323,10 +309,8 @@ def run_scan(
 
         _log(f"─── Total raw signals collected: {len(raw_signals)} ───")
 
-        # --- Smart staffing filter ---
-        # SI partners (IBM, PwC, Wipro etc.) → extract end client → keep as end client signal
-        # Pure staffing firms (Robert Half, Randstad etc.) → drop
-        # Contractor title signals → extract end client → keep if found, else drop
+        # smart staffing filter
+        # staffing filter: drop pure agencies, extract end clients from SI/contractor signals
         raw_signals, removed = staffing_filter.filter_signals(raw_signals)
         if removed:
             _log(f"▶ Staffing filter removed {removed} signals (pure staffing / unresolved SI)")
@@ -335,7 +319,7 @@ def run_scan(
         _current_scan["progress"] = f"Classifying {len(raw_signals)} signals..."
         _log(f"▶ Classifying signals (Oracle product + phase detection)...")
 
-        # --- Classify ---
+        # classify
         classified: list[dict] = []
         for sig in raw_signals:
             result = clf.classify(
@@ -354,14 +338,14 @@ def run_scan(
 
         _log(f"✓ Classification done")
 
-        # --- Aggregate ---
+        # aggregate
         _current_scan["progress"] = "Aggregating by company..."
         _log("▶ Aggregating signals by company...")
         companies = agg.aggregate(classified)
         _current_scan["companies_found"] = len(companies)
         _log(f"✓ Aggregation done — {len(companies)} unique companies detected")
 
-        # --- Firmographics enrichment (Wikidata — free, no key) ---
+        # firmographics enrichment (wikidata — free, no key)
         _current_scan["progress"] = "Enriching company firmographics..."
         _log("▶ Enriching company sizes via Wikidata (parallel)...")
         needs_firmographics = [c for c in companies if not c.get("size")]
@@ -384,7 +368,7 @@ def run_scan(
         enriched_count = sum(1 for c in companies if c.get("size"))
         _log(f"✓ Firmographics done — {enriched_count} companies enriched")
 
-        # --- Domain enrichment (Wikidata P856 + DuckDuckGo, free, no key) ---
+        # domain enrichment (wikidata p856 + duckduckgo, free, no key)
         _current_scan["progress"] = "Enriching company domains..."
         _log("▶ Enriching company domains (Wikidata + DuckDuckGo, parallel)...")
         needs_domain = [c for c in companies if not c.get("domain")]
@@ -405,20 +389,19 @@ def run_scan(
         domain_count = sum(1 for c in companies if c.get("domain"))
         _log(f"✓ Domain enrichment done — {domain_count} domains found")
 
-        # Phase breakdown
         from collections import Counter
         phase_counts = Counter(c["phase"] for c in companies)
         for phase, count in phase_counts.most_common():
             label = clf.PHASE_LABELS.get(phase, phase)
             _log(f"   {label}: {count} companies")
 
-        # --- Persist ---
+        # persist
         _current_scan["progress"] = "Saving to database..."
         _log("▶ Saving to database...")
         new_count, known_count = _persist(companies, run_id=run_id)
         _log(f"✓ Database save complete — {new_count} NEW leads, {known_count} already known (skipped)")
 
-        # --- CSV contact matching (all companies, from 280K contacts database) ---
+        # csv contact matching (all companies, from 280k contacts database)
         if csv_contacts.is_available():
             _current_scan["progress"] = "Matching contacts from CSV database..."
             _log("▶ Matching contacts from CSV database...")
@@ -441,7 +424,7 @@ def run_scan(
                     _log(f"  [csv_contacts] Error for {company['company_name']}: {e}")
             _log(f"✓ CSV contacts matched — {matched_contacts} contacts across {matched_companies} companies")
 
-        # --- Purge invalid company names from DB (catches any that slipped through) ---
+        # purge invalid company names from db (catches any that slipped through)
         _current_scan["progress"] = "Cleaning invalid company names..."
         try:
             purged = db.purge_invalid_companies(is_valid_company_name)
@@ -450,7 +433,7 @@ def run_scan(
         except Exception as e:
             _log(f"  [purge] Warning: {e}")
 
-        # --- Export ---
+        # export
         _current_scan["progress"] = "Exporting CSV and Excel..."
         _log("▶ Exporting CSV and Excel...")
         csv_path = exporter.export_csv(companies)
@@ -484,7 +467,6 @@ def run_scan(
     finally:
         _scan_lock.release()
 
-
 def run_scan_async(
     job_queries=None, news_queries=None,
     location="", max_pages=None, sources=None,
@@ -502,7 +484,6 @@ def run_scan_async(
     )
     thread.start()
     return thread
-
 
 def _persist(companies: list[dict], run_id: int = None) -> tuple[int, int]:
     """Persist companies and signals. Returns (new_count, known_count)."""

@@ -62,7 +62,6 @@ interface Contact {
   email_validation_status?: string
 }
 
-// ── Contacts slide-over ────────────────────────────────────────────────────
 function ContactsPanel({ company, onClose }: { company: Company; onClose: () => void }) {
   const [contacts, setContacts]   = useState<Contact[]>([])
   const [loading, setLoading]     = useState(true)
@@ -117,10 +116,7 @@ function ContactsPanel({ company, onClose }: { company: Company; onClose: () => 
 
   return (
     <>
-      {/* Backdrop */}
       <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.25)', zIndex: 400, backdropFilter: 'blur(1px)' }} />
-
-      {/* Panel */}
       <div style={{
         position: 'fixed', top: 0, right: 0, bottom: 0, width: 520,
         background: '#ffffff', zIndex: 500,
@@ -129,8 +125,6 @@ function ContactsPanel({ company, onClose }: { company: Company; onClose: () => 
         animation: 'slideInRight 0.22s ease',
       }}>
         <style>{`@keyframes slideInRight { from { transform: translateX(100%) } to { transform: translateX(0) } }`}</style>
-
-        {/* Header */}
         <div style={{ padding: '20px 24px', borderBottom: '1px solid #e2e8f0', flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -148,8 +142,6 @@ function ContactsPanel({ company, onClose }: { company: Company; onClose: () => 
               <X size={18} />
             </button>
           </div>
-
-          {/* Stats row */}
           <div style={{ display: 'flex', gap: 12, marginTop: 16 }}>
             {[
               { label: 'Contacts', value: loading ? '…' : contacts.length, color: '#6366f1', icon: <Users size={12} /> },
@@ -164,8 +156,6 @@ function ContactsPanel({ company, onClose }: { company: Company; onClose: () => 
             ))}
           </div>
         </div>
-
-        {/* Toolbar */}
         <div style={{ padding: '12px 24px', borderBottom: '1px solid #f1f5f9', display: 'flex', gap: 10, flexShrink: 0 }}>
           <div style={{ position: 'relative', flex: 1 }}>
             <Search size={12} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
@@ -178,8 +168,6 @@ function ContactsPanel({ company, onClose }: { company: Company; onClose: () => 
             {enriching ? 'Enriching…' : 'Enrich'}
           </button>
         </div>
-
-        {/* Contact list */}
         <div style={{ flex: 1, overflowY: 'auto' }}>
           {loading && (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 200, gap: 8, color: '#94a3b8', fontSize: 13 }}>
@@ -217,12 +205,9 @@ function ContactsPanel({ company, onClose }: { company: Company; onClose: () => 
                 onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
 
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-                  {/* Avatar */}
                   <div style={{ width: 36, height: 36, borderRadius: '50%', background: avatarColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, color: 'white', flexShrink: 0 }}>
                     {name[0]?.toUpperCase()}
                   </div>
-
-                  {/* Info */}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                       <span style={{ fontSize: 13, fontWeight: 600, color: '#0f172a' }}>{name}</span>
@@ -239,8 +224,6 @@ function ContactsPanel({ company, onClose }: { company: Company; onClose: () => 
                       )}
                     </div>
                     <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>{c.title || '—'}</div>
-
-                    {/* Contact links */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 6, flexWrap: 'wrap' }}>
                       {c.email ? (
                         <a href={`mailto:${c.email}`} onClick={e => e.stopPropagation()}
@@ -258,8 +241,6 @@ function ContactsPanel({ company, onClose }: { company: Company; onClose: () => 
                       )}
                     </div>
                   </div>
-
-                  {/* Actions */}
                   <div style={{ display: 'flex', gap: 6, flexShrink: 0, alignItems: 'center' }}>
                     <button onClick={() => pushToHubSpot(c)} disabled={pushing[c.id]}
                       title="Push to HubSpot"
@@ -273,8 +254,6 @@ function ContactsPanel({ company, onClose }: { company: Company; onClose: () => 
             )
           })}
         </div>
-
-        {/* Footer */}
         {!loading && contacts.length > 0 && (
           <div style={{ padding: '12px 24px', borderTop: '1px solid #e2e8f0', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
             <span style={{ fontSize: 12, color: '#64748b' }}>
@@ -302,7 +281,6 @@ function ContactsPanel({ company, onClose }: { company: Company; onClose: () => 
   )
 }
 
-// ── Company actions menu ───────────────────────────────────────────────────
 function CompanyMenu({ company, onClose, anchorRef, onRefresh }: {
   company: Company
   onClose: () => void
@@ -368,7 +346,6 @@ function CompanyMenu({ company, onClose, anchorRef, onRefresh }: {
   )
 }
 
-// ── Constants ──────────────────────────────────────────────────────────────
 const PHASES = ['All', 'Implementing', 'Evaluating', 'Researching', 'Hiring', 'Live']
 
 const normalisePhase = (p: string): string => {
@@ -385,7 +362,6 @@ const phaseColor = (p: string) => {
   return { bg: 'rgba(107,114,128,0.15)', color: '#9ca3af' }
 }
 
-// ── Main page ──────────────────────────────────────────────────────────────
 export default function Companies() {
   const [companies, setCompanies]         = useState<Company[]>([])
   const [total, setTotal]                 = useState(0)
@@ -404,7 +380,6 @@ export default function Companies() {
   const menuRefs = useRef<Map<number, HTMLButtonElement>>(new Map())
   const PAGE = 200
 
-  // Debounce search
   useEffect(() => {
     const t = setTimeout(() => setSearch(searchInput), 300)
     return () => clearTimeout(t)
@@ -499,13 +474,9 @@ export default function Companies() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20, width: '100%' }}>
-
-      {/* Contacts slide-over */}
       {contactsPanel && (
         <ContactsPanel company={contactsPanel} onClose={() => setContactsPanel(null)} />
       )}
-
-      {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div>
           <h1 style={{ fontSize: 20, fontWeight: 700, color: '#0f172a', margin: 0 }}>Companies</h1>
@@ -553,8 +524,6 @@ export default function Companies() {
           </a>
         </div>
       </div>
-
-      {/* Filters */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <div style={{ position: 'relative', width: 300 }}>
           <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#475569' }} />
@@ -571,7 +540,6 @@ export default function Companies() {
             </button>
           ))}
         </div>
-        {/* Product filter */}
         <select
           value={productFilter}
           onChange={e => setProductFilter(e.target.value)}
@@ -580,8 +548,6 @@ export default function Companies() {
           {ORACLE_PRODUCTS.map(p => <option key={p} value={p}>{p}</option>)}
         </select>
       </div>
-
-      {/* Table */}
       <div style={{ border: '1px solid #e2e8f0', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
@@ -627,8 +593,6 @@ export default function Companies() {
                 <td style={tdStyle} onClick={e => e.stopPropagation()}>
                   <input type="checkbox" checked={selected.includes(c.id)} onChange={() => toggleSelect(c.id)} style={{ accentColor: '#3b82f6' }} />
                 </td>
-
-                {/* Company name */}
                 <td style={tdStyle}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                     <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(59,130,246,0.12)', color: '#60a5fa', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 13, flexShrink: 0 }}>
@@ -642,8 +606,6 @@ export default function Companies() {
                 </td>
 
                 <td style={{ ...tdStyle, color: '#94a3b8', fontSize: 12 }}>{c.industry}</td>
-
-                {/* Target Product — inline editable */}
                 <td style={tdStyle} onClick={e => e.stopPropagation()}>
                   {editingProduct === c.id ? (
                     <select autoFocus
@@ -667,15 +629,11 @@ export default function Companies() {
                     </span>
                   )}
                 </td>
-
-                {/* Phase */}
                 <td style={tdStyle}>
                   <span style={{ fontSize: 12, padding: '3px 10px', borderRadius: 999, fontWeight: 500, background: phaseColor(c.phase).bg, color: phaseColor(c.phase).color }}>
                     {c.phase}
                   </span>
                 </td>
-
-                {/* Score */}
                 <td style={tdStyle}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{ fontSize: 12, fontWeight: 700, padding: '2px 8px', borderRadius: 6, background: `${scoreColor(c.score)}18`, color: scoreColor(c.score), minWidth: 28, textAlign: 'center' }}>{c.score}</span>
@@ -684,15 +642,11 @@ export default function Companies() {
                     </div>
                   </div>
                 </td>
-
-                {/* Signals */}
                 <td style={tdStyle}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: '#94a3b8', fontSize: 13 }}>
                     <Zap size={12} color="#f59e0b" /> {c.signals}
                   </div>
                 </td>
-
-                {/* Contacts — CLICKABLE BADGE */}
                 <td style={tdStyle}>
                   <button
                     onClick={e => { e.stopPropagation(); setContactsPanel(c) }}
@@ -719,8 +673,6 @@ export default function Companies() {
                     {c.contacts > 0 && <ChevronRight size={10} />}
                   </button>
                 </td>
-
-                {/* Actions */}
                 <td style={tdStyle} onClick={e => e.stopPropagation()}>
                   <div style={{ display: 'flex', gap: 2 }}>
                     <button title="View contacts" onClick={() => setContactsPanel(c)}
@@ -748,8 +700,6 @@ export default function Companies() {
             ))}
           </tbody>
         </table>
-
-        {/* Footer */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: '#f8fafc', borderTop: '1px solid #e2e8f0', fontSize: 12, color: '#64748b' }}>
           <span>Showing {filtered.length} of {total.toLocaleString()} companies</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
