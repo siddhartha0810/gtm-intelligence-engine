@@ -52,8 +52,8 @@ export default function ReviewQueue() {
       const pending = Array.isArray(data) ? data.filter(c => !c.is_target) : []
       setItems(pending)
       setSelected(pending[0]?.id ?? null)
-    } catch (e: any) {
-      setError(e.message || 'Failed to load')
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to load')
     } finally {
       setLoading(false)
     }

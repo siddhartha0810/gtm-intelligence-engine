@@ -1,7 +1,8 @@
 import { useState } from 'react'
+import type { User } from '../types'
 import { Eye, EyeOff, Zap } from 'lucide-react'
 
-interface Props { onLogin: (token: string, user: any) => void }
+interface Props { onLogin: (token: string, user: User) => void }
 
 export default function Login({ onLogin }: Props) {
   const [email, setEmail]       = useState('')
@@ -17,7 +18,7 @@ export default function Login({ onLogin }: Props) {
     setLoading(true); setError('')
     try {
       const url  = isRegister ? '/api/auth/register' : '/api/auth/login'
-      const body: any = { email, password }
+      const body: { email: string; password: string; name?: string } = { email, password }
       if (isRegister) body.name = name
       const res  = await fetch(url, {
         method: 'POST',
@@ -29,8 +30,8 @@ export default function Login({ onLogin }: Props) {
       localStorage.setItem('token', data.token)
       localStorage.setItem('user', JSON.stringify(data.user))
       onLogin(data.token, data.user)
-    } catch (e: any) {
-      setError(e.message || 'Network error')
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Network error')
     } finally {
       setLoading(false)
     }

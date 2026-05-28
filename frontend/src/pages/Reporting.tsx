@@ -41,8 +41,8 @@ export default function Reporting() {
       ])
       setReport(rr)
       setDash(dr)
-    } catch (e: any) {
-      setError(e.message || 'Failed to load reporting data')
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to load reporting data')
     }
     setLoading(false)
   }

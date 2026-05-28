@@ -1,4 +1,6 @@
+import type React from 'react'
 import { NavLink } from 'react-router-dom'
+import type { User } from '../types'
 import {
   LayoutDashboard, Building2, Users, Cpu, ClipboardCheck,
   BarChart3, Settings, ChevronLeft, ChevronRight,
@@ -6,14 +8,26 @@ import {
   ScrollText, UserCog, Shield, RefreshCw, PackageSearch, Briefcase
 } from 'lucide-react'
 
+interface NavItem {
+  to: string
+  icon: React.ComponentType<{ size?: number; strokeWidth?: number; color?: string; style?: React.CSSProperties }>
+  label: string
+  badge?: string
+}
+
+interface NavGroup {
+  label: string
+  items: NavItem[]
+}
+
 interface SidebarProps {
   collapsed: boolean
   onToggle: () => void
-  user?: any
+  user?: User
   isAdmin?: boolean
 }
 
-const NAV_STATIC = [
+const NAV_STATIC: NavGroup[] = [
   {
     label: 'OVERVIEW',
     items: [
@@ -157,9 +171,9 @@ export default function Sidebar({ collapsed, onToggle, user, isAdmin }: SidebarP
                     {!collapsed && (
                       <span style={{ fontSize: 13, fontWeight: 500, flex: 1 }}>{item.label}</span>
                     )}
-                    {!collapsed && (item as any).badge && (
+                    {!collapsed && item.badge && (
                       <span style={{ fontSize: 11, fontWeight: 600, padding: '1px 6px', borderRadius: 999, background: 'rgba(59,130,246,0.2)', color: '#93c5fd' }}>
-                        {(item as any).badge}
+                        {item.badge}
                       </span>
                     )}
                   </>

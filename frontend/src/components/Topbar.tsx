@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import type { User } from '../types'
 import { Search, Bell, ChevronDown, Settings, LogOut, User, CheckCircle2, Zap, Users } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 
@@ -25,7 +26,7 @@ function Dropdown({ onClose, children, anchorRef }: { onClose: () => void; child
 
 interface TopbarProps {
   onCmdK: () => void
-  user?: any
+  user?: User
   onLogout?: () => void
 }
 

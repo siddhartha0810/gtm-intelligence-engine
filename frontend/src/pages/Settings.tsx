@@ -5,6 +5,8 @@ import ConfirmDialog from '../components/ConfirmDialog'
 
 type Status = 'connected' | 'error' | 'unconfigured' | 'testing' | 'loading'
 
+interface TestResponse { status: string; message?: string }
+
 const SERVICES = [
   { id: 'hubspot',     label: 'HubSpot API Token',  desc: 'Required for pushing enriched contacts to your CRM',    placeholder: 'pat-na1-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx', color: '#f59e0b' },
   { id: 'apollo',      label: 'Apollo.io API Key',   desc: 'Used for contact discovery and company prospecting',     placeholder: 'xxxxxxxxxxxxxxxxxxxxxxxx',                      color: '#3b82f6' },
@@ -35,7 +37,7 @@ function ApiCard({
 
   const handleTest = async () => {
     setMsg('')
-    const result: any = await fetch(`/config/test/${svc.id}`, {
+    const result: TestResponse = await fetch(`/config/test/${svc.id}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ key }),
@@ -117,7 +119,7 @@ export default function Settings() {
 
   const handleTest = async (serviceId: string, key: string) => {
     setStatuses(prev => ({ ...prev, [serviceId]: 'testing' }))
-    const result: any = await fetch(`/config/test/${serviceId}`, {
+    const result: TestResponse = await fetch(`/config/test/${serviceId}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ key }),

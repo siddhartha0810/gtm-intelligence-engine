@@ -1,4 +1,5 @@
 import { useState, useEffect, lazy, Suspense } from 'react'
+import type { User } from './types'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import Sidebar from './components/Sidebar'
 import Topbar from './components/Topbar'
@@ -46,8 +47,8 @@ export default function App() {
   const [token, setToken]                       = useState<string | null>(
     () => localStorage.getItem('token')
   )
-  const [user, setUser]                         = useState<any>(
-    () => { try { return JSON.parse(localStorage.getItem('user') || 'null') } catch { return null } }
+  const [user, setUser]                         = useState<User | null>(
+    () => { try { return JSON.parse(localStorage.getItem('user') || 'null') as User | null } catch { return null } }
   )
 
   useEffect(() => {
@@ -59,7 +60,7 @@ export default function App() {
     return () => window.removeEventListener('keydown', handler)
   }, [])
 
-  const handleLogin = (tok: string, usr: any) => {
+  const handleLogin = (tok: string, usr: User) => {
     setToken(tok); setUser(usr)
   }
 

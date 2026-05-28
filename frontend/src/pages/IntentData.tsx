@@ -50,8 +50,8 @@ export default function IntentData() {
       const r = await fetch('/api/signals?limit=200', { headers: authH() })
       if (!r.ok) throw new Error(`HTTP ${r.status}`)
       setSignals(await r.json())
-    } catch (e: any) {
-      setError(e.message || 'Failed to load signals')
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to load signals')
     } finally {
       setLoading(false)
     }

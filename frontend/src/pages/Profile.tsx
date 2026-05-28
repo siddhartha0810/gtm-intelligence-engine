@@ -1,9 +1,10 @@
 import { useState } from 'react'
+import type { User } from '../types'
 import { User, Mail, Shield, Key, Save, CheckCircle2, AlertCircle } from 'lucide-react'
 import { toast } from '../components/Toast'
 
 interface ProfileProps {
-  user?: any
+  user?: User
 }
 
 export default function Profile({ user }: ProfileProps) {
