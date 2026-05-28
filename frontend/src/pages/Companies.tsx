@@ -377,8 +377,29 @@ export default function Companies() {
   const [contactsPanel, setContactsPanel] = useState<Company | null>(null)
   const [productFilter, setProductFilter] = useState('All')
   const [editingProduct, setEditingProduct] = useState<number | null>(null)
+  const [exporting, setExporting] = useState(false)
   const menuRefs = useRef<Map<number, HTMLButtonElement>>(new Map())
   const PAGE = 200
+
+  const exportCSV = async () => {
+    setExporting(true)
+    try {
+      const r = await fetch('/export/csv/all', { headers: authH() })
+      if (!r.ok) { toast.error('Export failed'); return }
+      const blob = await r.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `companies_${new Date().toISOString().slice(0, 10)}.csv`
+      a.click()
+      URL.revokeObjectURL(url)
+      toast.success('Companies exported')
+    } catch {
+      toast.error('Export failed')
+    } finally {
+      setExporting(false)
+    }
+  }
 
   useEffect(() => {
     const t = setTimeout(() => setSearch(searchInput), 300)
@@ -516,12 +537,12 @@ export default function Companies() {
             onMouseLeave={e => e.currentTarget.style.borderColor = '#e2e8f0'}>
             <RefreshCw size={13} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} />
           </button>
-          <a href="/export/csv/all" download
-            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 8, border: '1px solid #e2e8f0', background: 'transparent', color: '#94a3b8', fontSize: 13, cursor: 'pointer', textDecoration: 'none' }}
-            onMouseEnter={e => (e.currentTarget as HTMLElement).style.borderColor = '#3b82f6'}
-            onMouseLeave={e => (e.currentTarget as HTMLElement).style.borderColor = '#e2e8f0'}>
-            <Download size={13} /> Export
-          </a>
+          <button onClick={exportCSV} disabled={exporting}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 8, border: '1px solid #e2e8f0', background: 'transparent', color: exporting ? '#cbd5e1' : '#94a3b8', fontSize: 13, cursor: exporting ? 'not-allowed' : 'pointer' }}
+            onMouseEnter={e => { if (!exporting) e.currentTarget.style.borderColor = '#3b82f6' }}
+            onMouseLeave={e => e.currentTarget.style.borderColor = '#e2e8f0'}>
+            <Download size={13} /> {exporting ? 'Exporting…' : 'Export'}
+          </button>
         </div>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
