@@ -387,18 +387,51 @@ const phaseColor = (p: string) => {
 
 // ── Main page ──────────────────────────────────────────────────────────────
 export default function Companies() {
-  const [companies, setCompanies]       = useState<Company[]>([])
-  const [loading, setLoading]           = useState(true)
-  const [search, setSearch]             = useState('')
-  const [phase, setPhase]               = useState('All')
-  const [selected, setSelected]         = useState<number[]>([])
-  const [sortKey, setSortKey]           = useState('score')
-  const [sortDir, setSortDir]           = useState<'asc' | 'desc'>('desc')
-  const [openMenu, setOpenMenu]         = useState<number | null>(null)
+  const [companies, setCompanies]         = useState<Company[]>([])
+  const [total, setTotal]                 = useState(0)
+  const [loadingMore, setLoadingMore]     = useState(false)
+  const [loading, setLoading]             = useState(true)
+  const [searchInput, setSearchInput]     = useState('')
+  const [search, setSearch]               = useState('')
+  const [phase, setPhase]                 = useState('All')
+  const [selected, setSelected]           = useState<number[]>([])
+  const [sortKey, setSortKey]             = useState('score')
+  const [sortDir, setSortDir]             = useState<'asc' | 'desc'>('desc')
+  const [openMenu, setOpenMenu]           = useState<number | null>(null)
   const [contactsPanel, setContactsPanel] = useState<Company | null>(null)
   const [productFilter, setProductFilter] = useState('All')
   const [editingProduct, setEditingProduct] = useState<number | null>(null)
   const menuRefs = useRef<Map<number, HTMLButtonElement>>(new Map())
+  const PAGE = 200
+
+  // Debounce search
+  useEffect(() => {
+    const t = setTimeout(() => setSearch(searchInput), 300)
+    return () => clearTimeout(t)
+  }, [searchInput])
+
+  const mapRow = (c: Record<string, unknown>): Company => ({
+    id:            Number(c.id),
+    name:          String(c.name || ''),
+    industry:      String(c.industry || '—'),
+    size:          String(c.size || '—'),
+    score:         Math.round(Number(c.priority_score ?? c.signal_count ?? 0)),
+    phase:         normalisePhase(((c.phases as string[]) || [])[0] || 'Researching'),
+    signals:       Number(c.signal_count ?? 0),
+    contacts:      Number(c.contact_count ?? 0),
+    location:      String(c.location || 'UK'),
+    source:        ((c.sources as string[]) || [])[0] || 'Oracle Scan',
+    domain:        String(c.domain || ''),
+    target_product: String(c.target_product || ''),
+  })
+
+  const buildUrl = (offset = 0, q = search) => {
+    const p = new URLSearchParams({ limit: String(PAGE), offset: String(offset) })
+    if (q) p.set('search', q)
+    if (phase !== 'All') p.set('phase', phase.toLowerCase())
+    if (productFilter !== 'All') p.set('product', productFilter)
+    return `/api/companies?${p}`
+  }
 
   const setTargetProduct = async (companyId: number, product: string) => {
     try {
@@ -412,41 +445,42 @@ export default function Companies() {
     setEditingProduct(null)
   }
 
-  const fetchCompanies = useCallback(async () => {
+  const fetchCompanies = useCallback(async (q = search) => {
     setLoading(true)
     try {
-      const res = await fetch('/api/companies?show_all=1', { headers: authH() })
+      const res = await fetch(buildUrl(0, q), { headers: authH() })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = await res.json()
-      const mapped: Company[] = data.map((c: Record<string, unknown>) => ({
-        id:       Number(c.id),
-        name:     String(c.name || ''),
-        industry: String(c.industry || '—'),
-        size:     String(c.size || '—'),
-        score:    Math.round(Number(c.priority_score ?? c.signal_count ?? 0)),
-        phase:    normalisePhase(((c.phases as string[]) || [])[0] || String(c.phase || 'Researching')),
-        signals:       Number(c.signal_count ?? 0),
-        contacts:      Number(c.contact_count ?? 0),
-        location:      String(c.location || 'UK'),
-        source:        ((c.sources as string[]) || [])[0] || 'Oracle Scan',
-        domain:        String(c.domain || ''),
-        target_product: String(c.target_product || ''),
-      }))
-      setCompanies(mapped)
+      // Support both paginated {total, rows} and legacy plain array
+      const rows = Array.isArray(data) ? data : (data.rows ?? [])
+      setTotal(data.total ?? rows.length)
+      setCompanies(rows.map(mapRow))
     } catch {
       toast.error('Could not load companies — is the backend running?')
       setCompanies([])
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [search, phase, productFilter])
 
-  useEffect(() => { fetchCompanies() }, [fetchCompanies])
+  const loadMore = async () => {
+    setLoadingMore(true)
+    try {
+      const res = await fetch(buildUrl(companies.length), { headers: authH() })
+      if (!res.ok) return
+      const data = await res.json()
+      const rows = Array.isArray(data) ? data : (data.rows ?? [])
+      setCompanies(prev => [...prev, ...rows.map(mapRow)])
+    } finally {
+      setLoadingMore(false)
+    }
+  }
 
+  useEffect(() => { fetchCompanies() }, [])
+  useEffect(() => { fetchCompanies(search) }, [search, phase, productFilter])
+
+  // Client-side sort only (data already filtered server-side)
   const filtered = companies
-    .filter(c => phase === 'All' || c.phase === phase)
-    .filter(c => productFilter === 'All' || c.target_product === productFilter)
-    .filter(c => c.name.toLowerCase().includes(search.toLowerCase()) || c.industry.toLowerCase().includes(search.toLowerCase()))
     .sort((a, b) => {
       const d = sortDir === 'desc' ? -1 : 1
       if (sortKey === 'score')    return (b.score    - a.score)    * d
@@ -456,7 +490,7 @@ export default function Companies() {
       return 0
     })
 
-  const toggleSort    = (k: string) => { if (sortKey === k) setSortDir(d => d === 'desc' ? 'asc' : 'desc'); else { setSortKey(k); setSortDir('desc') } }
+  const toggleSort = (k: string) => { if (sortKey === k) setSortDir(d => d === 'desc' ? 'asc' : 'desc'); else { setSortKey(k); setSortDir('desc') } }
   const toggleSelect  = (id: number) => setSelected(s => s.includes(id) ? s.filter(x => x !== id) : [...s, id])
   const allSelected   = filtered.length > 0 && filtered.every(c => selected.includes(c.id))
 
@@ -505,7 +539,7 @@ export default function Companies() {
               <button onClick={() => setSelected([])} style={{ padding: '7px 14px', borderRadius: 8, border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.1)', color: '#f87171', fontSize: 13, cursor: 'pointer' }}>Clear</button>
             </div>
           )}
-          <button onClick={fetchCompanies} title="Refresh"
+          <button onClick={() => fetchCompanies()} title="Refresh"
             style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 8, border: '1px solid #e2e8f0', background: 'transparent', color: '#94a3b8', fontSize: 13, cursor: 'pointer' }}
             onMouseEnter={e => e.currentTarget.style.borderColor = '#3b82f6'}
             onMouseLeave={e => e.currentTarget.style.borderColor = '#e2e8f0'}>
@@ -524,7 +558,7 @@ export default function Companies() {
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <div style={{ position: 'relative', width: 300 }}>
           <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#475569' }} />
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search companies, industries…"
+          <input value={searchInput} onChange={e => setSearchInput(e.target.value)} placeholder="Search companies, industries…"
             style={{ width: '100%', padding: '8px 12px 8px 36px', borderRadius: 8, background: '#ffffff', border: '1px solid #d1d5db', color: '#0f172a', fontSize: 13, outline: 'none' }}
             onFocus={e => e.currentTarget.style.borderColor = '#3b82f6'}
             onBlur={e => e.currentTarget.style.borderColor = '#d1d5db'} />
@@ -717,8 +751,16 @@ export default function Companies() {
 
         {/* Footer */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: '#f8fafc', borderTop: '1px solid #e2e8f0', fontSize: 12, color: '#64748b' }}>
-          <span>Showing {filtered.length} of {companies.length} companies</span>
-          <span style={{ fontSize: 11, color: '#94a3b8' }}>Click the contacts badge on any row to view & manage contacts</span>
+          <span>Showing {filtered.length} of {total.toLocaleString()} companies</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            {companies.length < total && (
+              <button onClick={loadMore} disabled={loadingMore}
+                style={{ padding: '5px 16px', borderRadius: 7, border: '1px solid #d1d5db', background: '#fff', color: '#3b82f6', fontSize: 12, fontWeight: 600, cursor: loadingMore ? 'not-allowed' : 'pointer', opacity: loadingMore ? 0.6 : 1 }}>
+                {loadingMore ? 'Loading…' : `Load more (${(total - companies.length).toLocaleString()} remaining)`}
+              </button>
+            )}
+            <span style={{ fontSize: 11, color: '#94a3b8' }}>Click the contacts badge on any row to view & manage contacts</span>
+          </div>
         </div>
       </div>
     </div>

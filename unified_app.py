@@ -628,67 +628,110 @@ def _invalidate_companies_cache() -> None:
 
 
 @app.get("/api/companies")
-async def api_companies(phase: str = "", product: str = "", show_all: int = 0,
-                        current_user: dict = Depends(oracle_auth.require_user)):
+async def api_companies(
+    phase:    str = "",
+    product:  str = "",
+    show_all: int = 0,
+    search:   str = "",
+    limit:    int = 200,
+    offset:   int = 0,
+    current_user: dict = Depends(oracle_auth.require_user),
+):
+    """Fast paginated companies endpoint.
+    Uses denormalized signal_count / contact_count columns so sorting is O(log n).
+    Fetches signal details (phases, products) only for the page IDs.
+    Default: 200 companies per page, sorted by signal_count DESC.
+    """
     try:
-        cached = _companies_cache.get(show_all)
-        if cached and (time.time() - cached[0]) < _COMPANIES_CACHE_TTL:
-            companies = cached[1]
-        else:
-            run_id = 0 if show_all else None
-            companies = list(oracle_db.get_all_companies_with_signals(run_id=run_id))
-            companies = _annotate_and_sort(companies)
+        page_limit = min(limit, 500) if limit > 0 else 500
 
-            # ── Augment contact_count with master_leads fallback ──────────────
-            # Only query master_leads for companies with 0 contacts in oracle_intent
-            # — reduces ANY() list from ~4k to ~few hundred and keeps it fast.
-            try:
-                zero_contact = [c for c in companies if not int(c.get("contact_count") or 0)]
-                if zero_contact:
-                    domains = list({(c.get("domain") or "").strip().lower()
-                                    for c in zero_contact if (c.get("domain") or "").strip()})
-                    names   = list({(c.get("name") or "").strip().lower()
-                                    for c in zero_contact if (c.get("name") or "").strip()})
-                    with oracle_db.db_cursor(commit=False) as cur:
-                        domain_counts: dict = {}
-                        if domains:
-                            cur.execute(
-                                "SELECT LOWER(domain) AS d, COUNT(*) AS cnt FROM master_leads "
-                                "WHERE LOWER(domain) = ANY(%s) GROUP BY LOWER(domain)",
-                                (domains,),
-                            )
-                            for row in cur.fetchall():
-                                domain_counts[row["d"]] = row["cnt"]
-                        name_counts: dict = {}
-                        if names:
-                            cur.execute(
-                                "SELECT LOWER(company_normalized) AS n, COUNT(*) AS cnt FROM master_leads "
-                                "WHERE LOWER(company_normalized) = ANY(%s) GROUP BY LOWER(company_normalized)",
-                                (names,),
-                            )
-                            for row in cur.fetchall():
-                                name_counts[row["n"]] = row["cnt"]
+        with oracle_db.db_cursor(commit=False) as cur:
+            # ── Build WHERE clause ────────────────────────────────────────────
+            conditions: List[str] = []
+            params: List = []
 
-                    for c in zero_contact:
-                        d = (c.get("domain") or "").strip().lower()
-                        n = (c.get("name") or "").strip().lower()
-                        ml_count = domain_counts.get(d) or name_counts.get(n) or 0
-                        if ml_count:
-                            c["contact_count"] = ml_count
-            except Exception:
-                logger.warning("master_leads augment failed — continuing without contact counts", exc_info=True)
+            if search:
+                conditions.append(
+                    "(LOWER(c.name) LIKE %s OR LOWER(COALESCE(c.industry,'')) LIKE %s"
+                    " OR LOWER(COALESCE(c.domain,'')) LIKE %s)"
+                )
+                s = f"%{search.lower()}%"
+                params.extend([s, s, s])
 
-            companies = [dict(c) for c in companies]
-            _companies_cache[show_all] = (time.time(), companies)
+            if product:
+                conditions.append("c.target_product = %s")
+                params.append(product)
 
-        # Apply filters after cache (filters are fast, in-memory)
-        result = companies
-        if phase:
-            result = [c for c in result if phase in (c.get("phases") or [])]
-        if product:
-            result = [c for c in result if product in (c.get("products") or [])]
+            where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
 
-        return result
+            # ── Total count (fast — indexed) ──────────────────────────────────
+            cur.execute(f"SELECT COUNT(*) AS n FROM companies c {where}", params)
+            total = cur.fetchone()["n"]
+
+            # ── Page of company IDs ordered by denormalized signal_count ──────
+            cur.execute(
+                f"""SELECT c.id FROM companies c {where}
+                    ORDER BY c.signal_count DESC, c.last_updated DESC
+                    LIMIT %s OFFSET %s""",
+                params + [page_limit, offset],
+            )
+            page_ids = [r["id"] for r in cur.fetchall()]
+
+            if not page_ids:
+                return JSONResponse({"total": total, "offset": offset, "limit": page_limit, "rows": []})
+
+            # ── Signal details only for page IDs ──────────────────────────────
+            cur.execute("""
+                SELECT company_id,
+                       STRING_AGG(DISTINCT oracle_product, ',') AS products,
+                       STRING_AGG(DISTINCT phase, ',')          AS phases,
+                       STRING_AGG(DISTINCT source, ',')         AS sources,
+                       MAX(confidence)                          AS max_confidence,
+                       (ARRAY_AGG(url ORDER BY confidence DESC)
+                        FILTER (WHERE url LIKE 'http%%'))[1]   AS source_url
+                FROM oracle_signals
+                WHERE company_id = ANY(%s)
+                GROUP BY company_id
+            """, (page_ids,))
+            sig_map = {r["company_id"]: r for r in cur.fetchall()}
+
+            # ── Full company rows for page IDs ────────────────────────────────
+            cur.execute("""
+                SELECT c.id, c.name, c.domain, c.industry, c.size, c.location, c.website,
+                       c.target_product, c.status, c.source AS import_source,
+                       c.first_scan_run_id, c.first_seen::text AS first_seen,
+                       c.signal_count, c.contact_count, c.last_updated
+                FROM companies c
+                WHERE c.id = ANY(%s)
+            """, (page_ids,))
+            co_map = {r["id"]: dict(r) for r in cur.fetchall()}
+
+        # ── Assemble results in sort order ────────────────────────────────────
+        rows = []
+        for cid in page_ids:
+            co = co_map.get(cid)
+            if not co:
+                continue
+            sig = sig_map.get(cid, {})
+            products_str = (sig.get("products") or "")
+            phases_str   = (sig.get("phases")   or "")
+            sources_str  = (sig.get("sources")  or "")
+            co.update({
+                "products":       [p for p in products_str.split(",") if p],
+                "phases":         [p for p in phases_str.split(",")   if p],
+                "sources":        [s for s in sources_str.split(",")  if s],
+                "max_confidence": sig.get("max_confidence"),
+                "source_url":     sig.get("source_url"),
+                "priority_score": co["signal_count"],  # used by frontend for Score col
+            })
+
+            # Phase filter — server side
+            if phase and phase.lower() not in [p.lower() for p in co["phases"]]:
+                continue
+
+            rows.append(co)
+
+        return JSONResponse({"total": total, "offset": offset, "limit": page_limit, "rows": rows})
     except Exception as e:
         logger.exception("Unhandled error in GET /api/companies")
         return JSONResponse({"error": str(e)}, status_code=500)
