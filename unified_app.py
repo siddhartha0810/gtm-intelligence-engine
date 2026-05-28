@@ -51,6 +51,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 # Dotenv MUST load before oracle engine imports so JWT_SECRET and DB vars
 #    are in the environment when auth.py / database.py read them at import time.
@@ -125,8 +128,13 @@ async def lifespan(app: FastAPI):
     yield  # Application runs here
     # Shutdown — connection pools close automatically via psycopg2 GC
 
+# rate limiter — guards login/register against brute force
+limiter = Limiter(key_func=get_remote_address, default_limits=[])
+
 # app
 app = FastAPI(title="Oracle Intelligence Platform", lifespan=lifespan)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # logging
 logging.basicConfig(
@@ -486,7 +494,7 @@ def _react_index() -> HTMLResponse:
 # SHARED: SSE STREAM + STATUS + CANCEL
 # ---
 @app.get("/stream/{job_id}")
-async def stream_output(job_id: str):
+async def stream_output(job_id: str, current_user: dict = Depends(oracle_auth.require_user)):
     if job_id not in _jobs:
         return JSONResponse({"error": "Job not found"}, status_code=404)
 
@@ -513,14 +521,14 @@ async def stream_output(job_id: str):
     )
 
 @app.get("/status/{job_id}")
-async def get_status(job_id: str):
+async def get_status(job_id: str, current_user: dict = Depends(oracle_auth.require_user)):
     if job_id not in _jobs:
         return {"status": "not_found"}
     j = _jobs[job_id]
     return {"status": j["status"], "exit_code": j.get("exit_code")}
 
 @app.post("/cancel/{job_id}")
-async def cancel_job(job_id: str):
+async def cancel_job(job_id: str, current_user: dict = Depends(oracle_auth.require_analyst)):
     if job_id not in _jobs:
         return {"status": "not_found"}
     proc = _jobs[job_id].get("process")
@@ -880,9 +888,10 @@ async def api_enrich_contacts(company_id: int, current_user: dict = Depends(orac
 
 # bulk enrich
 _bulk_enrich_state: Dict[str, object] = {"running": False, "done": 0, "total": 0, "errors": 0}
+_bulk_enrich_lock  = threading.Lock()
 
 def _bulk_enrich_worker(company_ids: list):
-    _bulk_enrich_state.update({"running": True, "done": 0, "total": len(company_ids), "errors": 0})
+    # State is pre-set under _bulk_enrich_lock by the caller before this thread starts
     for cid in company_ids:
         try:
             company = oracle_db.get_company_by_id(cid)
@@ -934,8 +943,10 @@ async def api_bulk_enrich(request: Request, current_user: dict = Depends(oracle_
     company_ids = body.get("company_ids", [])
     if not company_ids:
         return JSONResponse({"error": "No company IDs provided"}, status_code=400)
-    if _bulk_enrich_state.get("running"):
-        return JSONResponse({"error": "Enrichment already running", "progress": _bulk_enrich_state}, status_code=409)
+    with _bulk_enrich_lock:
+        if _bulk_enrich_state.get("running"):
+            return JSONResponse({"error": "Enrichment already running", "progress": _bulk_enrich_state}, status_code=409)
+        _bulk_enrich_state.update({"running": True, "done": 0, "total": len(company_ids), "errors": 0})
     t = threading.Thread(target=_bulk_enrich_worker, args=(company_ids,), daemon=True)
     t.start()
     return {"message": f"Bulk enrichment started for {len(company_ids)} companies", "total": len(company_ids)}
@@ -1863,6 +1874,7 @@ async def enrich_stats(current_user: dict = Depends(oracle_auth.require_user)):
 # AUTH / RBAC
 # ---
 @app.post("/api/auth/register")
+@limiter.limit("10/minute")
 async def auth_register(request: Request):
     """Create a new user. First user ever becomes owner automatically."""
     data = await request.json()
@@ -1879,6 +1891,7 @@ async def auth_register(request: Request):
     return {"token": token, "user": {k: v for k, v in user.items() if k != "password_hash"}}
 
 @app.post("/api/auth/login")
+@limiter.limit("10/minute")
 async def auth_login(request: Request):
     data     = await request.json()
     email    = (data.get("email") or "").strip().lower()
@@ -1924,7 +1937,7 @@ async def list_users(current_user: dict = Depends(oracle_auth.require_admin)):
 async def update_user(user_id: int, request: Request,
                        current_user: dict = Depends(oracle_auth.require_admin)):
     data    = await request.json()
-    updated = oracle_auth.update_user(user_id, data)
+    updated = oracle_auth.update_user(user_id, data, caller_role=current_user["role"])
     log_audit(current_user, "update_user", "user", str(user_id), new_value=data)
     return updated
 
@@ -1953,11 +1966,11 @@ async def api_audit_logs(
 # TECHNOLOGY PROFILES
 # ---
 @app.get("/api/technology-profiles")
-async def api_list_profiles(active_only: bool = False):
+async def api_list_profiles(active_only: bool = False, current_user: dict = Depends(oracle_auth.require_user)):
     return tp_mod.list_profiles(active_only=active_only)
 
 @app.get("/api/technology-profiles/{profile_id}")
-async def api_get_profile(profile_id: int):
+async def api_get_profile(profile_id: int, current_user: dict = Depends(oracle_auth.require_user)):
     p = tp_mod.get_profile(profile_id)
     if not p:
         return JSONResponse({"error": "Not found"}, status_code=404)
@@ -1991,7 +2004,7 @@ async def api_delete_profile(profile_id: int,
 
 # product taxonomy
 @app.get("/api/technology-profiles/{profile_id}/taxonomy")
-async def api_list_taxonomy(profile_id: int):
+async def api_list_taxonomy(profile_id: int, current_user: dict = Depends(oracle_auth.require_user)):
     return tp_mod.list_taxonomy(profile_id)
 
 @app.post("/api/technology-profiles/{profile_id}/taxonomy")
@@ -2027,7 +2040,7 @@ async def api_delete_taxonomy(taxonomy_id: int,
 # EVENTS INTELLIGENCE
 # ---
 @app.get("/api/events")
-async def api_list_events(profile_id: int = 0, limit: int = 100):
+async def api_list_events(profile_id: int = 0, limit: int = 100, current_user: dict = Depends(oracle_auth.require_user)):
     return events_mod.list_events(profile_id or None, limit)
 
 @app.post("/api/events")
@@ -2056,7 +2069,7 @@ async def api_delete_event(event_id: int,
     return {"ok": True}
 
 @app.get("/api/events/{event_id}/attendees")
-async def api_event_attendees(event_id: int):
+async def api_event_attendees(event_id: int, current_user: dict = Depends(oracle_auth.require_user)):
     return events_mod.list_attendees(event_id)
 
 @app.post("/api/events/{event_id}/attendees")
@@ -2078,7 +2091,7 @@ async def api_remove_attendee(event_id: int, contact_id: int,
 # MANUFACTURER INTELLIGENCE
 # ---
 @app.get("/api/manufacturer-contacts")
-async def api_list_mfr(profile_id: int = 0, limit: int = 200):
+async def api_list_mfr(profile_id: int = 0, limit: int = 200, current_user: dict = Depends(oracle_auth.require_user)):
     return mfr_mod.list_manufacturer_contacts(profile_id or None, limit)
 
 @app.post("/api/manufacturer-contacts")
@@ -2117,14 +2130,16 @@ async def api_unlink_mfr(contact_id: int, company_id: int,
     return {"ok": True}
 
 @app.get("/api/companies/{company_id}/manufacturer-contacts")
-async def api_company_mfr(company_id: int):
+async def api_company_mfr(company_id: int, current_user: dict = Depends(oracle_auth.require_user)):
     return mfr_mod.get_company_manufacturer_contacts(company_id)
 
 # ---
 # LIST IMPORT
 # ---
+_MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
+
 @app.get("/api/import/fields/{entity_type}")
-async def api_import_fields(entity_type: str):
+async def api_import_fields(entity_type: str, current_user: dict = Depends(oracle_auth.require_user)):
     raw = import_mod._FIELD_LISTS.get(entity_type.lower(), [])
     fields = [{"value": f["key"], "label": f["label"], "required": f.get("required", False)} for f in raw]
     return {"fields": fields}
@@ -2133,8 +2148,11 @@ async def api_import_fields(entity_type: str):
 async def api_parse_headers(
     file: UploadFile = File(...),
     entity_type: str = Form("company"),
+    current_user: dict = Depends(oracle_auth.require_analyst),
 ):
     content = await file.read()
+    if len(content) > _MAX_UPLOAD_BYTES:
+        return JSONResponse({"error": "File exceeds 10 MB limit"}, status_code=413)
     return import_mod.parse_csv_headers(content, entity_type.lower())
 
 @app.post("/api/import/upload")
@@ -2145,8 +2163,11 @@ async def api_import_upload(
     template_name: str = Form(""),
     template_id: int = Form(0),
     default_product: str = Form(""),
+    current_user: dict = Depends(oracle_auth.require_analyst),
 ):
     content  = await file.read()
+    if len(content) > _MAX_UPLOAD_BYTES:
+        return JSONResponse({"error": "File exceeds 10 MB limit"}, status_code=413)
     entity_type = entity_type.lower()
     mappings_dict = json.loads(mappings)
     if import_mod._is_xlsx(content):
@@ -2169,11 +2190,11 @@ async def api_import_upload(
     return {"batch_id": batch["id"], **result}
 
 @app.get("/api/import/batches")
-async def api_import_batches(limit: int = 50):
+async def api_import_batches(limit: int = 50, current_user: dict = Depends(oracle_auth.require_user)):
     return import_mod.list_batches(limit)
 
 @app.get("/api/import/templates")
-async def api_import_templates(entity_type: str = ""):
+async def api_import_templates(entity_type: str = "", current_user: dict = Depends(oracle_auth.require_user)):
     return import_mod.list_templates(entity_type)
 
 @app.post("/api/import/templates")
@@ -2194,13 +2215,13 @@ async def api_delete_template(template_id: int,
 # DATA QUALITY ENGINE
 # ---
 @app.post("/api/dqe/check/company")
-async def api_dqe_company(request: Request):
+async def api_dqe_company(request: Request, current_user: dict = Depends(oracle_auth.require_user)):
     data   = await request.json()
     issues = dqe_mod.run_dqe_on_company(data)
     return {"issues": issues, "has_critical": any(i["severity"] == "critical" for i in issues)}
 
 @app.post("/api/dqe/check/contact")
-async def api_dqe_contact(request: Request):
+async def api_dqe_contact(request: Request, current_user: dict = Depends(oracle_auth.require_user)):
     data   = await request.json()
     issues = dqe_mod.run_dqe_on_contact(data)
     return {"issues": issues, "has_critical": any(i["severity"] == "critical" for i in issues)}

@@ -138,10 +138,16 @@ export default function Contacts() {
     setLoadingMore(true)
     try {
       const r = await fetch(buildUrl(contacts.length), { headers: authH() })
-      if (!r.ok) return
+      if (!r.ok) {
+        if (r.status === 401) { window.location.href = '/login'; return }
+        toast.error('Failed to load more contacts')
+        return
+      }
       const data = await r.json()
       const newRows = Array.isArray(data.rows) ? data.rows : []
       setContacts(prev => [...prev, ...newRows])
+    } catch {
+      toast.error('Failed to load more contacts')
     } finally {
       setLoadingMore(false)
     }

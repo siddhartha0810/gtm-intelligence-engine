@@ -32,10 +32,16 @@ from jose import JWTError, jwt
 import oracle_intent_engine.src.database as db
 
 # ── Configuration ─────────────────────────────────────────────────────────────
-_JWT_SECRET = os.environ.get("JWT_SECRET", "")
+_JWT_SECRET = os.environ.get("JWT_SECRET", "").strip()
 if not _JWT_SECRET:
+    import logging as _log
     import secrets as _sec
-    _JWT_SECRET = _sec.token_hex(32)  # random per-process secret (dev fallback only)
+    _JWT_SECRET = _sec.token_hex(32)
+    _log.getLogger(__name__).warning(
+        "JWT_SECRET is not set — using a random ephemeral key. "
+        "All sessions will be invalidated on restart. "
+        "Set JWT_SECRET in oracle_intent_engine/.env to fix this."
+    )
 _JWT_ALG     = "HS256"
 _TOKEN_HOURS = 12
 
@@ -183,11 +189,22 @@ def list_users() -> list:
         return [dict(r) for r in cur.fetchall()]
 
 
-def update_user(user_id: int, updates: dict) -> dict:
+def update_user(user_id: int, updates: dict, caller_role: str = "analyst") -> dict:
     allowed = {"name", "role", "is_active"}
     safe = {k: v for k, v in updates.items() if k in allowed}
     if not safe:
         raise ValueError("No valid fields to update")
+    if "role" in safe:
+        target = get_user_by_id(user_id)
+        target_rank = ROLE_HIERARCHY.get(target["role"] if target else "owner", 4)
+        caller_rank  = ROLE_HIERARCHY.get(caller_role, 0)
+        new_rank     = ROLE_HIERARCHY.get(safe["role"], 0)
+        if caller_rank <= target_rank or caller_rank <= new_rank:
+            from fastapi import HTTPException, status as http_status
+            raise HTTPException(
+                status_code=http_status.HTTP_403_FORBIDDEN,
+                detail="Cannot change the role of a user with equal or higher privilege",
+            )
     cols = ", ".join(f"{k} = %({k})s" for k in safe)
     safe["user_id"] = user_id
     safe["updated_at"] = datetime.now(timezone.utc)
