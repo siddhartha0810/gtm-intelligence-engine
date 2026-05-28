@@ -147,7 +147,7 @@ logger = logging.getLogger("unified_app")
 app.add_middleware(GZipMiddleware, minimum_size=500)   # compress responses > 500 bytes
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:8000", "http://localhost:5173", "http://127.0.0.1:8000"],
+    allow_origins=["http://localhost:8000", "http://localhost:5173"],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "Accept"],
@@ -1155,7 +1155,7 @@ async def config_test(service: str, request: Request,
                         "message": f"Apify connected as {username}" if ok else "Invalid Apify token"}
 
             else:
-                return JSONResponse({"status": "error", "message": f"Unknown service: {service}"}, status_code=400)
+                return JSONResponse({"status": "error", "message": "Unknown service"}, status_code=400)
 
     except Exception as e:
         return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
@@ -1178,7 +1178,7 @@ async def config_save(service: str, request: Request,
         "hubspot":    "HUBSPOT_API_KEY",
     }
     if service not in _VAR_MAP:
-        return JSONResponse({"ok": False, "message": f"Unknown service: {service}"}, status_code=400)
+        return JSONResponse({"ok": False, "message": "Unknown service"}, status_code=400)
 
     env_var  = _VAR_MAP[service]
     env_file = ENRICH_DIR / ".env"
@@ -1213,7 +1213,9 @@ async def upload_csv(file: UploadFile = File(...),
                      current_user: dict = Depends(oracle_auth.require_analyst)):
     dest_dir = ENRICH_DIR / "input"
     dest_dir.mkdir(exist_ok=True)
-    suffix = Path(file.filename).suffix.lower()
+    suffix = Path(file.filename or "").suffix.lower()
+    if suffix not in {".csv", ".xlsx"}:
+        return JSONResponse({"error": "Only .csv and .xlsx files are accepted"}, status_code=400)
     dest   = dest_dir / f"leads{suffix}"
     content = await file.read()
     dest.write_bytes(content)
@@ -1881,12 +1883,14 @@ async def auth_register(request: Request):
     email    = (data.get("email") or "").strip().lower()
     name     = (data.get("name")  or "").strip()
     password = (data.get("password") or "").strip()
-    role     = (data.get("role") or "analyst").strip()
     if not email or not password:
         return JSONResponse({"error": "email and password are required"}, status_code=400)
+    if len(password) < 8:
+        return JSONResponse({"error": "Password must be at least 8 characters"}, status_code=400)
     if oracle_auth.get_user_by_email(email):
         return JSONResponse({"error": "Registration failed. Please try again or contact support."}, status_code=409)
-    user  = oracle_auth.create_user(email, name, password, role)
+    # role is always analyst for self-registration — admins elevate via /api/users PATCH
+    user  = oracle_auth.create_user(email, name, password, role="analyst")
     token = oracle_auth.create_token(user["id"], user["email"], user["role"])
     return {"token": token, "user": {k: v for k, v in user.items() if k != "password_hash"}}
 
@@ -1946,7 +1950,7 @@ async def deactivate_user(user_id: int,
                            current_user: dict = Depends(oracle_auth.require_admin)):
     if user_id == current_user["id"]:
         return JSONResponse({"error": "Cannot deactivate yourself"}, status_code=400)
-    oracle_auth.update_user(user_id, {"is_active": False})
+    oracle_auth.update_user(user_id, {"is_active": False}, caller_role=current_user["role"])
     log_audit(current_user, "deactivate_user", "user", str(user_id))
     return {"ok": True}
 

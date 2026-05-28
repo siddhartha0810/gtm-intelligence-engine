@@ -97,17 +97,23 @@ def decode_token(token: str) -> dict:
 def _get_current_user(
     creds: Optional[HTTPAuthorizationCredentials] = Depends(_bearer),
 ) -> dict:
-    """Decode JWT and return { id, email, role }.  Raises 401 if missing/invalid."""
+    """Decode JWT, verify account is still active, return { id, email, role }."""
     if not creds:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authorization header required",
         )
     payload = decode_token(creds.credentials)
+    user = get_user_by_id(int(payload["sub"]))
+    if not user or not user.get("is_active"):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Account inactive or not found",
+        )
     return {
-        "id":    int(payload["sub"]),
-        "email": payload["email"],
-        "role":  payload["role"],
+        "id":    user["id"],
+        "email": user["email"],
+        "role":  user["role"],
     }
 
 
@@ -194,17 +200,25 @@ def update_user(user_id: int, updates: dict, caller_role: str = "analyst") -> di
     safe = {k: v for k, v in updates.items() if k in allowed}
     if not safe:
         raise ValueError("No valid fields to update")
-    if "role" in safe:
+    caller_rank = ROLE_HIERARCHY.get(caller_role, 0)
+    if "role" in safe or "is_active" in safe:
         target = get_user_by_id(user_id)
         target_rank = ROLE_HIERARCHY.get(target["role"] if target else "owner", 4)
-        caller_rank  = ROLE_HIERARCHY.get(caller_role, 0)
-        new_rank     = ROLE_HIERARCHY.get(safe["role"], 0)
-        if caller_rank <= target_rank or caller_rank <= new_rank:
-            from fastapi import HTTPException, status as http_status
-            raise HTTPException(
-                status_code=http_status.HTTP_403_FORBIDDEN,
-                detail="Cannot change the role of a user with equal or higher privilege",
-            )
+        if "role" in safe:
+            new_rank = ROLE_HIERARCHY.get(safe["role"], 0)
+            if caller_rank <= target_rank or caller_rank <= new_rank:
+                from fastapi import HTTPException, status as http_status
+                raise HTTPException(
+                    status_code=http_status.HTTP_403_FORBIDDEN,
+                    detail="Cannot change the role of a user with equal or higher privilege",
+                )
+        if "is_active" in safe and safe["is_active"] is False:
+            if target and target.get("role") == "owner":
+                from fastapi import HTTPException, status as http_status
+                raise HTTPException(
+                    status_code=http_status.HTTP_403_FORBIDDEN,
+                    detail="Cannot deactivate the owner account",
+                )
     cols = ", ".join(f"{k} = %({k})s" for k in safe)
     safe["user_id"] = user_id
     safe["updated_at"] = datetime.now(timezone.utc)
