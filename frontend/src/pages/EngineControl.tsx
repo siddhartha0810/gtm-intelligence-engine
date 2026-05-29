@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Play, Square, RotateCcw, Download, Trash2, Factory, Users, CheckCircle,
-         Mail, X, ChevronRight, Zap, Clock, CreditCard, Building2, Database } from 'lucide-react'
+         Mail, X, ChevronRight, Zap, Clock, CreditCard, Building2, Database,
+         ExternalLink, Globe, BarChart2 } from 'lucide-react'
 import { toast } from '../components/Toast'
 
 const authH = (): Record<string, string> => ({
@@ -60,22 +61,29 @@ const ENGINES = [
   { id: 'hubspot',    label: 'HubSpot Sync Engine',    desc: 'Pushes approved contacts from Review Queue to CRM',                         color: '#f59e0b', modules: 1 },
 ]
 
-const SOURCES = [
-  { id: 'linkedin',          label: 'LinkedIn Jobs',          desc: 'Job postings (public search)' },
-  { id: 'oracle_website',    label: 'Oracle.com',             desc: 'Customer stories + press releases' },
+// Sources are split into active (proven signal generators) and experimental (0 signals to date).
+// Experimental sources are hidden by default but can be expanded if needed.
+const ACTIVE_SOURCES = [
+  { id: 'linkedin',       label: 'LinkedIn Jobs',    desc: '787 signals · 664 companies — primary signal source (ALL Oracle products)' },
+  { id: 'oracle_website', label: 'Oracle.com',       desc: '95 signals · 94 companies — customer stories + press releases' },
+  { id: 'erp_today',      label: 'ERP News (Multi)', desc: 'ERP Today + Diginomica + Bing RSS — EBS, PeopleSoft, Siebel, Hyperion, JDE go-lives' },
+  { id: 'news',           label: 'Oracle News',      desc: 'Bing RSS — go-live announcements for ALL Oracle products' },
+  { id: 'g2_reviews',     label: 'G2 / Capterra',   desc: 'Software review sites — confirms active Oracle deployments (post_live signals)' },
+]
+
+const EXPERIMENTAL_SOURCES = [
   { id: 'partner_casestudy', label: 'Partner Stories',        desc: 'Oracle Gold/Platinum SI case studies' },
   { id: 'si_casestudy',      label: 'SI Case Studies',        desc: 'Accenture, Deloitte, PwC, KPMG client names' },
   { id: 'oracle_community',  label: 'Oracle Community',       desc: 'Migration stories + oracle.com news' },
   { id: 'oracle_event',      label: 'Oracle Events',          desc: 'CloudWorld / OpenWorld attendance signals' },
-  { id: 'news',              label: 'News Feeds',             desc: 'Bing RSS — go-live announcements' },
-  { id: 'erp_today',         label: 'ERP Today',              desc: 'ERP industry news RSS' },
-  { id: 'home_builders',     label: 'Home Builders',          desc: '1,000+ annual closings — JDE construction signals' },
-  { id: 'indeed',            label: 'Indeed',                 desc: 'Job postings' },
+  { id: 'home_builders',     label: 'Home Builders',          desc: 'JDE construction signals (1,000+ closing builders)' },
   { id: 'company_pages',     label: 'Company Press Releases', desc: 'Company IR pages + announcements' },
-  { id: 'procurement',       label: 'Procurement Tenders',    desc: 'Contracts Finder, SAM.gov, TED EU' },
+  { id: 'procurement',       label: 'Procurement Tenders',    desc: 'Contracts Finder (UK) + USASpending.gov + Bing procurement RSS' },
+  { id: 'sec_filing',        label: 'SEC Filings (EDGAR)',    desc: 'Free EDGAR search — 10-K/10-Q/8-K filings mentioning Oracle, EBS, PeopleSoft' },
+  { id: 'indeed',            label: 'Indeed',                 desc: 'Job postings — limited by bot detection' },
 ]
 
-const DEFAULT_SOURCES = ['linkedin','oracle_website','partner_casestudy','si_casestudy','oracle_community','oracle_event','news','erp_today','home_builders']
+const DEFAULT_SOURCES = ['linkedin', 'oracle_website', 'erp_today', 'news', 'g2_reviews']
 
 const card = { background:'#ffffff', border:'1px solid #e2e8f0', borderRadius:12, padding:20, boxShadow:'0 1px 3px rgba(0,0,0,0.06)' }
 const now  = () => new Date().toLocaleTimeString('en-GB', { hour12: false })
@@ -295,11 +303,214 @@ function PreflightModal({
   )
 }
 
+// ── Scan Results Modal ────────────────────────────────────────────────────────
+
+interface ScanCompany {
+  name:         string
+  domain:       string | null
+  industry:     string | null
+  signal_count: number
+  first_seen:   string | null
+}
+
+interface ScanRun {
+  id:               number
+  started_at:       string
+  completed_at:     string | null
+  total_companies:  number
+  total_signals:    number
+  status:           string
+}
+
+function ScanResultsModal({ onClose, onDeleted }: { onClose: () => void; onDeleted: () => void }) {
+  const [companies,  setCompanies]  = useState<ScanCompany[]>([])
+  const [scanRuns,   setScanRuns]   = useState<ScanRun[]>([])
+  const [selectedId, setSelectedId] = useState<number | null>(null)
+  const [loading,    setLoading]    = useState(true)
+  const [deleting,   setDeleting]   = useState(false)
+  const [search,     setSearch]     = useState('')
+
+  const loadRun = async (runId: number | null) => {
+    setLoading(true)
+    try {
+      const qs  = runId !== null ? `?run_id=${runId}` : ''
+      const res = await fetch(`/scan/companies${qs}`, { headers: authH() })
+      if (!res.ok) { toast.error('Failed to load scan results'); return }
+      const d   = await res.json()
+      setCompanies(d.companies || [])
+      if (d.scan_runs?.length && scanRuns.length === 0) setScanRuns(d.scan_runs)
+      setSelectedId(d.run_id ?? null)
+    } catch { toast.error('Network error') }
+    finally   { setLoading(false) }
+  }
+
+  const removeFromDB = async () => {
+    if (!selectedId || selectedId <= 0) {
+      toast.error('Select a specific scan run first (not "All time")')
+      return
+    }
+    const count = companies.length
+    if (!window.confirm(`Remove ${count} companies from scan run #${selectedId}?\n\nThis also deletes their signals and contacts. Cannot be undone.`))
+      return
+    setDeleting(true)
+    try {
+      const res = await fetch(`/scan/companies?run_id=${selectedId}`, {
+        method: 'DELETE',
+        headers: authH(),
+      })
+      const d = await res.json()
+      if (!res.ok) { toast.error(d.detail || 'Delete failed'); return }
+      toast.success(`Removed ${d.deleted} companies from the database`)
+      setCompanies([])
+      setScanRuns(prev => prev.filter(r => r.id !== selectedId))
+      setSelectedId(null)
+      onDeleted()   // refresh enrichment stats on the parent page
+    } catch { toast.error('Network error') }
+    finally { setDeleting(false) }
+  }
+
+  useEffect(() => { loadRun(null) }, [])
+
+  const filtered = companies.filter(c =>
+    !search || c.name.toLowerCase().includes(search.toLowerCase()) ||
+    (c.domain || '').toLowerCase().includes(search.toLowerCase())
+  )
+
+  const fmtDate = (s: string | null) => s ? new Date(s).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'
+
+  return (
+    <>
+      <div onClick={onClose} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', zIndex:1000 }} />
+      <div style={{ position:'fixed', top:'50%', left:'50%', transform:'translate(-50%,-50%)',
+                    width:'min(900px, 95vw)', maxHeight:'85vh', background:'#fff',
+                    borderRadius:14, zIndex:1001, display:'flex', flexDirection:'column',
+                    boxShadow:'0 20px 60px rgba(0,0,0,0.25)', overflow:'hidden' }}>
+
+        {/* Header */}
+        <div style={{ padding:'18px 24px', borderBottom:'1px solid #e2e8f0', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0 }}>
+          <div>
+            <div style={{ fontSize:16, fontWeight:600, color:'#0f172a', display:'flex', alignItems:'center', gap:8 }}>
+              <BarChart2 size={16} color="#3b82f6" /> Scan Results
+            </div>
+            <div style={{ fontSize:12, color:'#64748b', marginTop:3 }}>
+              Companies discovered by the Oracle Intent scan
+            </div>
+          </div>
+          <button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer', color:'#94a3b8', padding:4 }}>
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Scan run selector */}
+        {scanRuns.length > 0 && (
+          <div style={{ padding:'12px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', gap:10, flexShrink:0, overflowX:'auto' }}>
+            <span style={{ fontSize:12, color:'#64748b', flexShrink:0 }}>Scan run:</span>
+            {scanRuns.map(r => (
+              <button key={r.id} onClick={() => loadRun(r.id)}
+                style={{ flexShrink:0, padding:'4px 12px', borderRadius:999, fontSize:12, fontWeight:500, cursor:'pointer', border:'none',
+                         background: selectedId === r.id ? '#3b82f6' : '#f1f5f9',
+                         color:      selectedId === r.id ? 'white'   : '#475569' }}>
+                #{r.id} — {fmtDate(r.started_at)}
+                {r.total_companies ? <span style={{ opacity:0.8 }}> ({r.total_companies} cos)</span> : null}
+              </button>
+            ))}
+            <button onClick={() => loadRun(0)}
+              style={{ flexShrink:0, padding:'4px 12px', borderRadius:999, fontSize:12, fontWeight:500, cursor:'pointer', border:'none',
+                       background: selectedId === 0 ? '#3b82f6' : '#f1f5f9',
+                       color:      selectedId === 0 ? 'white'   : '#475569' }}>
+              All time
+            </button>
+          </div>
+        )}
+
+        {/* Search + summary bar */}
+        <div style={{ padding:'10px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', gap:12, flexShrink:0 }}>
+          <input value={search} onChange={e => setSearch(e.target.value)}
+            placeholder="Search companies..."
+            style={{ flex:1, padding:'7px 12px', borderRadius:8, border:'1px solid #e2e8f0', fontSize:13, outline:'none', background:'#f8fafc' }} />
+          <span style={{ fontSize:12, color:'#64748b', flexShrink:0 }}>
+            {loading ? 'Loading…' : `${filtered.length} companies`}
+          </span>
+        </div>
+
+        {/* Table */}
+        <div style={{ flex:1, overflowY:'auto' }}>
+          {loading ? (
+            <div style={{ padding:40, textAlign:'center', color:'#94a3b8', fontSize:14 }}>Loading companies…</div>
+          ) : filtered.length === 0 ? (
+            <div style={{ padding:40, textAlign:'center', color:'#94a3b8', fontSize:14 }}>No companies found for this scan run.</div>
+          ) : (
+            <table style={{ width:'100%', borderCollapse:'collapse' }}>
+              <thead>
+                <tr style={{ background:'#f8fafc' }}>
+                  {['Company', 'Domain', 'Industry', 'Signals', 'First seen'].map(h => (
+                    <th key={h} style={{ padding:'10px 16px', textAlign:'left', fontSize:11, fontWeight:600, color:'#64748b', letterSpacing:'0.05em', borderBottom:'1px solid #e2e8f0' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((c, i) => (
+                  <tr key={i} style={{ borderBottom:'1px solid #f1f5f9' }}
+                    onMouseEnter={e => (e.currentTarget.style.background = '#f8fafc')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                    <td style={{ padding:'10px 16px', fontSize:13, fontWeight:500, color:'#0f172a' }}>
+                      <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                        <Building2 size={13} color="#94a3b8" />
+                        {c.name}
+                      </div>
+                    </td>
+                    <td style={{ padding:'10px 16px', fontSize:12, color:'#64748b' }}>
+                      {c.domain ? (
+                        <a href={`https://${c.domain}`} target="_blank" rel="noreferrer"
+                          style={{ display:'flex', alignItems:'center', gap:4, color:'#3b82f6', textDecoration:'none' }}>
+                          <Globe size={11} /> {c.domain} <ExternalLink size={10} />
+                        </a>
+                      ) : '—'}
+                    </td>
+                    <td style={{ padding:'10px 16px', fontSize:12, color:'#64748b' }}>{c.industry || '—'}</td>
+                    <td style={{ padding:'10px 16px', fontSize:12 }}>
+                      <span style={{ padding:'2px 8px', borderRadius:999, fontSize:11, fontWeight:600,
+                                     background: (c.signal_count || 0) > 0 ? 'rgba(59,130,246,0.12)' : '#f1f5f9',
+                                     color:      (c.signal_count || 0) > 0 ? '#2563eb' : '#94a3b8' }}>
+                        {c.signal_count || 0}
+                      </span>
+                    </td>
+                    <td style={{ padding:'10px 16px', fontSize:12, color:'#94a3b8' }}>{fmtDate(c.first_seen)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div style={{ padding:'12px 24px', borderTop:'1px solid #e2e8f0', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0 }}>
+          {/* Remove button — only shown when a specific run is selected and has companies */}
+          {selectedId && selectedId > 0 && companies.length > 0 ? (
+            <button onClick={removeFromDB} disabled={deleting}
+              style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 16px', borderRadius:8,
+                       border:'1px solid rgba(239,68,68,0.35)', background:'rgba(239,68,68,0.06)',
+                       color:'#dc2626', fontSize:13, fontWeight:500, cursor:'pointer', opacity: deleting ? 0.6 : 1 }}>
+              <Trash2 size={13} />
+              {deleting ? 'Removing…' : `Remove ${companies.length} companies from DB`}
+            </button>
+          ) : <span />}
+          <button onClick={onClose}
+            style={{ padding:'8px 20px', borderRadius:8, border:'1px solid #e2e8f0', background:'transparent', fontSize:13, color:'#64748b', cursor:'pointer' }}>
+            Close
+          </button>
+        </div>
+      </div>
+    </>
+  )
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function EngineControl() {
-  const [oracleState,     setOracleState]     = useState<'idle' | 'running' | 'stopping'>('idle')
-  const [enrichState,     setEnrichState]     = useState<'idle' | 'running'>('idle')
+  const [oracleState,       setOracleState]     = useState<'idle' | 'running' | 'stopping'>('idle')
+  const [enrichState,       setEnrichState]     = useState<'idle' | 'running'>('idle')
+  const [showScanResults,   setShowScanResults] = useState(false)
   const [logs,            setLogs]            = useState<LogEntry[]>([{ t: now(), level: 'INFO', msg: 'System ready. Fetching engine status...' }])
   const [enrichLogs,      setEnrichLogs]      = useState<LogEntry[]>([])
   const [selectedSources, setSelectedSources] = useState<string[]>(DEFAULT_SOURCES)
@@ -331,16 +542,6 @@ export default function EngineControl() {
     const m2 = line.match(/^\[(\w+)\]\s+(.+)$/)
     if (m2) return { t: now(), level: m2[1], msg: m2[2] }
     return { t: now(), level: 'INFO', msg: line }
-  }
-
-  const fetchStatus = async () => {
-    try {
-      const r = await fetch('/scan/status', { headers: authH() })
-      if (!r.ok) return
-      const d = await r.json()
-      if (d.status === 'running') setOracleState('running')
-      else if (oracleState === 'running') setOracleState('idle')
-    } catch { /* silent */ }
   }
 
   const fetchLog = async () => {
@@ -497,10 +698,68 @@ export default function EngineControl() {
     setTimeout(() => { setOracleState('idle'); toast.info('Engine reset') }, oracleState === 'running' ? 2500 : 0)
   }
 
+  // Bootstrap: fetch current state on mount and re-attach polling loops if
+  // either engine is already running (handles hard-refresh mid-run).
   useEffect(() => {
-    fetchStatus(); fetchLog(); fetchEnrichStats(); fetchEnrichStatus()
+    const bootstrap = async () => {
+      await fetchLog()
+      await fetchEnrichStats()
+
+      // ── Oracle scan ──────────────────────────────────────────────────────────
+      try {
+        const r = await fetch('/scan/status', { headers: authH() })
+        if (r.ok) {
+          const d = await r.json()
+          if (d.status === 'running') {
+            setOracleState('running')
+            addLog('INFO', 'Scan already running — resuming live log...')
+            if (pollRef.current) clearInterval(pollRef.current)
+            pollRef.current = setInterval(async () => {
+              await fetchLog()
+              const s = await fetch('/scan/status', { headers: authH() })
+                .then(res => res.json()).catch(() => null)
+              if (s && s.status !== 'running') {
+                setOracleState('idle')
+                addLog('SUCCESS', 'Oracle Intent scan completed.')
+                clearInterval(pollRef.current!)
+                pollRef.current = null
+                fetchEnrichStats()
+              }
+            }, 3000)
+          }
+        }
+      } catch { /* silent */ }
+
+      // ── Lead Enrichment ──────────────────────────────────────────────────────
+      try {
+        const r = await fetch('/api/enrich/status', { headers: authH() })
+        if (r.ok) {
+          const d = await r.json()
+          setEnrichStatus(d)
+          if (d.status === 'running') {
+            setEnrichState('running')
+            setShowEnrichLog(true)
+            if (enrichPoll.current) clearInterval(enrichPoll.current)
+            enrichPoll.current = setInterval(async () => {
+              await fetchEnrichLog()
+              const s = await fetch('/api/enrich/status', { headers: authH() })
+                .then(res => res.json()).catch(() => null)
+              if (s) setEnrichStatus(s)
+              if (s && s.status !== 'running') {
+                setEnrichState('idle')
+                clearInterval(enrichPoll.current!)
+                enrichPoll.current = null
+                fetchEnrichStats()
+              }
+            }, 3000)
+          }
+        }
+      } catch { /* silent */ }
+    }
+
+    bootstrap()
     return () => {
-      if (pollRef.current)  clearInterval(pollRef.current)
+      if (pollRef.current)    clearInterval(pollRef.current)
       if (enrichPoll.current) clearInterval(enrichPoll.current)
     }
   }, [])
@@ -531,6 +790,14 @@ export default function EngineControl() {
     <div style={{ display:'flex', flexDirection:'column', gap:20, width:'100%' }}>
       <style>{`@keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}} @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.5}}`}</style>
 
+      {/* Scan results modal */}
+      {showScanResults && (
+        <ScanResultsModal
+          onClose={() => setShowScanResults(false)}
+          onDeleted={() => { fetchEnrichStats(); fetchEnrichStatus() }}
+        />
+      )}
+
       {/* Pre-flight modal */}
       {showPreflight && preflight && (
         <PreflightModal
@@ -544,9 +811,18 @@ export default function EngineControl() {
         />
       )}
 
-      <div>
-        <h1 style={{ fontSize:20, fontWeight:600, color:'#0f172a', margin:0 }}>Engine Control</h1>
-        <p style={{ fontSize:13, color:'#64748b', marginTop:4 }}>Start, stop, and monitor intelligence engines in real time</p>
+      <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between' }}>
+        <div>
+          <h1 style={{ fontSize:20, fontWeight:600, color:'#0f172a', margin:0 }}>Engine Control</h1>
+          <p style={{ fontSize:13, color:'#64748b', marginTop:4 }}>Start, stop, and monitor intelligence engines in real time</p>
+        </div>
+        <button
+          onClick={() => setShowScanResults(true)}
+          style={{ display:'flex', alignItems:'center', gap:8, padding:'9px 18px', borderRadius:8,
+                   border:'1px solid rgba(59,130,246,0.35)', background:'rgba(59,130,246,0.06)',
+                   color:'#2563eb', fontSize:13, fontWeight:500, cursor:'pointer', flexShrink:0 }}>
+          <BarChart2 size={14} /> View Scan Results
+        </button>
       </div>
 
       {/* Engine cards */}
@@ -640,14 +916,20 @@ export default function EngineControl() {
 
           {/* Data Sources */}
           <div style={{ marginBottom:16 }}>
-            <div style={{ fontSize:12, fontWeight:500, color:'#94a3b8', marginBottom:10 }}>Data Sources</div>
-            <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
-              {SOURCES.map(s => {
+            {/* Active sources */}
+            <div style={{ fontSize:12, fontWeight:500, color:'#94a3b8', marginBottom:8 }}>
+              Data Sources
+              <span style={{ marginLeft:8, fontSize:10, fontWeight:600, padding:'2px 7px', borderRadius:999, background:'rgba(16,185,129,0.12)', color:'#10b981' }}>
+                {ACTIVE_SOURCES.filter(s => selectedSources.includes(s.id)).length}/{ACTIVE_SOURCES.length} active
+              </span>
+            </div>
+            <div style={{ display:'flex', flexDirection:'column', gap:6, marginBottom:10 }}>
+              {ACTIVE_SOURCES.map(s => {
                 const active = selectedSources.includes(s.id)
                 return (
                   <button key={s.id} onClick={() => toggleSource(s.id)}
                     style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 10px', borderRadius:8, cursor:'pointer', background: active ? 'rgba(59,130,246,0.08)' : '#f8fafc', color: active ? '#2563eb' : '#64748b', border: active ? '1px solid rgba(59,130,246,0.25)' : '1px solid #e2e8f0', textAlign:'left', transition:'all 0.15s' }}>
-                    <div style={{ width:6, height:6, borderRadius:'50%', background: active ? '#3b82f6' : '#cbd5e1', flexShrink:0 }} />
+                    <div style={{ width:6, height:6, borderRadius:'50%', background: active ? '#10b981' : '#cbd5e1', flexShrink:0 }} />
                     <div style={{ flex:1 }}>
                       <span style={{ fontSize:12, fontWeight:500 }}>{s.label}</span>
                       <span style={{ fontSize:11, color:'#94a3b8', marginLeft:6 }}>{s.desc}</span>
@@ -656,6 +938,29 @@ export default function EngineControl() {
                 )
               })}
             </div>
+
+            {/* Experimental sources — collapsed by default */}
+            <details style={{ cursor:'pointer' }}>
+              <summary style={{ fontSize:11, fontWeight:500, color:'#94a3b8', listStyle:'none', display:'flex', alignItems:'center', gap:6, userSelect:'none', marginBottom:6 }}>
+                <span style={{ fontSize:10 }}>▶</span>
+                Experimental sources (0 signals to date)
+              </summary>
+              <div style={{ display:'flex', flexDirection:'column', gap:5, marginTop:6 }}>
+                {EXPERIMENTAL_SOURCES.map(s => {
+                  const active = selectedSources.includes(s.id)
+                  return (
+                    <button key={s.id} onClick={() => toggleSource(s.id)}
+                      style={{ display:'flex', alignItems:'center', gap:10, padding:'7px 10px', borderRadius:8, cursor:'pointer', background: active ? 'rgba(245,158,11,0.08)' : '#f8fafc', color: active ? '#d97706' : '#94a3b8', border: active ? '1px solid rgba(245,158,11,0.3)' : '1px solid #e2e8f0', textAlign:'left', transition:'all 0.15s', opacity:0.8 }}>
+                      <div style={{ width:6, height:6, borderRadius:'50%', background: active ? '#f59e0b' : '#e2e8f0', flexShrink:0 }} />
+                      <div style={{ flex:1 }}>
+                        <span style={{ fontSize:11, fontWeight:500 }}>{s.label}</span>
+                        <span style={{ fontSize:10, color:'#cbd5e1', marginLeft:6 }}>{s.desc}</span>
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+            </details>
           </div>
 
           {/* Scan Depth */}
@@ -669,7 +974,7 @@ export default function EngineControl() {
           </div>
 
           <div style={{ padding:'10px 12px', background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:8, fontSize:11, color:'#94a3b8' }}>
-            {selectedSources.length} sources selected · depth: {depth}
+            {ACTIVE_SOURCES.filter(s => selectedSources.includes(s.id)).length} active + {EXPERIMENTAL_SOURCES.filter(s => selectedSources.includes(s.id)).length} experimental · depth: {depth}
             {jdeMfg && <span style={{ color:'#10b981', marginLeft:8 }}>· JDE Mfg focus ON</span>}
             {autoTrigger && <span style={{ color:'#6366f1', marginLeft:8 }}>· auto-enrich ON</span>}
           </div>

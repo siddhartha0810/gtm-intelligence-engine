@@ -32,6 +32,7 @@ from src.signals.partner_casestudy_signal import PartnerCaseStudySignal
 from src.signals.oracle_community_signal import OracleCommunitySignal
 from src.signals.oracle_event_signal import OracleEventSignal
 from src.signals.company_pages_signal import CompanyPagesSignal
+from src.signals.g2_reviews_signal import G2ReviewsSignal
 
 logger = get_logger(__name__)
 
@@ -95,6 +96,7 @@ def run_scan(
             "oracle_community", "oracle_event",
             "si_casestudy", "partner_casestudy", "company_pages",
             "home_builders",
+            "g2_reviews",
         ]
         max_pages = max_pages or config.MAX_PAGES
 
@@ -130,6 +132,7 @@ def run_scan(
             "oracle_event":     OracleEventSignal(),
             "company_pages":    CompanyPagesSignal(),
             "home_builders":    HomeBuildersSignal(),
+            "g2_reviews":       G2ReviewsSignal(),
         }
 
         raw_signals: list[dict] = []
@@ -279,6 +282,18 @@ def run_scan(
                 _log(f"✓ HOME BUILDERS done — {len(results)} JDE signals")
             except Exception as e:
                 _log(f"  [home_builders] ERROR: {e}")
+
+        # G2 / Capterra reviews — confirmed Oracle product users
+        if "g2_reviews" in sources and not _is_stopped():
+            _current_scan["progress"] = "Scanning G2/Capterra reviews (confirmed Oracle users)..."
+            _log("▶ Starting G2/CAPTERRA REVIEWS (confirmed active Oracle deployments)")
+            try:
+                results = scrapers["g2_reviews"].fetch(location=location)
+                raw_signals.extend(results)
+                _current_scan["raw_signals"] = len(raw_signals)
+                _log(f"✓ G2/CAPTERRA done — {len(results)} confirmed-user signals")
+            except Exception as e:
+                _log(f"  [g2_reviews] ERROR: {e}")
 
         # procurement / rfp tenders
         if "procurement" in sources and not _is_stopped():

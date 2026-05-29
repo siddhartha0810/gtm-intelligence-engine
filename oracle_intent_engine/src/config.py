@@ -56,38 +56,79 @@ FLASK_SECRET_KEY = os.getenv("FLASK_SECRET_KEY", "oracle-intent-secret")
 FLASK_PORT = int(os.getenv("FLASK_PORT", "5001"))
 
 ORACLE_SEARCH_QUERIES = [
-    # ERP
+    # ── Oracle Cloud ERP (Fusion) ──────────────────────────────────────
     "Oracle Cloud ERP consultant",
     "Oracle Fusion ERP implementation",
     "Oracle Financials Cloud",
     "Oracle ERP Cloud migration",
-    # HCM
+    "Oracle Fusion Cloud implementation manager",
+    "Oracle Financials Cloud project manager",
+    # ── Oracle HCM Cloud ──────────────────────────────────────────────
     "Oracle HCM Cloud consultant",
     "Oracle Fusion HCM implementation",
     "Oracle Global HR Cloud",
-    # SCM
+    "Oracle HCM Cloud project manager",
+    "Oracle Payroll Cloud consultant",
+    # ── Oracle SCM Cloud ──────────────────────────────────────────────
     "Oracle SCM Cloud consultant",
     "Oracle Supply Chain Cloud implementation",
-    # EPM
+    "Oracle Procurement Cloud consultant",
+    "Oracle Manufacturing Cloud consultant",
+    # ── Oracle EPM Cloud ──────────────────────────────────────────────
     "Oracle EPM Cloud consultant",
     "Oracle Hyperion implementation",
     "Oracle Planning Cloud",
-    # CX
+    "Oracle Hyperion Financial Management consultant",
+    "Oracle Hyperion Planning administrator",
+    "Oracle EPM Cloud project manager",
+    # ── Oracle CX Cloud ───────────────────────────────────────────────
     "Oracle CX Cloud consultant",
     "Oracle Sales Cloud implementation",
-    # NetSuite
+    "Oracle Service Cloud consultant",
+    "Oracle CPQ Cloud consultant",
+    # ── NetSuite ──────────────────────────────────────────────────────
     "NetSuite implementation consultant",
     "Oracle NetSuite ERP",
-    # OCI
+    "NetSuite administrator",
+    "NetSuite ERP project manager",
+    # ── OCI / Infrastructure ──────────────────────────────────────────
     "Oracle Cloud Infrastructure architect",
     "OCI migration consultant",
-    # Integration
+    "Oracle OCI cloud engineer",
+    # ── Oracle Integration ────────────────────────────────────────────
     "Oracle Integration Cloud OIC",
     "Oracle middleware consultant",
-    # Database
+    "Oracle SOA Suite integration developer",
+    # ── Oracle Database ───────────────────────────────────────────────
     "Oracle Autonomous Database migration",
     "Oracle Database administrator",
-    # JD Edwards — core
+    "Oracle Database DBA consultant",
+    # ── Oracle E-Business Suite (EBS) — legacy, massive install base ──
+    "Oracle E-Business Suite consultant",
+    "Oracle EBS implementation",
+    "Oracle EBS R12 upgrade",
+    "Oracle EBS functional consultant",
+    "Oracle EBS technical developer",
+    "Oracle E-Business Suite project manager",
+    "Oracle EBS migration cloud",
+    "Oracle EBS financials consultant",
+    "Oracle EBS HRMS consultant",
+    "Oracle EBS supply chain consultant",
+    # ── Oracle PeopleSoft — HR/Finance, huge public sector base ───────
+    "Oracle PeopleSoft consultant",
+    "PeopleSoft HCM implementation",
+    "PeopleSoft Financials consultant",
+    "PeopleSoft FSCM consultant",
+    "PeopleSoft technical developer",
+    "PeopleSoft upgrade consultant",
+    "PeopleSoft to Oracle Cloud migration",
+    "PeopleSoft campus solutions consultant",
+    # ── Oracle Siebel CRM — legacy, still active in telco/insurance ───
+    "Oracle Siebel CRM consultant",
+    "Siebel CRM implementation",
+    "Siebel to Oracle CX migration",
+    "Oracle Siebel developer",
+    # ── JD Edwards — core ─────────────────────────────────────────────
     "JD Edwards consultant",
     "JDE EnterpriseOne implementation",
     "JD Edwards ERP upgrade",
@@ -121,6 +162,10 @@ ORACLE_SEARCH_QUERIES = [
     "JDE inventory procurement sales order",
     "JD Edwards supply chain distribution",
     "JDE wholesale distribution implementation",
+    # High-yield queries confirmed working (tested May 2026)
+    "JD Edwards 9.2 upgrade",             # 772+ results, very specific version-upgrade intent
+    "JD Edwards upgrade project manager",  # 1,000+ results, clear upgrade cycle signal
+    "JDE system administrator",            # 6,000+ results, broad but catches active JDE shops
 ]
 
 # ── JDE Manufacturing Focus queries ─────────────────────────────────────────
@@ -207,4 +252,30 @@ NEWS_QUERIES = [
     "JDE EnterpriseOne upgrade announcement",
     "company selects JD Edwards ERP",
     "JDE to Oracle Cloud migration",
+    # Oracle E-Business Suite (EBS) news — large legacy install base
+    "Oracle E-Business Suite go live implementation",
+    "Oracle EBS upgrade announcement",
+    "company migrates from Oracle EBS to cloud",
+    "Oracle EBS R12 implementation go live",
+    "Oracle EBS modernization cloud migration",
+    "Oracle EBS digital transformation announcement",
+    # PeopleSoft news — HR/Finance, public sector and higher education
+    "Oracle PeopleSoft upgrade implementation",
+    "PeopleSoft HCM go live announcement",
+    "company upgrades PeopleSoft ERP",
+    "PeopleSoft to Oracle Cloud migration announcement",
+    "PeopleSoft campus solutions implementation",
+    "university PeopleSoft implementation go live",
+    # Siebel CRM news — telco, insurance, financial services
+    "Oracle Siebel CRM upgrade implementation",
+    "Siebel to Oracle CX Cloud migration",
+    "company replaces Siebel CRM Oracle",
+    # Hyperion news — CFO / finance office
+    "Oracle Hyperion implementation go live",
+    "Oracle Hyperion upgrade announcement",
+    "company deploys Oracle Hyperion EPM",
+    # Oracle Analytics / BI news
+    "Oracle Analytics Cloud implementation",
+    "Oracle BI implementation announcement",
+    "Oracle Analytics go live company",
 ]
