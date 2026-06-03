@@ -582,6 +582,41 @@ async def stop_scan(current_user: dict = Depends(oracle_auth.require_analyst)):
 async def scan_log(current_user: dict = Depends(oracle_auth.require_user)):
     return _scan_get_log()
 
+@app.get("/scan/companies")
+async def scan_companies(
+    run_id: int = None,
+    current_user: dict = Depends(oracle_auth.require_user),
+):
+    """Companies discovered in a specific scan run (defaults to latest completed run).
+
+    Query params:
+      run_id=<int>  — specific scan run
+      run_id=0      — all companies ever
+    """
+    resolved_run_id = run_id if run_id is not None else oracle_db.get_latest_completed_run_id()
+    companies = list(oracle_db.get_all_companies_with_signals(run_id=resolved_run_id))
+    companies = _annotate_and_sort(companies)
+    scan_runs = oracle_db.get_recent_scan_runs(10)
+    return {
+        "run_id":    resolved_run_id,
+        "total":     len(companies),
+        "companies": companies,
+        "scan_runs": [dict(r) for r in scan_runs],
+    }
+
+@app.delete("/scan/companies")
+async def purge_scan_companies(
+    run_id: int,
+    current_user: dict = Depends(oracle_auth.require_admin),
+):
+    """Delete all companies (+ their signals and contacts) first found in the given scan run.
+    Requires admin role. Cannot be undone.
+    """
+    if not run_id or run_id <= 0:
+        raise HTTPException(status_code=400, detail="A valid run_id is required.")
+    deleted = oracle_db.purge_scan_companies(run_id)
+    return {"deleted": deleted, "run_id": run_id, "message": f"Removed {deleted} companies from scan run #{run_id}."}
+
 # ---
 # ORACLE INTENT — data / companies
 # ---

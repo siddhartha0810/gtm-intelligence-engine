@@ -70,14 +70,14 @@ const NAV_STATIC: NavGroup[] = [
   },
 ]
 
-const ADMIN_GROUP = {
+const ADMIN_GROUP: NavGroup = {
   label: 'ADMIN',
   items: [
     { to: '/user-management', icon: UserCog, label: 'User Management' },
   ]
 }
 
-const SENSITIVE_GROUP = {
+const SENSITIVE_GROUP: NavGroup = {
   label: 'SENSITIVE',
   items: [
     { to: '/recruitment', icon: Briefcase, label: 'Recruitment' },

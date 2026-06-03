@@ -83,10 +83,84 @@ _FIELD_LISTS = {
 }
 
 
+# Explicit aliases: cleaned header string → field key.
+# Covers shorthand / unconventional column names that the fuzzy scorer misses.
+_ALIASES: dict[str, str] = {
+    # Company fields
+    "company":        "name",
+    "companyname":    "name",
+    "organisation":   "name",
+    "organization":   "name",
+    "org":            "name",
+    "coname":         "name",
+    "biz":            "name",
+    "bizname":        "name",
+    "accountname":    "name",
+    "website":        "domain",
+    "url":            "domain",
+    "web":            "domain",
+    "site":           "domain",
+    "employees":      "number_of_employees",
+    "headcount":      "number_of_employees",
+    "empcount":       "number_of_employees",
+    "numemployees":   "number_of_employees",
+    "street":         "billing_street",
+    "address":        "billing_street",
+    "addr":           "billing_street",
+    "city":           "billing_city",
+    "state":          "billing_state",
+    "zip":            "billing_postal_code",
+    "zipcode":        "billing_postal_code",
+    "postalcode":     "billing_postal_code",
+    "postcode":       "billing_postal_code",
+    "country":        "billing_country",
+    "nation":         "billing_country",
+    # Contact fields
+    "fname":          "first_name",
+    "firstname":      "first_name",
+    "givenname":      "first_name",
+    "forename":       "first_name",
+    "lname":          "last_name",
+    "lastname":       "last_name",
+    "surname":        "last_name",
+    "familyname":     "last_name",
+    "jobtitle":       "title",
+    "role":           "title",
+    "position":       "title",
+    "designation":    "title",
+    "linkedin":       "linkedin_url",
+    "linkedinprofile":"linkedin_url",
+    "linkedinlink":   "linkedin_url",
+    "mobile":         "mobile_phone",
+    "cell":           "mobile_phone",
+    "cellphone":      "mobile_phone",
+    "mobilephone":    "mobile_phone",
+    "emailaddress":   "email",
+    "mail":           "email",
+}
+
+
 def _fuzzy_suggest(header: str, entity_type: str) -> Optional[str]:
-    """Auto-suggest a HubSpot field key from a CSV column header."""
+    """Auto-suggest a HubSpot field key from a CSV column header.
+
+    Resolution order:
+      1. Exact alias match (covers shorthands like fname, org, zip)
+      2. Exact cleaned string match against field key or label (score 100)
+      3. Substring match against key or label (score 80 / 60)
+    Only returns a suggestion when the winning score >= 60.
+    """
     fields = _FIELD_LISTS.get(entity_type.lower(), [])
+    if not fields:
+        return None
+
     h = re.sub(r"[^a-z0-9]", "", header.lower())
+
+    # 1. Alias lookup — always wins if present
+    alias_key = _ALIASES.get(h)
+    if alias_key and any(f["key"] == alias_key for f in fields):
+        return alias_key
+
+    # 2 & 3. Fuzzy scoring
     best, best_score = None, 0
     for f in fields:
         label_clean = re.sub(r"[^a-z0-9]", "", f["label"].lower())

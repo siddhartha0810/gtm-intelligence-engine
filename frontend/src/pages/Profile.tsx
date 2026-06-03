@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { User } from '../types'
-import { User, Mail, Shield, Key, Save, CheckCircle2, AlertCircle } from 'lucide-react'
+import { User as UserIcon, Mail, Shield, Key, Save, CheckCircle2, AlertCircle } from 'lucide-react'
 import { toast } from '../components/Toast'
 
 interface ProfileProps {
@@ -106,7 +106,7 @@ export default function Profile({ user }: ProfileProps) {
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 20, marginTop: 28, paddingTop: 24, borderTop: '1px solid #f1f5f9' }}>
           <div>
-            <div style={labelStyle}><User size={11} style={{ marginRight: 5, verticalAlign: 'middle' }} />DISPLAY NAME</div>
+            <div style={labelStyle}><UserIcon size={11} style={{ marginRight: 5, verticalAlign: 'middle' }} />DISPLAY NAME</div>
             <div style={valueStyle}>{displayName}</div>
           </div>
           <div>

@@ -759,6 +759,20 @@ def get_recent_scan_runs(limit: int = 10):
         """, (limit,))
         return cur.fetchall()
 
+
+def purge_scan_companies(run_id: int) -> int:
+    """Delete all companies first discovered in the given scan run.
+
+    Signals and contacts cascade automatically (ON DELETE CASCADE).
+    Returns the number of companies deleted.
+    """
+    with db_cursor() as cur:
+        cur.execute(
+            "DELETE FROM companies WHERE first_scan_run_id = %s RETURNING id",
+            (run_id,),
+        )
+        return len(cur.fetchall())
+
 # contact operations
 def save_contacts(company_id: int, contacts: list):
     with db_cursor() as cur:

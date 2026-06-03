@@ -55,18 +55,30 @@ def find_contacts(company_name: str, domain: str = "") -> list[dict]:
     seen: set = set()
 
     def _row_to_contact(r: dict) -> dict:
+        validated_email = r.get("Validated_Email", "")
+        any_email       = validated_email or r.get("Email", "")
+        raw_status      = (r.get("Validated_Email_Status") or "").strip().lower()
+        if raw_status in ("valid", "invalid", "catch-all", "unknown", "spamtrap", "abuse"):
+            email_status = raw_status
+        elif validated_email:
+            email_status = "valid"
+        elif any_email:
+            email_status = "unknown"
+        else:
+            email_status = "unknown"
         return {
-            "first_name":   r.get("FirstName", ""),
-            "last_name":    r.get("LastName", ""),
-            "full_name":    f"{r.get('FirstName', '')} {r.get('LastName', '')}".strip(),
-            "title":        r.get("Title", ""),
-            "email":        r.get("Validated_Email", "") or r.get("Email", ""),
-            "linkedin_url": r.get("LinkedIn_URL__c", "") or r.get("LinkedIn_URL_Enriched", ""),
-            "domain":       r.get("Domain", ""),
-            "seniority":    r.get("Management_Level__c", ""),
-            "confidence":   1.0 if (r.get("Validated_Email") or r.get("Email")) else 0.5,
-            "is_target":    False,
-            "source":       "contacts_db",
+            "first_name":             r.get("FirstName", ""),
+            "last_name":              r.get("LastName", ""),
+            "full_name":              f"{r.get('FirstName', '')} {r.get('LastName', '')}".strip(),
+            "title":                  r.get("Title", ""),
+            "email":                  any_email,
+            "linkedin_url":           r.get("LinkedIn_URL__c", "") or r.get("LinkedIn_URL_Enriched", ""),
+            "domain":                 r.get("Domain", ""),
+            "seniority":              r.get("Management_Level__c", ""),
+            "confidence":             1.0 if any_email else 0.5,
+            "is_target":              False,
+            "source":                 "contacts_db",
+            "email_validation_status": email_status,
         }
 
     def _add(rows):

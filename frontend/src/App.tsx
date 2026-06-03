@@ -88,9 +88,9 @@ export default function App() {
   return (
     <BrowserRouter>
       <div style={{ display: 'flex', height: '100vh', width: '100vw', overflow: 'hidden', background: '#f1f5f9' }}>
-        <Sidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed(v => !v)} user={user} isAdmin={isAdmin} />
+        <Sidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed(v => !v)} user={user ?? undefined} isAdmin={isAdmin} />
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, overflow: 'hidden' }}>
-          <Topbar onCmdK={() => setCmdOpen(true)} user={user} onLogout={handleLogout} />
+          <Topbar onCmdK={() => setCmdOpen(true)} user={user ?? undefined} onLogout={handleLogout} />
           <main style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: 24, background: '#f1f5f9' }}>
             <Suspense fallback={<PageLoader />}>
               <Routes>
@@ -108,7 +108,7 @@ export default function App() {
                 <Route path="/intent-data"            element={<IntentData />} />
                 <Route path="/reporting"              element={<Reporting />} />
                 <Route path="/settings"               element={<Settings />} />
-                <Route path="/profile"                element={<Profile user={user} />} />
+                <Route path="/profile"                element={<Profile user={user ?? undefined} />} />
                 <Route path="/technology-profiles"    element={<TechnologyProfiles />} />
                 <Route path="/list-import"            element={<ListImport />} />
                 <Route path="/events"                 element={<Events />} />
