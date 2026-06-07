@@ -60,8 +60,26 @@ lead_enrichment_engine/uploads/
 # ── Runtime state files ───────────────────────────────────────────────────────
 _scan_log.txt
 _scan_status.json
+_scan_worker.pid
 _enrich_log.txt
 _enrich_status.json
+
+# ── One-off scripts (data migration / audit / fix tools) ─────────────────────
+scripts/
+
+# ── Checkpoint / pickle files ─────────────────────────────────────────────────
+*.pkl
+*.pickle
+*_checkpoint.json
+*checkpoint*.json
+
+# ── Generated documents / diagrams ───────────────────────────────────────────
+*.docx
+*.pptx
+Inoapps_*.html
+Inoapps_*.png
+TECHNICAL_DOCUMENT.md
+WORKFLOW_FLOWCHART.md
 
 # ── Logs ─────────────────────────────────────────────────────────────────────
 *.log

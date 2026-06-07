@@ -23,7 +23,7 @@ os.environ.setdefault("DB_HOST",     "localhost")
 os.environ.setdefault("DB_PORT",     "5432")
 os.environ.setdefault("DB_NAME",     "oracle_intent")
 os.environ.setdefault("DB_USER",     "postgres")
-os.environ.setdefault("DB_PASSWORD", "Inoapps123")
+os.environ.setdefault("DB_PASSWORD", os.getenv("DB_PASSWORD", ""))
 os.environ.setdefault("JWT_SECRET",  "test-secret-key-not-for-production-use-only")
 
 # Suppress subprocess workers during tests
