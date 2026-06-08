@@ -207,11 +207,7 @@ export default function Contacts() {
         <div>
           <h1 style={{ fontSize: 20, fontWeight: 600, color: '#0f172a', margin: 0 }}>Contacts</h1>
           <p style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>
-            {loading ? 'Loading...' : (() => {
-              const apolloCount = contacts.filter(c => isApollo(c.source || '')).length
-              const mlCount = contacts.length - apolloCount
-              return `${contacts.length} contacts · ${apolloCount} Apollo (with role) · ${mlCount} master leads (email only) · ${validCount} valid emails`
-            })()}
+            {loading ? 'Loading...' : `${total.toLocaleString()} contacts · ${validCount.toLocaleString()} valid emails`}
           </p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -249,7 +245,7 @@ export default function Contacts() {
             style={{ width: '100%', padding: '8px 12px 8px 36px', borderRadius: 8, background: '#ffffff', border: '1px solid #d1d5db', color: '#0f172a', fontSize: 13, outline: 'none', boxSizing: 'border-box' }} />
         </div>
         <div style={{ display: 'flex', padding: 3, borderRadius: 8, background: '#f8fafc', border: '1px solid #e2e8f0', gap: 2 }}>
-          {([['all', 'All'], ['apollo', '🔵 Apollo (with role)'], ['master_leads', '📋 Master Leads']] as const).map(([val, label]) => (
+          {([['all', 'All'], ['apollo', '🔵 Apollo'], ['master_leads', '📋 Master Leads']] as const).map(([val, label]) => (
             <button key={val} onClick={() => setSourceFilter(val)}
               style={{ padding: '5px 12px', borderRadius: 6, border: 'none', fontSize: 12, fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap',
                 background: sourceFilter === val ? (val === 'apollo' ? '#6366f1' : val === 'master_leads' ? '#0f172a' : '#3b82f6') : 'transparent',
