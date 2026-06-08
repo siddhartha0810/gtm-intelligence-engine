@@ -1937,7 +1937,7 @@ async def enrich_preflight(current_user: dict = Depends(oracle_auth.require_anal
     from master_leads (free), how many need Apollo (credit cost), and estimated time.
     """
     try:
-        companies = oracle_db.get_companies_needing_enrichment(1000)
+        companies = oracle_db.get_companies_needing_enrichment(5000)
         total = len(companies)
 
         if not total:

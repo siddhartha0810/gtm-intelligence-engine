@@ -323,12 +323,13 @@ interface ScanRun {
 }
 
 function ScanResultsModal({ onClose, onDeleted }: { onClose: () => void; onDeleted: () => void }) {
-  const [companies,  setCompanies]  = useState<ScanCompany[]>([])
-  const [scanRuns,   setScanRuns]   = useState<ScanRun[]>([])
-  const [selectedId, setSelectedId] = useState<number | null>(null)
-  const [loading,    setLoading]    = useState(true)
-  const [deleting,   setDeleting]   = useState(false)
-  const [search,     setSearch]     = useState('')
+  const [companies,     setCompanies]     = useState<ScanCompany[]>([])
+  const [scanRuns,      setScanRuns]      = useState<ScanRun[]>([])
+  const [selectedId,    setSelectedId]    = useState<number | null>(null)
+  const [loading,       setLoading]       = useState(true)
+  const [deleting,      setDeleting]      = useState(false)
+  const [search,        setSearch]        = useState('')
+  const [confirmDelete, setConfirmDelete] = useState(false)
 
   const loadRun = async (runId: number | null) => {
     setLoading(true)
@@ -350,8 +351,12 @@ function ScanResultsModal({ onClose, onDeleted }: { onClose: () => void; onDelet
       return
     }
     const count = companies.length
-    if (!window.confirm(`Remove ${count} companies from scan run #${selectedId}?\n\nThis also deletes their signals and contacts. Cannot be undone.`))
-      return
+    setConfirmDelete(true)
+    return
+  }
+
+  const confirmAndDelete = async () => {
+    setConfirmDelete(false)
     setDeleting(true)
     try {
       const res = await fetch(`/scan/companies?run_id=${selectedId}`, {
@@ -483,9 +488,30 @@ function ScanResultsModal({ onClose, onDeleted }: { onClose: () => void; onDelet
           )}
         </div>
 
+        {/* Inline confirm overlay — replaces window.confirm */}
+        {confirmDelete && (
+          <div style={{ position:'absolute', inset:0, background:'rgba(15,23,42,0.55)', borderRadius:14, zIndex:10, display:'flex', alignItems:'center', justifyContent:'center' }}>
+            <div style={{ background:'#fff', borderRadius:12, padding:'24px 28px', width:380, boxShadow:'0 8px 32px rgba(0,0,0,0.2)' }}>
+              <div style={{ fontSize:15, fontWeight:700, color:'#0f172a', marginBottom:8 }}>Remove companies from DB?</div>
+              <div style={{ fontSize:13, color:'#64748b', lineHeight:1.6, marginBottom:20 }}>
+                This will permanently delete <strong style={{ color:'#dc2626' }}>{companies.length} companies</strong> from scan run #{selectedId}, along with their signals and contacts. This cannot be undone.
+              </div>
+              <div style={{ display:'flex', gap:10, justifyContent:'flex-end' }}>
+                <button onClick={() => setConfirmDelete(false)}
+                  style={{ padding:'8px 18px', borderRadius:8, border:'1px solid #e2e8f0', background:'transparent', fontSize:13, color:'#64748b', cursor:'pointer' }}>
+                  Cancel
+                </button>
+                <button onClick={confirmAndDelete}
+                  style={{ padding:'8px 18px', borderRadius:8, border:'none', background:'#dc2626', color:'#fff', fontSize:13, fontWeight:600, cursor:'pointer', display:'flex', alignItems:'center', gap:6 }}>
+                  <Trash2 size={13} /> Yes, remove {companies.length} companies
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Footer */}
         <div style={{ padding:'12px 24px', borderTop:'1px solid #e2e8f0', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0 }}>
-          {/* Remove button — only shown when a specific run is selected and has companies */}
           {selectedId && selectedId > 0 && companies.length > 0 ? (
             <button onClick={removeFromDB} disabled={deleting}
               style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 16px', borderRadius:8,
@@ -528,13 +554,16 @@ export default function EngineControl() {
   const [preflight,       setPreflight]       = useState<Preflight | null>(null)
   const [preflightLoading, setPreflightLoading] = useState(false)
 
+  const [logScrollLocked,      setLogScrollLocked]      = useState(false)
+  const [enrichScrollLocked,   setEnrichScrollLocked]   = useState(false)
+
   const logRef       = useRef<HTMLDivElement>(null)
   const enrichLogRef = useRef<HTMLDivElement>(null)
   const pollRef      = useRef<ReturnType<typeof setInterval> | null>(null)
   const enrichPoll   = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const addLog = (level: string, msg: string) =>
-    setLogs(l => [...l.slice(-200), { t: now(), level, msg }])
+    setLogs(l => [...l.slice(-500), { t: now(), level, msg }])
 
   const parseLine = (line: string): LogEntry => {
     const m  = line.match(/^\[(\d{2}:\d{2}:\d{2})\]\s+\[(\w+)\]\s+(.+)$/)
@@ -550,7 +579,7 @@ export default function EngineControl() {
       if (!r.ok) return
       const d = await r.json()
       const entries: LogEntry[] = (d.log || d || []).map((line: string) => parseLine(line))
-      if (entries.length > 0) setLogs(entries.slice(-100))
+      if (entries.length > 0) setLogs(entries.slice(-500))
     } catch { /* silent */ }
   }
 
@@ -566,7 +595,7 @@ export default function EngineControl() {
       const r = await fetch('/api/enrich/log', { headers: authH() })
       if (!r.ok) return
       const lines: string[] = await r.json()
-      if (lines.length > 0) setEnrichLogs(lines.map(parseLine).slice(-100))
+      if (lines.length > 0) setEnrichLogs(lines.map(parseLine).slice(-500))
     } catch { /* silent */ }
   }
 
@@ -764,15 +793,22 @@ export default function EngineControl() {
     }
   }, [])
 
-  useEffect(() => { if (logRef.current)       logRef.current.scrollTop       = logRef.current.scrollHeight },       [logs])
-  useEffect(() => { if (enrichLogRef.current) enrichLogRef.current.scrollTop = enrichLogRef.current.scrollHeight }, [enrichLogs])
+  useEffect(() => { if (!logScrollLocked      && logRef.current)       logRef.current.scrollTop       = logRef.current.scrollHeight }, [logs, logScrollLocked])
+  useEffect(() => { if (!enrichScrollLocked   && enrichLogRef.current) enrichLogRef.current.scrollTop = enrichLogRef.current.scrollHeight }, [enrichLogs, enrichScrollLocked])
 
   const toggleSource = (id: string) =>
     setSelectedSources(ss => ss.includes(id) ? ss.filter(x => x !== id) : [...ss, id])
 
   const exportLog = () => {
-    navigator.clipboard.writeText(logs.map(l => `[${l.t}] [${l.level}] ${l.msg}`).join('\n'))
-      .then(() => toast.success('Log copied to clipboard'))
+    const text = logs.map(l => `[${l.t}] [${l.level}] ${l.msg}`).join('\n')
+    const blob = new Blob([text], { type: 'text/plain' })
+    const url  = URL.createObjectURL(blob)
+    const a    = document.createElement('a')
+    a.href     = url
+    a.download = `scan_log_${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.txt`
+    a.click()
+    URL.revokeObjectURL(url)
+    toast.success('Log downloaded')
   }
 
   const clearLog = () => { setLogs([{ t: now(), level: 'INFO', msg: 'Log cleared.' }]); toast.info('Log cleared') }
@@ -828,9 +864,15 @@ export default function EngineControl() {
       {/* Engine cards */}
       <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:16 }}>
         {ENGINES.map(engine => {
-          const isOracle = engine.id === 'oracle'
-          const state    = isOracle ? oracleState : 'idle'
-          const running  = state === 'running'
+          const isOracle     = engine.id === 'oracle'
+          const isEnrichment = engine.id === 'enrichment'
+          const isHubspot    = engine.id === 'hubspot'
+          const state        = isOracle ? oracleState : isEnrichment ? enrichState : 'idle'
+          const running      = state === 'running'
+
+          // Enrichment card sub-info
+          const enrichPending = pending > 0 ? `${pending} companies pending` : enriched > 0 ? `${enriched} enriched` : null
+
           return (
             <div key={engine.id} style={card}>
               <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:12 }}>
@@ -838,16 +880,31 @@ export default function EngineControl() {
                   <div style={{ fontSize:14, fontWeight:600, color:'#0f172a' }}>{engine.label}</div>
                   <div style={{ fontSize:12, color:'#64748b', marginTop:4, lineHeight:1.5 }}>{engine.desc}</div>
                 </div>
-                <div style={{ width:10, height:10, borderRadius:'50%', flexShrink:0, marginTop:4, background: running ? engine.color : '#cbd5e1', boxShadow: running ? `0 0 8px ${engine.color}` : 'none' }} />
+                <div style={{ width:10, height:10, borderRadius:'50%', flexShrink:0, marginTop:4,
+                  background: running ? engine.color : isHubspot ? '#e2e8f0' : '#cbd5e1',
+                  boxShadow: running ? `0 0 8px ${engine.color}` : 'none',
+                  animation: running ? 'pulse 1.5s infinite' : 'none' }} />
               </div>
               <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:16 }}>
-                <span style={{ fontSize:12, padding:'2px 10px', borderRadius:999, fontWeight:500, background: running ? `${engine.color}18` : state === 'stopping' ? 'rgba(245,158,11,0.12)' : 'rgba(203,213,225,0.5)', color: running ? engine.color : state === 'stopping' ? '#f59e0b' : '#94a3b8' }}>
-                  {running ? 'Running' : state === 'stopping' ? 'Stopping...' : 'Idle'}
+                <span style={{ fontSize:12, padding:'2px 10px', borderRadius:999, fontWeight:500,
+                  background: running ? `${engine.color}18` : state === 'stopping' ? 'rgba(245,158,11,0.12)' : isHubspot ? 'rgba(203,213,225,0.3)' : 'rgba(203,213,225,0.5)',
+                  color:      running ? engine.color : state === 'stopping' ? '#f59e0b' : isHubspot ? '#cbd5e1' : '#94a3b8' }}>
+                  {running ? 'Running' : state === 'stopping' ? 'Stopping...' : isHubspot ? 'Not connected' : 'Idle'}
                 </span>
                 {engine.modules > 1 && <span style={{ fontSize:12, color:'#374151' }}>{engine.modules} modules</span>}
+                {isEnrichment && enrichPending && !running && (
+                  <span style={{ fontSize:11, padding:'2px 8px', borderRadius:999, background:'rgba(245,158,11,0.12)', color:'#d97706', fontWeight:500 }}>
+                    {enrichPending}
+                  </span>
+                )}
+                {isEnrichment && running && enrichStatus.companies_processed != null && (
+                  <span style={{ fontSize:11, color:'#94a3b8' }}>
+                    {enrichStatus.companies_processed}/{enrichStatus.companies_total ?? '?'} companies
+                  </span>
+                )}
               </div>
               <div style={{ display:'flex', gap:8 }}>
-                {isOracle ? (
+                {isOracle && (
                   state === 'idle' ? (
                     <button onClick={startEngine} style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', gap:8, padding:'9px 0', borderRadius:8, border:'none', background:engine.color, color:'white', fontSize:13, fontWeight:500, cursor:'pointer' }}>
                       <Play size={13} /> Start Scan
@@ -857,12 +914,37 @@ export default function EngineControl() {
                       <Square size={13} /> Stop
                     </button>
                   )
-                ) : (
-                  <button disabled style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', gap:8, padding:'9px 0', borderRadius:8, border:'none', background:'rgba(203,213,225,0.5)', color:'#94a3b8', fontSize:13, cursor:'default' }}>
-                    <Play size={13} /> Start
+                )}
+                {isEnrichment && (
+                  enrichState === 'idle' ? (
+                    <button onClick={fetchPreflight} disabled={preflightLoading || !apolloOk}
+                      style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', gap:8, padding:'9px 0', borderRadius:8, border:'none',
+                        background: apolloOk ? engine.color : 'rgba(203,213,225,0.5)',
+                        color: apolloOk ? 'white' : '#94a3b8',
+                        fontSize:13, fontWeight:500, cursor: apolloOk ? 'pointer' : 'not-allowed',
+                        opacity: preflightLoading ? 0.7 : 1 }}
+                      title={!apolloOk ? 'Add APOLLO_API_KEY to oracle_intent_engine/.env' : ''}>
+                      {preflightLoading
+                        ? <><span style={{ animation:'spin 1s linear infinite', display:'inline-block' }}>⟳</span> Loading...</>
+                        : <><Zap size={13} /> {pending > 0 ? `Enrich ${pending}` : 'Run Enrichment'}</>}
+                    </button>
+                  ) : (
+                    <button onClick={stopEnrichment} style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', gap:8, padding:'9px 0', borderRadius:8, border:'1px solid rgba(239,68,68,0.3)', background:'rgba(239,68,68,0.1)', color:'#ef4444', fontSize:13, fontWeight:500, cursor:'pointer' }}>
+                      <Square size={13} /> Stop
+                    </button>
+                  )
+                )}
+                {isHubspot && (
+                  <button disabled style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', gap:8, padding:'9px 0', borderRadius:8, border:'1px solid #e2e8f0', background:'#f8fafc', color:'#cbd5e1', fontSize:13, cursor:'not-allowed' }}>
+                    <Play size={13} /> Connect HubSpot
                   </button>
                 )}
-                <button onClick={isOracle ? resetEngine : undefined} style={{ width:36, height:36, borderRadius:8, border:'1px solid #e2e8f0', background:'transparent', cursor: isOracle ? 'pointer' : 'default', display:'flex', alignItems:'center', justifyContent:'center', color:'#94a3b8', opacity: isOracle ? 1 : 0.3 }}>
+                <button
+                  onClick={isOracle ? resetEngine : undefined}
+                  style={{ width:36, height:36, borderRadius:8, border:'1px solid #e2e8f0', background:'transparent',
+                    cursor: isOracle ? 'pointer' : 'default',
+                    display:'flex', alignItems:'center', justifyContent:'center',
+                    color:'#94a3b8', opacity: (isOracle) ? 1 : 0.3 }}>
                   <RotateCcw size={13} />
                 </button>
               </div>
@@ -989,7 +1071,17 @@ export default function EngineControl() {
               <div style={{ width:10, height:10, borderRadius:'50%', background:'#10b981' }} />
               <span style={{ marginLeft:8, fontFamily:'JetBrains Mono, monospace', fontSize:12, color:'#475569' }}>scan.log — {logs.length} events</span>
             </div>
-            <div style={{ display:'flex', gap:12 }}>
+            <div style={{ display:'flex', gap:12, alignItems:'center' }}>
+              <button
+                onClick={() => setLogScrollLocked(v => !v)}
+                title={logScrollLocked ? 'Unlock auto-scroll' : 'Lock scroll position'}
+                style={{ fontSize:11, display:'flex', alignItems:'center', gap:4,
+                  color: logScrollLocked ? '#f59e0b' : '#475569',
+                  background: logScrollLocked ? 'rgba(245,158,11,0.12)' : 'none',
+                  border: logScrollLocked ? '1px solid rgba(245,158,11,0.3)' : '1px solid transparent',
+                  borderRadius:5, padding:'2px 7px', cursor:'pointer' }}>
+                {logScrollLocked ? '🔒 Locked' : '🔓 Auto-scroll'}
+              </button>
               <button onClick={exportLog} style={{ fontSize:12, display:'flex', alignItems:'center', gap:4, color:'#475569', background:'none', border:'none', cursor:'pointer' }}><Download size={11} /> Export</button>
               <button onClick={clearLog}  style={{ fontSize:12, display:'flex', alignItems:'center', gap:4, color:'#475569', background:'none', border:'none', cursor:'pointer' }}><Trash2 size={11} /> Clear</button>
             </div>
@@ -1119,7 +1211,19 @@ export default function EngineControl() {
           <div style={{ marginTop:16, background:'#080c14', border:'1px solid #1f2d45', borderRadius:10, overflow:'hidden' }}>
             <div style={{ padding:'8px 14px', borderBottom:'1px solid #1f2d45', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
               <span style={{ fontFamily:'JetBrains Mono, monospace', fontSize:11, color:'#475569' }}>enrich.log — {enrichLogs.length} entries</span>
-              <button onClick={() => setEnrichLogs([])} style={{ fontSize:11, color:'#475569', background:'none', border:'none', cursor:'pointer' }}>Clear</button>
+              <div style={{ display:'flex', gap:10, alignItems:'center' }}>
+                <button
+                  onClick={() => setEnrichScrollLocked(v => !v)}
+                  title={enrichScrollLocked ? 'Unlock auto-scroll' : 'Lock scroll position'}
+                  style={{ fontSize:11, display:'flex', alignItems:'center', gap:4,
+                    color: enrichScrollLocked ? '#f59e0b' : '#475569',
+                    background: enrichScrollLocked ? 'rgba(245,158,11,0.12)' : 'none',
+                    border: enrichScrollLocked ? '1px solid rgba(245,158,11,0.3)' : '1px solid transparent',
+                    borderRadius:5, padding:'2px 7px', cursor:'pointer' }}>
+                  {enrichScrollLocked ? '🔒 Locked' : '🔓 Auto-scroll'}
+                </button>
+                <button onClick={() => setEnrichLogs([])} style={{ fontSize:11, color:'#475569', background:'none', border:'none', cursor:'pointer' }}>Clear</button>
+              </div>
             </div>
             <div ref={enrichLogRef} style={{ fontFamily:'JetBrains Mono, monospace', fontSize:11, padding:14, maxHeight:220, overflowY:'auto', display:'flex', flexDirection:'column', gap:3 }}>
               {enrichLogs.length === 0
