@@ -637,10 +637,36 @@ _COMPANIES_CACHE_TTL = 60  # seconds
 def _invalidate_companies_cache() -> None:
     _companies_cache.clear()
 
+@app.get("/api/companies/filter-options")
+async def api_companies_filter_options(current_user: dict = Depends(oracle_auth.require_user)):
+    """Returns distinct industries and locations for column filter dropdowns."""
+    try:
+        with oracle_db.db_cursor(commit=False) as cur:
+            cur.execute("""
+                SELECT DISTINCT LOWER(industry) AS industry
+                FROM companies
+                WHERE industry IS NOT NULL AND industry <> ''
+                ORDER BY 1 LIMIT 300
+            """)
+            industries = [r["industry"] for r in cur.fetchall()]
+            cur.execute("""
+                SELECT DISTINCT location
+                FROM companies
+                WHERE location IS NOT NULL AND location <> ''
+                ORDER BY 1 LIMIT 300
+            """)
+            locations = [r["location"] for r in cur.fetchall()]
+        return JSONResponse({"industries": industries, "locations": locations})
+    except Exception as e:
+        return JSONResponse({"industries": [], "locations": []})
+
 @app.get("/api/companies")
 async def api_companies(
     phase:    str = "",
     product:  str = "",
+    industry: str = "",
+    location: str = "",
+    has_contacts: str = "",   # "yes" | "no"
     show_all: int = 0,
     search:   str = "",
     limit:    int = 200,
@@ -671,6 +697,25 @@ async def api_companies(
             if product:
                 conditions.append("c.target_product = %s")
                 params.append(product)
+
+            if industry:
+                vals = [v.strip().lower() for v in industry.split(',') if v.strip()]
+                if vals:
+                    placeholders = ','.join(['%s'] * len(vals))
+                    conditions.append(f"LOWER(COALESCE(c.industry,'')) IN ({placeholders})")
+                    params.extend(vals)
+
+            if location:
+                vals = [v.strip().lower() for v in location.split(',') if v.strip()]
+                if vals:
+                    loc_conds = ' OR '.join(['LOWER(COALESCE(c.location,\'\')) LIKE %s'] * len(vals))
+                    conditions.append(f"({loc_conds})")
+                    params.extend([f"%{v}%" for v in vals])
+
+            if has_contacts == "yes":
+                conditions.append("c.contact_count > 0")
+            elif has_contacts == "no":
+                conditions.append("(c.contact_count = 0 OR c.contact_count IS NULL)")
 
             where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
 
@@ -1802,6 +1847,21 @@ async def api_reporting(current_user: dict = Depends(oracle_auth.require_user)):
             "without_contacts": int(co["without_contacts"] or 0),
         }
 
+        # Companies covered per source
+        cur.execute("""
+            SELECT
+                COUNT(DISTINCT CASE WHEN source IN ('master_leads','280k_master_db','master db') THEN company_id END) AS master_leads,
+                COUNT(DISTINCT CASE WHEN source IN ('apollo','apollo.io') THEN company_id END)                        AS apollo,
+                COUNT(DISTINCT CASE WHEN source IN ('zoominfo','zoom info','zoom_info') THEN company_id END)          AS zoominfo
+            FROM company_contacts
+        """)
+        sc = cur.fetchone()
+        company_coverage_by_source = {
+            "master_leads": int(sc["master_leads"] or 0),
+            "apollo":       int(sc["apollo"] or 0),
+            "zoominfo":     int(sc["zoominfo"] or 0),
+        }
+
         # Contact reach breakdown
         cur.execute("""
             SELECT
@@ -1864,6 +1924,7 @@ async def api_reporting(current_user: dict = Depends(oracle_auth.require_user)):
         "scan_runs":             [dict(r) for r in scan_runs],
         "companies_by_product":  companies_by_product,
         "company_contact_stats": company_contact_stats,
+        "company_coverage_by_source": company_coverage_by_source,
         "contact_reach_stats":   contact_reach_stats,
         "contact_by_source":     contact_by_source,
     }
@@ -2008,8 +2069,8 @@ async def auth_register(request: Request):
         return JSONResponse({"error": "Password must be at least 8 characters"}, status_code=400)
     if oracle_auth.get_user_by_email(email):
         return JSONResponse({"error": "Registration failed. Please try again or contact support."}, status_code=409)
-    # role is always analyst for self-registration — admins elevate via /api/users PATCH
-    user  = oracle_auth.create_user(email, name, password, role="analyst")
+    # role is always viewer for self-registration — admins/owner elevate via /api/users PATCH
+    user  = oracle_auth.create_user(email, name, password, role="viewer")
     token = oracle_auth.create_token(user["id"], user["email"], user["role"])
     return {"token": token, "user": {k: v for k, v in user.items() if k != "password_hash"}}
 

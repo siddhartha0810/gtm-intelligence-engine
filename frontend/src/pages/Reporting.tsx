@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { TrendingUp, Users, Building2, CheckCircle2, RefreshCw, Mail, Linkedin, BarChart2 } from 'lucide-react'
+import { TrendingUp, Users, Building2, CheckCircle2, RefreshCw } from 'lucide-react'
 
 const authH = () => ({ 'Authorization': `Bearer ${localStorage.getItem('token') || ''}` })
 
@@ -11,6 +11,7 @@ interface ReportingData {
   scan_runs: { id: number; started_at: string; completed_at: string; status: string; total_signals: number; total_companies: number }[]
   companies_by_product: { product: string; count: number }[]
   company_contact_stats: { total: number; with_contacts: number; without_contacts: number }
+  company_coverage_by_source: { master_leads: number; apollo: number; zoominfo: number }
   contact_reach_stats: { total: number; email_and_linkedin: number; email_only: number; linkedin_only: number; no_reach: number; valid_emails: number }
   contact_by_source: { label: string; count: number; pct: number }[]
 }
@@ -94,6 +95,7 @@ export default function Reporting() {
   const maxSig  = Math.max(...runs.map(r => r.total_signals || 0), 1)
 
   const co  = report?.company_contact_stats
+  const covSrc = report?.company_coverage_by_source
   const ct  = report?.contact_reach_stats
   const byProduct = report?.companies_by_product ?? []
   const bySrc     = report?.contact_by_source ?? []
@@ -177,6 +179,29 @@ export default function Reporting() {
                 <BarRow label="With contacts"    count={co.with_contacts}    total={co.total} color="#10b981" />
                 <BarRow label="Without contacts" count={co.without_contacts} total={co.total} color="#f59e0b" />
               </div>
+              {covSrc && (
+                <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: 14, marginTop: 4 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>
+                    Coverage by Source
+                  </div>
+                  <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 12 }}>
+                    Companies with at least one contact from each source — overlap possible
+                  </div>
+                  <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                    {[
+                      { label: 'Master Leads', count: covSrc.master_leads, color: '#3b82f6' },
+                      { label: 'Apollo',        count: covSrc.apollo,       color: '#8b5cf6' },
+                      { label: 'ZoomInfo',      count: covSrc.zoominfo,     color: '#10b981' },
+                    ].map(s => (
+                      <div key={s.label} style={{ flex: 1, minWidth: 110, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '12px 14px' }}>
+                        <div style={{ fontSize: 22, fontWeight: 700, color: s.color }}>{s.count.toLocaleString()}</div>
+                        <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>{s.label}</div>
+                        <div style={{ fontSize: 11, color: '#94a3b8' }}>{Math.round(s.count / co.total * 100)}% of companies</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

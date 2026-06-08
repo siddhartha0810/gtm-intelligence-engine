@@ -24,75 +24,89 @@ interface SidebarProps {
   collapsed: boolean
   onToggle: () => void
   user?: User
-  isAdmin?: boolean
 }
 
-const NAV_STATIC: NavGroup[] = [
-  {
-    label: 'OVERVIEW',
-    items: [
+// Role helpers
+const is = (role: string | undefined, ...allowed: string[]) => allowed.includes(role ?? '')
+
+function buildNavGroups(user?: User): NavGroup[] {
+  const role = user?.role
+  const groups: NavGroup[] = []
+
+  // OVERVIEW — analyst+ only
+  if (is(role, 'owner', 'admin', 'analyst')) {
+    const overviewItems: NavItem[] = [
       { to: '/dashboard',    icon: LayoutDashboard, label: 'Control Panel' },
       { to: '/review-queue', icon: ClipboardCheck,  label: 'Review Queue', badge: '12' },
-      { to: '/audit-logs',   icon: ScrollText,      label: 'Audit Logs' },
     ]
-  },
-  {
-    label: 'CONFIGURATION',
-    items: [
-      { to: '/technology-profiles', icon: Layers,    label: 'Technology Profiles' },
-      { to: '/hubspot-sync',        icon: RefreshCw, label: 'HubSpot Sync' },
-      { to: '/engine-control',      icon: Cpu,       label: 'Engine Control' },
-    ]
-  },
-  {
-    label: 'DATA MODULES',
-    items: [
-      { to: '/companies',                icon: Building2,    label: 'Companies' },
-      { to: '/contacts',                 icon: Users,        label: 'Contacts' },
-      { to: '/product-intelligence',     icon: PackageSearch,label: 'Product Intel' },
-      { to: '/list-import',              icon: Upload,       label: 'List Import' },
-      { to: '/intent-data',              icon: Target,       label: 'Intent Data' },
-      { to: '/events',                   icon: CalendarDays, label: 'Events' },
-      { to: '/manufacturer-intelligence',icon: Factory,      label: 'Manufacturer Intel' },
-    ]
-  },
-  {
-    label: 'ANALYTICS',
-    items: [
-      { to: '/reporting', icon: BarChart3, label: 'Reporting' },
-    ]
-  },
-  {
-    label: 'SYSTEM',
-    items: [
-      { to: '/settings', icon: Settings, label: 'Settings & API' },
-    ]
-  },
-]
+    if (is(role, 'owner', 'admin')) {
+      overviewItems.push({ to: '/audit-logs', icon: ScrollText, label: 'Audit Logs' })
+    }
+    groups.push({ label: 'OVERVIEW', items: overviewItems })
+  }
 
-const ADMIN_GROUP: NavGroup = {
-  label: 'ADMIN',
-  items: [
-    { to: '/user-management', icon: UserCog, label: 'User Management' },
-  ]
+  // CONFIGURATION — admin+ only
+  if (is(role, 'owner', 'admin')) {
+    groups.push({
+      label: 'CONFIGURATION',
+      items: [
+        { to: '/technology-profiles', icon: Layers,    label: 'Technology Profiles' },
+        { to: '/hubspot-sync',        icon: RefreshCw, label: 'HubSpot Sync' },
+        { to: '/engine-control',      icon: Cpu,       label: 'Engine Control' },
+      ]
+    })
+  } else if (is(role, 'analyst')) {
+    // Analysts see Technology Profiles only
+    groups.push({
+      label: 'CONFIGURATION',
+      items: [
+        { to: '/technology-profiles', icon: Layers, label: 'Technology Profiles' },
+      ]
+    })
+  }
+
+  // DATA MODULES — viewer+
+  if (is(role, 'owner', 'admin', 'analyst', 'viewer')) {
+    const dataItems: NavItem[] = [
+      { to: '/companies',                 icon: Building2,     label: 'Companies' },
+      { to: '/contacts',                  icon: Users,         label: 'Contacts' },
+      { to: '/product-intelligence',      icon: PackageSearch, label: 'Product Intel' },
+      { to: '/intent-data',               icon: Target,        label: 'Intent Data' },
+      { to: '/events',                    icon: CalendarDays,  label: 'Events' },
+      { to: '/manufacturer-intelligence', icon: Factory,       label: 'Manufacturer Intel' },
+    ]
+    if (is(role, 'owner', 'admin', 'analyst')) {
+      dataItems.splice(3, 0, { to: '/list-import', icon: Upload, label: 'List Import' })
+    }
+    groups.push({ label: 'DATA MODULES', items: dataItems })
+  }
+
+  // ANALYTICS — analyst+
+  if (is(role, 'owner', 'admin', 'analyst')) {
+    groups.push({ label: 'ANALYTICS', items: [{ to: '/reporting', icon: BarChart3, label: 'Reporting' }] })
+  }
+
+  // SYSTEM — admin+ only
+  if (is(role, 'owner', 'admin')) {
+    groups.push({ label: 'SYSTEM', items: [{ to: '/settings', icon: Settings, label: 'Settings & API' }] })
+  }
+
+  // ADMIN — owner only
+  if (is(role, 'owner')) {
+    groups.push({ label: 'ADMIN', items: [{ to: '/user-management', icon: UserCog, label: 'User Management' }] })
+  }
+
+  // SENSITIVE — owner, admin, recruitment only
+  if (is(role, 'owner', 'admin', 'recruitment')) {
+    groups.push({ label: 'SENSITIVE', items: [{ to: '/recruitment', icon: Briefcase, label: 'Recruitment' }] })
+  }
+
+  return groups
 }
 
-const SENSITIVE_GROUP: NavGroup = {
-  label: 'SENSITIVE',
-  items: [
-    { to: '/recruitment', icon: Briefcase, label: 'Recruitment' },
-  ]
-}
-
-export default function Sidebar({ collapsed, onToggle, user, isAdmin }: SidebarProps) {
+export default function Sidebar({ collapsed, onToggle, user }: SidebarProps) {
   const w = collapsed ? 64 : 240
-
-  const canSeeSensitive = user?.role === 'admin' || user?.role === 'owner' || user?.role === 'recruitment'
-  const groups = [
-    ...NAV_STATIC,
-    ...(isAdmin ? [ADMIN_GROUP] : []),
-    ...(canSeeSensitive ? [SENSITIVE_GROUP] : []),
-  ]
+  const groups = buildNavGroups(user)
 
   return (
     <aside style={{

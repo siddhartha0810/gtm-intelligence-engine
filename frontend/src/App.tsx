@@ -83,46 +83,65 @@ export default function App() {
     )
   }
 
-  const isAdmin = user?.role === 'admin' || user?.role === 'owner'
+  const role = user?.role
+  const isOwner    = role === 'owner'
+  const isAdmin    = role === 'admin' || role === 'owner'
+  const isAnalyst  = role === 'analyst' || isAdmin
+  const isViewer   = role === 'viewer' || isAnalyst
+  const canRecruit = role === 'recruitment' || isAdmin || isOwner
 
   return (
     <BrowserRouter>
       <div style={{ display: 'flex', height: '100vh', width: '100vw', overflow: 'hidden', background: '#f1f5f9' }}>
-        <Sidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed(v => !v)} user={user ?? undefined} isAdmin={isAdmin} />
+        <Sidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed(v => !v)} user={user ?? undefined} />
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, overflow: 'hidden' }}>
           <Topbar onCmdK={() => setCmdOpen(true)} user={user ?? undefined} onLogout={handleLogout} />
           <main style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: 24, background: '#f1f5f9' }}>
             <Suspense fallback={<PageLoader />}>
               <Routes>
-                <Route path="/"                       element={<Navigate to="/dashboard" replace />} />
-                {/* /login when already authenticated → redirect to dashboard */}
-                <Route path="/login"                  element={<Navigate to="/dashboard" replace />} />
-                <Route path="/dashboard"              element={<Dashboard />} />
-                <Route path="/companies"              element={<Companies />} />
-                <Route path="/contacts"               element={<Contacts />} />
-                <Route path="/engine"                 element={<EngineControl />} />
-                <Route path="/engine-control"         element={<EngineControl />} />
-                <Route path="/review"                 element={<ReviewQueue />} />
-                <Route path="/review-queue"           element={<ReviewQueue />} />
-                <Route path="/intent"                 element={<IntentData />} />
-                <Route path="/intent-data"            element={<IntentData />} />
-                <Route path="/reporting"              element={<Reporting />} />
-                <Route path="/settings"               element={<Settings />} />
-                <Route path="/profile"                element={<Profile user={user ?? undefined} />} />
-                <Route path="/technology-profiles"    element={<TechnologyProfiles />} />
-                <Route path="/list-import"            element={<ListImport />} />
-                <Route path="/events"                 element={<Events />} />
-                <Route path="/manufacturer-intel"         element={<ManufacturerIntel />} />
-                <Route path="/manufacturer-intelligence"  element={<ManufacturerIntel />} />
-                <Route path="/audit-logs"             element={<AuditLogs />} />
-                {isAdmin && <Route path="/user-management" element={<UserManagement />} />}
-                <Route path="/hubspot-sync"           element={<HubSpotSync />} />
-                <Route path="/product-intelligence"   element={<ProductIntelligence />} />
-                {(user?.role === 'admin' || user?.role === 'owner' || user?.role === 'recruitment') && (
-                  <Route path="/recruitment"          element={<Recruitment />} />
-                )}
-                {/* Catch-all: any unknown URL → dashboard */}
-                <Route path="*"                       element={<Navigate to="/dashboard" replace />} />
+                <Route path="/"      element={<Navigate to="/dashboard" replace />} />
+                <Route path="/login" element={<Navigate to="/dashboard" replace />} />
+
+                {/* viewer+ */}
+                {isViewer && <>
+                  <Route path="/dashboard"                  element={<Dashboard />} />
+                  <Route path="/companies"                  element={<Companies />} />
+                  <Route path="/contacts"                   element={<Contacts />} />
+                  <Route path="/intent"                     element={<IntentData />} />
+                  <Route path="/intent-data"                element={<IntentData />} />
+                  <Route path="/events"                     element={<Events />} />
+                  <Route path="/manufacturer-intel"         element={<ManufacturerIntel />} />
+                  <Route path="/manufacturer-intelligence"  element={<ManufacturerIntel />} />
+                  <Route path="/product-intelligence"       element={<ProductIntelligence />} />
+                  <Route path="/profile"                    element={<Profile user={user ?? undefined} />} />
+                </>}
+
+                {/* analyst+ */}
+                {isAnalyst && <>
+                  <Route path="/review"              element={<ReviewQueue />} />
+                  <Route path="/review-queue"        element={<ReviewQueue />} />
+                  <Route path="/technology-profiles" element={<TechnologyProfiles />} />
+                  <Route path="/list-import"         element={<ListImport />} />
+                  <Route path="/reporting"           element={<Reporting />} />
+                </>}
+
+                {/* admin+ */}
+                {isAdmin && <>
+                  <Route path="/engine"         element={<EngineControl />} />
+                  <Route path="/engine-control" element={<EngineControl />} />
+                  <Route path="/audit-logs"     element={<AuditLogs />} />
+                  <Route path="/hubspot-sync"   element={<HubSpotSync />} />
+                  <Route path="/settings"       element={<Settings />} />
+                </>}
+
+                {/* owner only */}
+                {isOwner && <Route path="/user-management" element={<UserManagement />} />}
+
+                {/* recruitment */}
+                {canRecruit && <Route path="/recruitment" element={<Recruitment />} />}
+
+                {/* Catch-all → dashboard */}
+                <Route path="*" element={<Navigate to="/dashboard" replace />} />
               </Routes>
             </Suspense>
           </main>

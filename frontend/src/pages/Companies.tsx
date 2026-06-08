@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { Search, Download, ArrowUpRight, MoreHorizontal, Zap, Users, Send,
          Eye, UserX, Trash2, RefreshCw, X, Mail, ExternalLink, ChevronRight,
-         Building2, Loader2, Package } from 'lucide-react'
+         Building2, Loader2, Package, ChevronDown, Filter } from 'lucide-react'
 import { toast } from '../components/Toast'
 
 const ORACLE_PRODUCTS = [
@@ -346,6 +346,154 @@ function CompanyMenu({ company, onClose, anchorRef, onRefresh }: {
   )
 }
 
+// ─── Excel-style column filter ────────────────────────────────────────────
+function ColumnFilter({
+  label, options, selected, onApply, onSort, align = 'left',
+}: {
+  label: string
+  options: string[]
+  selected: string[]
+  onApply: (vals: string[]) => void
+  onSort?: (dir: 'asc' | 'desc') => void
+  align?: 'left' | 'right'
+}) {
+  const [open, setOpen]     = useState(false)
+  const [q, setQ]           = useState('')
+  const [draft, setDraft]   = useState<string[]>(selected)
+  const ref                 = useRef<HTMLDivElement>(null)
+  const active              = selected.length > 0
+
+  // Sync draft when re-opening
+  useEffect(() => { if (open) setDraft(selected) }, [open])
+
+  useEffect(() => {
+    const h = (e: MouseEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', h)
+    return () => document.removeEventListener('mousedown', h)
+  }, [])
+
+  const visible   = options.filter(o => o.toLowerCase().includes(q.toLowerCase()))
+  const allTicked = visible.length > 0 && visible.every(o => draft.includes(o))
+  const anyTicked = visible.some(o => draft.includes(o))
+
+  const toggle = (o: string) =>
+    setDraft(d => d.includes(o) ? d.filter(x => x !== o) : [...d, o])
+
+  const toggleAll = () =>
+    setDraft(allTicked ? draft.filter(x => !visible.includes(x)) : [...new Set([...draft, ...visible])])
+
+  const apply = () => { onApply(draft); setOpen(false) }
+  const clear = () => { onApply([]); setDraft([]); setOpen(false) }
+
+  return (
+    <div ref={ref} style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
+      <button
+        onClick={() => setOpen(v => !v)}
+        title={active ? `Filtered: ${selected.join(', ')}` : `Filter by ${label}`}
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: 3,
+          background: active ? 'rgba(59,130,246,0.12)' : 'transparent',
+          border: 'none', borderRadius: 5, padding: '2px 5px',
+          cursor: 'pointer', color: active ? '#3b82f6' : '#94a3b8',
+        }}>
+        <Filter size={11} style={{ opacity: active ? 1 : 0.5 }} />
+        {active && <span style={{ fontSize: 10, fontWeight: 700, color: '#3b82f6' }}>{selected.length}</span>}
+        <ChevronDown size={10} style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }} />
+      </button>
+
+      {open && (
+        <div style={{
+          position: 'fixed', zIndex: 9999,
+          background: '#fff', border: '1px solid #d1d5db', borderRadius: 8,
+          boxShadow: '0 8px 32px rgba(0,0,0,0.16)', width: 240,
+          display: 'flex', flexDirection: 'column',
+          // Position will be set via ref below — we use a portal-like trick with fixed
+        }}
+        ref={el => {
+          if (el && ref.current) {
+            const btn = ref.current.querySelector('button')
+            if (btn) {
+              const r = btn.getBoundingClientRect()
+              el.style.top  = `${r.bottom + 4}px`
+              el.style.left = align === 'right' ? `${r.right - 240}px` : `${r.left}px`
+            }
+          }
+        }}>
+          {/* Sort options */}
+          {onSort && (
+            <div style={{ borderBottom: '1px solid #e2e8f0' }}>
+              {[{ label: 'Sort A → Z', dir: 'asc' as const }, { label: 'Sort Z → A', dir: 'desc' as const }].map(s => (
+                <button key={s.dir} onClick={() => { onSort(s.dir); setOpen(false) }}
+                  style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: '#0f172a', textAlign: 'left' }}
+                  onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+                  {s.dir === 'asc' ? '🔼' : '🔽'} {s.label}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Clear filter */}
+          <button onClick={clear}
+            style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', background: 'none', border: 'none', borderBottom: '1px solid #e2e8f0', cursor: active ? 'pointer' : 'not-allowed', fontSize: 12, color: active ? '#ef4444' : '#cbd5e1', textAlign: 'left' }}
+            disabled={!active}
+            onMouseEnter={e => { if (active) e.currentTarget.style.background = '#fef2f2' }}
+            onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+            <X size={11} /> Clear filter from "{label}"
+          </button>
+
+          {/* Search */}
+          <div style={{ padding: '8px 10px', borderBottom: '1px solid #f1f5f9' }}>
+            <div style={{ position: 'relative' }}>
+              <Search size={11} style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+              <input autoFocus value={q} onChange={e => setQ(e.target.value)} placeholder="Search…"
+                style={{ width: '100%', paddingLeft: 26, paddingRight: 8, paddingTop: 5, paddingBottom: 5, border: '1px solid #d1d5db', borderRadius: 6, fontSize: 12, outline: 'none', boxSizing: 'border-box' }} />
+            </div>
+          </div>
+
+          {/* Checkboxes */}
+          <div style={{ overflowY: 'auto', maxHeight: 220 }}>
+            {/* Select all row */}
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', cursor: 'pointer', borderBottom: '1px solid #f1f5f9', fontSize: 12, color: '#0f172a', fontWeight: 600 }}
+              onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
+              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+              <input type="checkbox" checked={allTicked} ref={el => { if (el) el.indeterminate = anyTicked && !allTicked }}
+                onChange={toggleAll} style={{ accentColor: '#3b82f6', width: 13, height: 13 }} />
+              (Select All)
+            </label>
+            {visible.map(o => (
+              <label key={o} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 12px', cursor: 'pointer', fontSize: 12, color: '#0f172a' }}
+                onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
+                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                <input type="checkbox" checked={draft.includes(o)} onChange={() => toggle(o)}
+                  style={{ accentColor: '#3b82f6', width: 13, height: 13 }} />
+                {o}
+              </label>
+            ))}
+            {visible.length === 0 && (
+              <div style={{ padding: '12px', fontSize: 12, color: '#94a3b8', textAlign: 'center' }}>No results</div>
+            )}
+          </div>
+
+          {/* OK / Cancel */}
+          <div style={{ display: 'flex', gap: 8, padding: '10px 12px', borderTop: '1px solid #e2e8f0', background: '#f8fafc' }}>
+            <button onClick={apply}
+              style={{ flex: 1, padding: '6px 0', borderRadius: 6, border: 'none', background: '#3b82f6', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+              OK
+            </button>
+            <button onClick={() => setOpen(false)}
+              style={{ flex: 1, padding: '6px 0', borderRadius: 6, border: '1px solid #d1d5db', background: '#fff', color: '#374151', fontSize: 12, fontWeight: 500, cursor: 'pointer' }}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 const PHASES = ['All', 'Implementing', 'Evaluating', 'Researching', 'Hiring', 'Live']
 
 const normalisePhase = (p: string): string => {
@@ -375,7 +523,11 @@ export default function Companies() {
   const [sortDir, setSortDir]             = useState<'asc' | 'desc'>('desc')
   const [openMenu, setOpenMenu]           = useState<number | null>(null)
   const [contactsPanel, setContactsPanel] = useState<Company | null>(null)
-  const [productFilter, setProductFilter] = useState('All')
+  const [productFilter, setProductFilter]   = useState('All')
+  const [industryFilter, setIndustryFilter] = useState<string[]>([])
+  const [locationFilter, setLocationFilter] = useState<string[]>([])
+  const [contactsFilter, setContactsFilter] = useState<string[]>([])
+  const [filterOptions, setFilterOptions]   = useState<{ industries: string[]; locations: string[] }>({ industries: [], locations: [] })
   const [editingProduct, setEditingProduct] = useState<number | null>(null)
   const [exporting, setExporting] = useState(false)
   const menuRefs = useRef<Map<number, HTMLButtonElement>>(new Map())
@@ -402,6 +554,13 @@ export default function Companies() {
   }
 
   useEffect(() => {
+    fetch('/api/companies/filter-options', { headers: authH() })
+      .then(r => r.ok ? r.json() : { industries: [], locations: [] })
+      .then(d => setFilterOptions(d))
+      .catch(() => {})
+  }, [])
+
+  useEffect(() => {
     const t = setTimeout(() => setSearch(searchInput), 300)
     return () => clearTimeout(t)
   }, [searchInput])
@@ -426,6 +585,9 @@ export default function Companies() {
     if (q) p.set('search', q)
     if (phase !== 'All') p.set('phase', phase.toLowerCase())
     if (productFilter !== 'All') p.set('product', productFilter)
+    if (industryFilter.length > 0) p.set('industry', industryFilter.join(','))
+    if (locationFilter.length > 0) p.set('location', locationFilter.join(','))
+    if (contactsFilter.length > 0) p.set('has_contacts', contactsFilter[0])
     return `/api/companies?${p}`
   }
 
@@ -457,7 +619,8 @@ export default function Companies() {
     } finally {
       setLoading(false)
     }
-  }, [search, phase, productFilter])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, phase, productFilter, JSON.stringify(industryFilter), JSON.stringify(locationFilter), JSON.stringify(contactsFilter)])
 
   const loadMore = async () => {
     setLoadingMore(true)
@@ -473,7 +636,8 @@ export default function Companies() {
   }
 
   useEffect(() => { fetchCompanies() }, [])
-  useEffect(() => { fetchCompanies(search) }, [search, phase, productFilter])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { fetchCompanies(search) }, [search, phase, productFilter, JSON.stringify(industryFilter), JSON.stringify(locationFilter), JSON.stringify(contactsFilter)])
 
   // Client-side sort only (data already filtered server-side)
   const filtered = companies
@@ -569,6 +733,35 @@ export default function Companies() {
           {ORACLE_PRODUCTS.map(p => <option key={p} value={p}>{p}</option>)}
         </select>
       </div>
+      {/* Active filter chips */}
+      {(industryFilter.length > 0 || locationFilter.length > 0 || contactsFilter.length > 0) && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 12, color: '#64748b', fontWeight: 500 }}>Active filters:</span>
+          {industryFilter.length > 0 && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 10px', borderRadius: 999, background: 'rgba(59,130,246,0.1)', color: '#3b82f6', fontSize: 12, fontWeight: 500 }}>
+              Industry: {industryFilter.length === 1 ? industryFilter[0] : `${industryFilter.length} selected`}
+              <button onClick={() => setIndustryFilter([])} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#3b82f6', padding: 0, display: 'flex', alignItems: 'center' }}><X size={11} /></button>
+            </span>
+          )}
+          {locationFilter.length > 0 && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 10px', borderRadius: 999, background: 'rgba(99,102,241,0.1)', color: '#6366f1', fontSize: 12, fontWeight: 500 }}>
+              Location: {locationFilter.length === 1 ? locationFilter[0] : `${locationFilter.length} selected`}
+              <button onClick={() => setLocationFilter([])} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6366f1', padding: 0, display: 'flex', alignItems: 'center' }}><X size={11} /></button>
+            </span>
+          )}
+          {contactsFilter.length > 0 && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 10px', borderRadius: 999, background: 'rgba(16,185,129,0.1)', color: '#10b981', fontSize: 12, fontWeight: 500 }}>
+              Contacts: {contactsFilter[0] === 'yes' ? 'With contacts' : 'Without contacts'}
+              <button onClick={() => setContactsFilter([])} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#10b981', padding: 0, display: 'flex', alignItems: 'center' }}><X size={11} /></button>
+            </span>
+          )}
+          <button onClick={() => { setIndustryFilter([]); setLocationFilter([]); setContactsFilter([]) }}
+            style={{ fontSize: 12, color: '#94a3b8', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>
+            Clear all
+          </button>
+        </div>
+      )}
+
       <div style={{ border: '1px solid #e2e8f0', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
@@ -576,20 +769,52 @@ export default function Companies() {
               <th style={{ ...thStyle, width: 44, cursor: 'default' }}>
                 <input type="checkbox" checked={allSelected} onChange={() => setSelected(allSelected ? [] : filtered.map(c => c.id))} style={{ accentColor: '#3b82f6' }} />
               </th>
-              <th style={thStyle} onClick={() => toggleSort('name')}>
-                Company {sortKey === 'name' ? (sortDir === 'desc' ? '↓' : '↑') : <span style={{ color: '#cbd5e1' }}>↕</span>}
+              <th style={thStyle}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <span style={{ cursor: 'pointer' }} onClick={() => toggleSort('name')}>
+                    Company {sortKey === 'name' ? (sortDir === 'desc' ? '↓' : '↑') : <span style={{ color: '#cbd5e1' }}>↕</span>}
+                  </span>
+                  <ColumnFilter label="Location" options={filterOptions.locations} selected={locationFilter} onApply={setLocationFilter}
+                    onSort={d => { setSortKey('name'); setSortDir(d) }} />
+                </div>
               </th>
-              <th style={{ ...thStyle, cursor: 'default' }}>Industry</th>
+              <th style={thStyle}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  Industry
+                  <ColumnFilter label="Industry" options={filterOptions.industries} selected={industryFilter} onApply={setIndustryFilter}
+                    onSort={d => { setSortKey('name'); setSortDir(d) }} />
+                </div>
+              </th>
               <th style={{ ...thStyle, cursor: 'default' }}>Target Product</th>
-              <th style={{ ...thStyle, cursor: 'default' }}>Phase</th>
-              <th style={thStyle} onClick={() => toggleSort('score')}>
-                Score {sortKey === 'score' ? (sortDir === 'desc' ? '↓' : '↑') : <span style={{ color: '#cbd5e1' }}>↕</span>}
+              <th style={thStyle}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  Phase
+                  <ColumnFilter label="Phase" options={['Implementing', 'Evaluating', 'Researching', 'Hiring', 'Live']}
+                    selected={phase === 'All' ? [] : [phase]}
+                    onApply={vals => setPhase(vals[0] ?? 'All')} />
+                </div>
               </th>
-              <th style={thStyle} onClick={() => toggleSort('signals')}>
-                Signals {sortKey === 'signals' ? (sortDir === 'desc' ? '↓' : '↑') : <span style={{ color: '#cbd5e1' }}>↕</span>}
+              <th style={thStyle}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <span style={{ cursor: 'pointer' }} onClick={() => toggleSort('score')}>
+                    Score {sortKey === 'score' ? (sortDir === 'desc' ? '↓' : '↑') : <span style={{ color: '#cbd5e1' }}>↕</span>}
+                  </span>
+                </div>
               </th>
-              <th style={thStyle} onClick={() => toggleSort('contacts')} title="Click to view contacts">
-                Contacts {sortKey === 'contacts' ? (sortDir === 'desc' ? '↓' : '↑') : <span style={{ color: '#cbd5e1' }}>↕</span>}
+              <th style={thStyle}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <span style={{ cursor: 'pointer' }} onClick={() => toggleSort('signals')}>
+                    Signals {sortKey === 'signals' ? (sortDir === 'desc' ? '↓' : '↑') : <span style={{ color: '#cbd5e1' }}>↕</span>}
+                  </span>
+                </div>
+              </th>
+              <th style={thStyle}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <span style={{ cursor: 'pointer' }} onClick={() => toggleSort('contacts')}>
+                    Contacts {sortKey === 'contacts' ? (sortDir === 'desc' ? '↓' : '↑') : <span style={{ color: '#cbd5e1' }}>↕</span>}
+                  </span>
+                  <ColumnFilter label="Contacts" options={['yes', 'no']} selected={contactsFilter} onApply={setContactsFilter} align="right" />
+                </div>
               </th>
               <th style={{ ...thStyle, cursor: 'default', width: 70 }} />
             </tr>

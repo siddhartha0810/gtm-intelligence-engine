@@ -167,7 +167,7 @@ export default function Settings() {
       <style>{`@keyframes spin { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }`}</style>
 
       <div>
-        <h1 style={{ fontSize: 20, fontWeight: 600, color: 'white', margin: 0 }}>Settings & API Configuration</h1>
+        <h1 style={{ fontSize: 20, fontWeight: 600, color: '#0f172a', margin: 0 }}>Settings & API Configuration</h1>
         <p style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>Keys are read from .env — enter a key below to test it live</p>
       </div>
 
