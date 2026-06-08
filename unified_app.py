@@ -1757,7 +1757,7 @@ async def push_contact_to_hubspot_endpoint(
 
 @app.get("/api/reporting")
 async def api_reporting(current_user: dict = Depends(oracle_auth.require_user)):
-    """Reporting stats: phase distribution, scan-run history, source breakdown."""
+    """Reporting stats: company KPIs, contact KPIs, phase distribution, scan-run history."""
     companies = list(oracle_db.get_all_companies_with_signals(run_id=0))
     companies = _annotate_and_sort(companies)
 
@@ -1773,15 +1773,99 @@ async def api_reporting(current_user: dict = Depends(oracle_auth.require_user)):
 
     scan_runs = oracle_db.get_recent_scan_runs(10)
     total_src = sum(source_counter.values()) or 1
+
+    # ── Extended KPIs ──────────────────────────────────────────────────────────
+    with oracle_db.db_cursor(commit=False) as cur:
+
+        # Companies by target product
+        cur.execute("""
+            SELECT COALESCE(target_product, 'Unknown') AS product, COUNT(*) AS cnt
+            FROM companies
+            GROUP BY target_product
+            ORDER BY cnt DESC
+        """)
+        companies_by_product = [{"product": r["product"], "count": int(r["cnt"])} for r in cur.fetchall()]
+
+        # Companies with / without contacts
+        cur.execute("""
+            SELECT
+                COUNT(*)                                              AS total,
+                COUNT(*) FILTER (WHERE contact_count > 0)            AS with_contacts,
+                COUNT(*) FILTER (WHERE contact_count = 0
+                                    OR contact_count IS NULL)        AS without_contacts
+            FROM companies
+        """)
+        co = cur.fetchone()
+        company_contact_stats = {
+            "total":            int(co["total"] or 0),
+            "with_contacts":    int(co["with_contacts"] or 0),
+            "without_contacts": int(co["without_contacts"] or 0),
+        }
+
+        # Contact reach breakdown
+        cur.execute("""
+            SELECT
+                COUNT(*)                                                            AS total,
+                COUNT(*) FILTER (
+                    WHERE (email IS NOT NULL AND email <> '')
+                      AND (linkedin_url IS NOT NULL AND linkedin_url <> ''))        AS email_and_linkedin,
+                COUNT(*) FILTER (
+                    WHERE (email IS NOT NULL AND email <> '')
+                      AND (linkedin_url IS NULL OR linkedin_url = ''))             AS email_only,
+                COUNT(*) FILTER (
+                    WHERE (email IS NULL OR email = '')
+                      AND (linkedin_url IS NOT NULL AND linkedin_url <> ''))       AS linkedin_only,
+                COUNT(*) FILTER (
+                    WHERE (email IS NULL OR email = '')
+                      AND (linkedin_url IS NULL OR linkedin_url = ''))             AS no_reach,
+                COUNT(*) FILTER (WHERE email_validation_status = 'valid')          AS valid_emails
+            FROM company_contacts
+        """)
+        ct = cur.fetchone()
+        contact_reach_stats = {
+            "total":              int(ct["total"] or 0),
+            "email_and_linkedin": int(ct["email_and_linkedin"] or 0),
+            "email_only":         int(ct["email_only"] or 0),
+            "linkedin_only":      int(ct["linkedin_only"] or 0),
+            "no_reach":           int(ct["no_reach"] or 0),
+            "valid_emails":       int(ct["valid_emails"] or 0),
+        }
+
+        # Contacts by source
+        cur.execute("""
+            SELECT
+                CASE
+                    WHEN source IN ('apollo', 'apollo.io') THEN 'Apollo'
+                    WHEN source IN ('master_leads', '280k_master_db', 'master db') THEN 'Master Leads'
+                    WHEN source IN ('zoominfo', 'ZoomInfo') THEN 'ZoomInfo'
+                    WHEN source IN ('phantombuster', 'PhantomBuster') THEN 'PhantomBuster'
+                    ELSE COALESCE(NULLIF(TRIM(source), ''), 'Other')
+                END AS source_label,
+                COUNT(*) AS cnt
+            FROM company_contacts
+            GROUP BY source_label
+            ORDER BY cnt DESC
+        """)
+        total_contacts = contact_reach_stats["total"] or 1
+        contact_by_source = [
+            {"label": r["source_label"], "count": int(r["cnt"]),
+             "pct": round(int(r["cnt"]) / total_contacts * 100, 1)}
+            for r in cur.fetchall()
+        ]
+
     return {
-        "total_companies": len(companies),
-        "total_signals":   total_signals,
-        "phases":          dict(phase_counter.most_common()),
+        "total_companies":       company_contact_stats["total"],
+        "total_signals":         total_signals,
+        "phases":                dict(phase_counter.most_common()),
         "sources": [
             {"label": k, "count": v, "pct": round(v / total_src * 100)}
             for k, v in source_counter.most_common(6)
         ],
-        "scan_runs": [dict(r) for r in scan_runs],
+        "scan_runs":             [dict(r) for r in scan_runs],
+        "companies_by_product":  companies_by_product,
+        "company_contact_stats": company_contact_stats,
+        "contact_reach_stats":   contact_reach_stats,
+        "contact_by_source":     contact_by_source,
     }
 
 # enrichment endpoints
