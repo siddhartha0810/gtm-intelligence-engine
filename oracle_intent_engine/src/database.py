@@ -1110,70 +1110,14 @@ def _norm_company(name: str) -> str:
     return re.sub(r"\s+", " ", n).strip()
 
 def upsert_master_leads(records: list) -> int:
-    """
-    Upsert a batch of enriched contacts into master_leads.
-
-    Non-destructive: existing non-empty values are never overwritten by empty ones.
-    Designed to be called after Apollo enrichment + ZeroBounce validation.
-
-    Each record dict must have 'lead_id'. All other fields are optional.
-    Returns number of records processed.
-    """
-    if not records:
-        return 0
-
-    fields = [
-        "lead_id", "first_name", "last_name", "company", "company_normalized",
-        "domain", "email", "email_source", "email_validation_status",
-        "email_validation_sub_status", "email_prediction_pattern",
-        "linkedin_url", "linkedin_source", "job_title",
-        "phone", "mobile_phone", "ready_for_outreach", "failure_reason",
-    ]
-
-    rows = []
-    for r in records:
-        row = {f: str(r.get(f) or "").strip() for f in fields}
-        # Never persist invalid emails — blank them so a prior good email is preserved
-        if row.get("email_validation_status") == "invalid":
-            row["email"]                       = ""
-            row["email_source"]                = ""
-            row["email_validation_status"]     = ""
-            row["email_validation_sub_status"] = ""
-        if not row.get("company_normalized") and row.get("company"):
-            row["company_normalized"] = _norm_company(row["company"])
-        rows.append(row)
-
-    col_list = ", ".join(fields)
-    placeholders = ", ".join(f"%({f})s" for f in fields)
-    # Non-destructive update: only replace with new value if new value is non-empty
-    update_cols = [f for f in fields if f != "lead_id"]
-    set_clause  = ",\n            ".join(
-        f"{c} = CASE WHEN EXCLUDED.{c} <> '' THEN EXCLUDED.{c} ELSE master_leads.{c} END"
-        for c in update_cols
-    )
-
-    try:
-        with db_cursor() as cur:
-            cur.executemany(
-                f"""
-                INSERT INTO master_leads ({col_list}, first_seen_at, last_updated_at)
-                VALUES ({placeholders}, NOW(), NOW())
-                ON CONFLICT (lead_id) DO UPDATE SET
-                    {set_clause},
-                    run_count       = master_leads.run_count + 1,
-                    last_updated_at = NOW()
-                """,
-                rows,
-            )
-        return len(rows)
-    except Exception:
-        return 0
+    """contacts_master is a read-only Salesforce export — writes are no-ops."""
+    return 0
 
 def get_master_leads_by_email(emails: list) -> dict:
     """
-    Look up master_leads by email address (case-insensitive).
-    Returns {email_lower: record_dict}. Used by ZeroBounce pre-check.
-    Returns {} if table absent.
+    Look up contacts_master by email address (case-insensitive).
+    Checks zb_valid_email → validated_email → email in priority order.
+    Returns {email_lower: record_dict}. Returns {} if table absent.
     """
     if not emails:
         return {}
@@ -1184,48 +1128,80 @@ def get_master_leads_by_email(emails: list) -> dict:
         with db_cursor(commit=False) as cur:
             cur.execute(
                 """
-                SELECT * FROM master_leads
-                WHERE LOWER(email) = ANY(%s)
-                  AND email_validation_status IN ('valid','invalid','catch-all','spamtrap','abuse','do_not_mail')
+                SELECT
+                    id                                                           AS lead_id,
+                    firstname                                                    AS first_name,
+                    lastname                                                     AS last_name,
+                    title                                                        AS job_title,
+                    COALESCE(NULLIF(zb_valid_email,''), NULLIF(validated_email,''), NULLIF(email,'')) AS email,
+                    validated_email_status                                       AS email_validation_status,
+                    COALESCE(NULLIF(linkedin_url_enriched,''), NULLIF(linkedin_url__c,'')) AS linkedin_url,
+                    domain,
+                    COALESCE(NULLIF(new_company,''), NULLIF(existing_company,'')) AS company,
+                    phone
+                FROM contacts_master
+                WHERE LOWER(COALESCE(zb_valid_email, validated_email, email, '')) = ANY(%s)
+                  AND validated_email_status IN ('valid','invalid','catch-all','spamtrap','abuse','do_not_mail')
                 """,
                 (clean,),
             )
-            return {row["email"].lower(): dict(row) for row in cur.fetchall()}
+            rows = cur.fetchall()
+            return {dict(r)["email"].lower(): dict(r) for r in rows if dict(r).get("email")}
     except Exception:
         return {}
 
 def get_master_leads_by_company(company_normalized: str) -> list:
-    """Return all master_leads for a given normalised company name. Returns [] if table absent."""
+    """
+    Return contacts from contacts_master for a given company name.
+    Matches on new_company or existing_company (case-insensitive normalised).
+    Returns [] if table absent or no match.
+    """
+    norm = _norm_company(company_normalized)
     try:
         with db_cursor(commit=False) as cur:
             cur.execute(
                 """
-                SELECT * FROM master_leads
-                WHERE company_normalized = %s
+                SELECT
+                    id                                                           AS lead_id,
+                    firstname                                                    AS first_name,
+                    lastname                                                     AS last_name,
+                    title                                                        AS job_title,
+                    COALESCE(NULLIF(zb_valid_email,''), NULLIF(validated_email,''), NULLIF(email,'')) AS email,
+                    validated_email_status                                       AS email_validation_status,
+                    COALESCE(NULLIF(linkedin_url_enriched,''), NULLIF(linkedin_url__c,'')) AS linkedin_url,
+                    domain,
+                    COALESCE(NULLIF(new_company,''), NULLIF(existing_company,'')) AS company,
+                    phone
+                FROM contacts_master
+                WHERE LOWER(REGEXP_REPLACE(
+                          COALESCE(new_company, existing_company, ''),
+                          '\\s+(llc|inc|ltd|corp|limited|plc|llp|gmbh|sa|ag|nv|bv|co)\\.?$',
+                          '', 'i')) = %s
                 ORDER BY
-                    CASE email_validation_status
+                    CASE validated_email_status
                         WHEN 'valid'     THEN 0
                         WHEN 'catch-all' THEN 1
-                        ELSE 2 END,
-                    last_updated_at DESC
+                        ELSE 2 END
+                LIMIT 50
                 """,
-                (_norm_company(company_normalized),),
+                (norm,),
             )
             return cur.fetchall()
     except Exception:
         return []
 
 def master_leads_stats() -> dict:
-    """Row counts for the master_leads table. Returns zeros if table absent."""
+    """Row counts for contacts_master. Returns zeros if table absent."""
     try:
         with db_cursor(commit=False) as cur:
             cur.execute("""
                 SELECT
-                    COUNT(*)                                                     AS total,
-                    COUNT(CASE WHEN email != ''              THEN 1 END)         AS with_email,
-                    COUNT(CASE WHEN email_validation_status = 'valid' THEN 1 END) AS valid_email,
-                    COUNT(CASE WHEN ready_for_outreach = 'yes'        THEN 1 END) AS ready
-                FROM master_leads
+                    COUNT(*)                                                                             AS total,
+                    COUNT(CASE WHEN COALESCE(zb_valid_email, validated_email, email, '') != '' THEN 1 END) AS with_email,
+                    COUNT(CASE WHEN validated_email_status = 'valid'                           THEN 1 END) AS valid_email,
+                    COUNT(CASE WHEN validated_email_status = 'valid'
+                                AND (hasoptedoutofEmail IS NULL OR hasoptedoutofEmail = FALSE) THEN 1 END) AS ready
+                FROM contacts_master
             """)
             row = cur.fetchone()
             return dict(row)

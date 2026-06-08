@@ -624,6 +624,35 @@ def enrich_companies(
         _status["progress"] = f"({i+1}/{len(companies)}) {name}"
         log(f"[{i+1}/{len(companies)}] {name}  ({sig_count} signals)")
 
+        # Check contacts_master first (Salesforce export — no API cost)
+        master_rows = db.get_master_leads_by_company(name)
+        if master_rows:
+            to_save = [
+                {
+                    "full_name":               f"{c['first_name']} {c['last_name']}".strip(),
+                    "first_name":              c["first_name"] or "",
+                    "last_name":               c["last_name"] or "",
+                    "title":                   c.get("job_title") or "",
+                    "email":                   c.get("email") or None,
+                    "linkedin_url":            c.get("linkedin_url") or None,
+                    "domain":                  c.get("domain") or "",
+                    "source":                  "contacts_master",
+                    "confidence":              0.9,
+                    "is_target":               1,
+                    "email_validation_status": c.get("email_validation_status") or None,
+                }
+                for c in master_rows
+            ]
+            db.save_contacts(company_id, to_save)
+            valid_ct = sum(1 for c in master_rows if c.get("email_validation_status") == "valid")
+            total_contacts  += len(to_save)
+            total_validated += valid_ct
+            _status["contacts_found"]     = total_contacts
+            _status["contacts_validated"] = total_validated
+            _status["companies_processed"] += 1
+            log(f"  + {len(to_save)} contacts from contacts_master ({valid_ct} valid) — skipped Apollo")
+            continue
+
         contacts, pass_used = _apollo_search(name, apollo_key, max_per_company,
                                              role_filters=effective_roles)
 
