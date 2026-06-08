@@ -129,35 +129,7 @@ _DDL = [
     "ALTER TABLE company_contacts ADD COLUMN IF NOT EXISTS email_validation_status TEXT",
     "ALTER TABLE company_contacts ADD COLUMN IF NOT EXISTS email_source TEXT DEFAULT ''",
     "ALTER TABLE company_contacts ADD COLUMN IF NOT EXISTS email_prediction_pattern TEXT DEFAULT ''",
-    """
-    CREATE TABLE IF NOT EXISTS master_leads (
-        lead_id                     TEXT PRIMARY KEY,
-        first_name                  TEXT NOT NULL DEFAULT '',
-        last_name                   TEXT NOT NULL DEFAULT '',
-        company                     TEXT NOT NULL DEFAULT '',
-        company_normalized          TEXT NOT NULL DEFAULT '',
-        domain                      TEXT NOT NULL DEFAULT '',
-        email                       TEXT NOT NULL DEFAULT '',
-        email_source                TEXT NOT NULL DEFAULT '',
-        email_validation_status     TEXT NOT NULL DEFAULT '',
-        email_validation_sub_status TEXT NOT NULL DEFAULT '',
-        email_prediction_pattern    TEXT NOT NULL DEFAULT '',
-        linkedin_url                TEXT NOT NULL DEFAULT '',
-        linkedin_source             TEXT NOT NULL DEFAULT '',
-        job_title                   TEXT NOT NULL DEFAULT '',
-        phone                       TEXT NOT NULL DEFAULT '',
-        mobile_phone                TEXT NOT NULL DEFAULT '',
-        ready_for_outreach          TEXT NOT NULL DEFAULT '',
-        failure_reason              TEXT NOT NULL DEFAULT '',
-        run_count                   INTEGER NOT NULL DEFAULT 1,
-        first_seen_at               TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        last_updated_at             TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-    """,
-    "CREATE INDEX IF NOT EXISTS idx_ml_company_norm ON master_leads(company_normalized)",
-    "CREATE INDEX IF NOT EXISTS idx_ml_domain       ON master_leads(domain)",
-    "CREATE INDEX IF NOT EXISTS idx_ml_email        ON master_leads(email) WHERE email != ''",
-    "CREATE INDEX IF NOT EXISTS idx_ml_outreach     ON master_leads(ready_for_outreach)",
+    # master_leads table intentionally removed — dropped 2026-06-08
     """
     CREATE TABLE IF NOT EXISTS domain_knowledge (
         company_normalized  TEXT PRIMARY KEY,
@@ -1180,72 +1152,85 @@ def upsert_master_leads(records: list) -> int:
         for c in update_cols
     )
 
-    with db_cursor() as cur:
-        cur.executemany(
-            f"""
-            INSERT INTO master_leads ({col_list}, first_seen_at, last_updated_at)
-            VALUES ({placeholders}, NOW(), NOW())
-            ON CONFLICT (lead_id) DO UPDATE SET
-                {set_clause},
-                run_count       = master_leads.run_count + 1,
-                last_updated_at = NOW()
-            """,
-            rows,
-        )
-    return len(rows)
+    try:
+        with db_cursor() as cur:
+            cur.executemany(
+                f"""
+                INSERT INTO master_leads ({col_list}, first_seen_at, last_updated_at)
+                VALUES ({placeholders}, NOW(), NOW())
+                ON CONFLICT (lead_id) DO UPDATE SET
+                    {set_clause},
+                    run_count       = master_leads.run_count + 1,
+                    last_updated_at = NOW()
+                """,
+                rows,
+            )
+        return len(rows)
+    except Exception:
+        return 0
 
 def get_master_leads_by_email(emails: list) -> dict:
     """
     Look up master_leads by email address (case-insensitive).
     Returns {email_lower: record_dict}. Used by ZeroBounce pre-check.
+    Returns {} if table absent.
     """
     if not emails:
         return {}
     clean = [e.lower().strip() for e in emails if e and e.strip()]
     if not clean:
         return {}
-    with db_cursor(commit=False) as cur:
-        cur.execute(
-            """
-            SELECT * FROM master_leads
-            WHERE LOWER(email) = ANY(%s)
-              AND email_validation_status IN ('valid','invalid','catch-all','spamtrap','abuse','do_not_mail')
-            """,
-            (clean,),
-        )
-        return {row["email"].lower(): dict(row) for row in cur.fetchall()}
+    try:
+        with db_cursor(commit=False) as cur:
+            cur.execute(
+                """
+                SELECT * FROM master_leads
+                WHERE LOWER(email) = ANY(%s)
+                  AND email_validation_status IN ('valid','invalid','catch-all','spamtrap','abuse','do_not_mail')
+                """,
+                (clean,),
+            )
+            return {row["email"].lower(): dict(row) for row in cur.fetchall()}
+    except Exception:
+        return {}
 
 def get_master_leads_by_company(company_normalized: str) -> list:
-    """Return all master_leads for a given normalised company name."""
-    with db_cursor(commit=False) as cur:
-        cur.execute(
-            """
-            SELECT * FROM master_leads
-            WHERE company_normalized = %s
-            ORDER BY
-                CASE email_validation_status
-                    WHEN 'valid'     THEN 0
-                    WHEN 'catch-all' THEN 1
-                    ELSE 2 END,
-                last_updated_at DESC
-            """,
-            (_norm_company(company_normalized),),
-        )
-        return cur.fetchall()
+    """Return all master_leads for a given normalised company name. Returns [] if table absent."""
+    try:
+        with db_cursor(commit=False) as cur:
+            cur.execute(
+                """
+                SELECT * FROM master_leads
+                WHERE company_normalized = %s
+                ORDER BY
+                    CASE email_validation_status
+                        WHEN 'valid'     THEN 0
+                        WHEN 'catch-all' THEN 1
+                        ELSE 2 END,
+                    last_updated_at DESC
+                """,
+                (_norm_company(company_normalized),),
+            )
+            return cur.fetchall()
+    except Exception:
+        return []
 
 def master_leads_stats() -> dict:
-    """Row counts for the master_leads table."""
-    with db_cursor(commit=False) as cur:
-        cur.execute("""
-            SELECT
-                COUNT(*)                                                     AS total,
-                COUNT(CASE WHEN email != ''              THEN 1 END)         AS with_email,
-                COUNT(CASE WHEN email_validation_status = 'valid' THEN 1 END) AS valid_email,
-                COUNT(CASE WHEN ready_for_outreach = 'yes'        THEN 1 END) AS ready
-            FROM master_leads
-        """)
-        row = cur.fetchone()
-        return dict(row)
+    """Row counts for the master_leads table. Returns zeros if table absent."""
+    try:
+        with db_cursor(commit=False) as cur:
+            cur.execute("""
+                SELECT
+                    COUNT(*)                                                     AS total,
+                    COUNT(CASE WHEN email != ''              THEN 1 END)         AS with_email,
+                    COUNT(CASE WHEN email_validation_status = 'valid' THEN 1 END) AS valid_email,
+                    COUNT(CASE WHEN ready_for_outreach = 'yes'        THEN 1 END) AS ready
+                FROM master_leads
+            """)
+            row = cur.fetchone()
+            return dict(row)
+    except Exception:
+        return {"total": 0, "with_email": 0, "valid_email": 0, "ready": 0}
 
 # email pattern operations
 def load_domain_patterns(domains: list = None) -> dict:

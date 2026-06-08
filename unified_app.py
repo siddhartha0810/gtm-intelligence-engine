@@ -820,79 +820,14 @@ async def api_company_signals(company_id: int, current_user: dict = Depends(orac
 
 @app.get("/api/company/{company_id}/contacts")
 async def api_company_contacts(company_id: int, current_user: dict = Depends(oracle_auth.require_user)):
-    """Return enriched contacts for a company.
-    Primary source: company_contacts table.
-    Fallback: master_leads matched by domain or company name (so the panel
-    always shows something useful even before enrichment).
-    """
+    """Return enriched contacts for a company from company_contacts table."""
     rows = jsonable_encoder([dict(c) for c in oracle_db.get_contacts_for_company(company_id)])
-    if rows:
-        return JSONResponse(rows)
-
-    # fallback: pull from master_leads
-    company = oracle_db.get_company_by_id(company_id)
-    if not company:
-        return JSONResponse([])
-
-    cname  = (company.get("name") or "").strip()
-    domain = (company.get("domain") or "").strip().lower()
-
-    try:
-        with oracle_db.db_cursor(commit=False) as cur:
-            if domain:
-                cur.execute(
-                    """SELECT lead_id, first_name, last_name, job_title AS title,
-                              email, linkedin_url, email_validation_status,
-                              company AS company_name, domain AS company_domain,
-                              first_seen_at::text AS created_at
-                       FROM master_leads
-                       WHERE LOWER(domain) = %s
-                       ORDER BY email_validation_status ASC, last_updated_at DESC
-                       LIMIT 100""",
-                    (domain,),
-                )
-            else:
-                cur.execute(
-                    """SELECT lead_id, first_name, last_name, job_title AS title,
-                              email, linkedin_url, email_validation_status,
-                              company AS company_name, domain AS company_domain,
-                              first_seen_at::text AS created_at
-                       FROM master_leads
-                       WHERE LOWER(company_normalized) = LOWER(%s)
-                       ORDER BY email_validation_status ASC, last_updated_at DESC
-                       LIMIT 100""",
-                    (cname,),
-                )
-            leads = cur.fetchall()
-
-        result = []
-        for i, row in enumerate(leads):
-            d = dict(row)
-            evs = d.pop("email_validation_status", "") or ""
-            conf = 0.85 if evs == "valid" else (0.55 if evs == "catch-all" else 0.30)
-            result.append({
-                "id":             f"ml_{d.get('lead_id', i)}",
-                "first_name":     d.get("first_name") or "",
-                "last_name":      d.get("last_name") or "",
-                "title":          d.get("title") or "",
-                "email":          d.get("email") or "",
-                "linkedin_url":   d.get("linkedin_url") or "",
-                "confidence":     conf,
-                "is_target":      False,
-                "source":         "master_leads",
-                "created_at":     d.get("created_at") or "",
-                "company_name":   d.get("company_name") or cname,
-                "company_domain": d.get("company_domain") or domain,
-            })
-        return JSONResponse(result)
-    except Exception as e:
-        return JSONResponse({"error": str(e)}, status_code=500)
+    return JSONResponse(rows)
 
 @app.post("/api/company/{company_id}/contacts/enrich")
 async def api_enrich_contacts(company_id: int, current_user: dict = Depends(oracle_auth.require_analyst)):
     """Enrich contacts for a company.
-    Step 1: import from master_leads (fast, no external calls).
-    Step 2: if master_leads found nothing, call the external contact finder.
+    Find contacts via external search and save to company_contacts.
     Saves results into company_contacts so they persist.
     """
     try:
@@ -906,58 +841,6 @@ async def api_enrich_contacts(company_id: int, current_user: dict = Depends(orac
     domain = (company.get("domain") or "").strip().lower() or \
              oracle_contact_finder.infer_domain(cname)
 
-    # step 1: pull from master_leads
-    imported = 0
-    try:
-        with oracle_db.db_cursor(commit=False) as cur:
-            if domain:
-                cur.execute(
-                    """SELECT first_name, last_name, job_title, email, linkedin_url,
-                              email_validation_status, company AS company_name, domain
-                       FROM master_leads
-                       WHERE LOWER(domain) = %s
-                       ORDER BY email_validation_status ASC
-                       LIMIT 100""",
-                    (domain,),
-                )
-            else:
-                cur.execute(
-                    """SELECT first_name, last_name, job_title, email, linkedin_url,
-                              email_validation_status, company AS company_name, domain
-                       FROM master_leads
-                       WHERE LOWER(company_normalized) = LOWER(%s)
-                       ORDER BY email_validation_status ASC
-                       LIMIT 100""",
-                    (cname,),
-                )
-            leads = cur.fetchall()
-
-        if leads:
-            contacts_to_save = []
-            for row in leads:
-                d = dict(row)
-                evs = d.get("email_validation_status") or ""
-                conf = 0.85 if evs == "valid" else (0.55 if evs == "catch-all" else 0.30)
-                contacts_to_save.append({
-                    "first_name":   d.get("first_name") or "",
-                    "last_name":    d.get("last_name") or "",
-                    "title":        d.get("job_title") or "",
-                    "email":        d.get("email") or "",
-                    "linkedin_url": d.get("linkedin_url") or "",
-                    "confidence":   conf,
-                    "source":       "master_leads",
-                    "is_target":    False,
-                })
-            oracle_db.save_contacts(company_id, contacts_to_save)
-            imported = len(contacts_to_save)
-    except Exception:
-        logger.warning("master_leads lookup failed for company_id=%s — falling through to external finder", company_id, exc_info=True)
-
-    if imported:
-        return {"contacts": [], "count": imported,
-                "message": f"Imported {imported} contacts from master database"}
-
-    # step 2: external contact finder
     try:
         contacts = oracle_contact_finder.find_contacts(cname, domain)
         oracle_db.save_contacts(company_id, contacts)
@@ -980,37 +863,13 @@ def _bulk_enrich_worker(company_ids: list):
             cname  = (company.get("name") or "").strip()
             domain = (company.get("domain") or "").strip().lower() or \
                      oracle_contact_finder.infer_domain(cname)
-            # master_leads first
-            imported = 0
             try:
-                with oracle_db.db_cursor(commit=False) as cur:
-                    if domain:
-                        cur.execute("""SELECT first_name, last_name, job_title, email, linkedin_url,
-                                              email_validation_status, company AS company_name, domain
-                                       FROM master_leads WHERE LOWER(domain)=%s LIMIT 100""", (domain,))
-                    else:
-                        cur.execute("""SELECT first_name, last_name, job_title, email, linkedin_url,
-                                              email_validation_status, company AS company_name, domain
-                                       FROM master_leads WHERE LOWER(company_normalized)=LOWER(%s) LIMIT 100""", (cname,))
-                    leads = cur.fetchall()
-                if leads:
-                    contacts_to_save = [{"first_name": d.get("first_name") or "", "last_name": d.get("last_name") or "",
-                        "title": d.get("job_title") or "", "email": d.get("email") or "",
-                        "linkedin_url": d.get("linkedin_url") or "",
-                        "confidence": 0.85 if (d.get("email_validation_status") or "") == "valid" else 0.55,
-                        "source": "master_leads", "is_target": False} for d in [dict(r) for r in leads]]
-                    oracle_db.save_contacts(cid, contacts_to_save)
-                    imported = len(contacts_to_save)
+                contacts = oracle_contact_finder.find_contacts(cname, domain)
+                if contacts:
+                    oracle_db.save_contacts(cid, contacts)
             except Exception:
-                logger.warning("master_leads lookup failed for company_id=%s", cid, exc_info=True)
-            if not imported:
-                try:
-                    contacts = oracle_contact_finder.find_contacts(cname, domain)
-                    if contacts:
-                        oracle_db.save_contacts(cid, contacts)
-                except Exception:
-                    logger.warning("Apollo contact search failed for company_id=%s (%s)", cid, cname, exc_info=True)
-                    _bulk_enrich_state["errors"] = _bulk_enrich_state["errors"] + 1
+                logger.warning("Apollo contact search failed for company_id=%s (%s)", cid, cname, exc_info=True)
+                _bulk_enrich_state["errors"] = _bulk_enrich_state["errors"] + 1
         except Exception:
             logger.exception("Unexpected error enriching company_id=%s", cid)
             _bulk_enrich_state["errors"] = _bulk_enrich_state["errors"] + 1
@@ -1948,43 +1807,18 @@ async def enrich_preflight(current_user: dict = Depends(oracle_auth.require_anal
                 "zerobounce_configured": bool(ZEROBOUNCE_API_KEY),
             }
 
-        # Batch-check master_leads coverage in two queries (not N+1)
-        names   = [c["name"].strip().lower() for c in companies]
-        domains = [c.get("domain", "").strip().lower() for c in companies if c.get("domain", "").strip()]
-
-        with oracle_db.db_cursor(commit=False) as cur:
-            cur.execute(
-                "SELECT DISTINCT LOWER(company_normalized) AS n FROM master_leads "
-                "WHERE LOWER(company_normalized) = ANY(%s)",
-                (names,),
-            )
-            name_hits = {r["n"] for r in cur.fetchall()}
-
-            domain_hits: set = set()
-            if domains:
-                cur.execute(
-                    "SELECT DISTINCT LOWER(domain) AS d FROM master_leads "
-                    "WHERE LOWER(domain) = ANY(%s) AND domain != ''",
-                    (domains,),
-                )
-                domain_hits = {r["d"] for r in cur.fetchall()}
-
-        from_master = sum(
-            1 for c in companies
-            if c["name"].strip().lower() in name_hits
-            or (c.get("domain", "").strip().lower() in domain_hits and c.get("domain", ""))
-        )
-        need_apollo = total - from_master
+        # All companies go through Apollo — master_leads removed
+        need_apollo = total
 
         # Apollo credit estimate: 2 credits per company (targeted pass + possible broad pass)
-        est_credits  = need_apollo * 2
-        # Time estimate: ~3 s per Apollo company (1.2s × 2 passes + ZB overhead)
-        est_seconds  = need_apollo * 3
-        est_minutes  = max(0.5, round(est_seconds / 60, 1))
+        est_credits = need_apollo * 2
+        # Time estimate: ~3s per company (1.2s × 2 passes + ZB overhead)
+        est_seconds = need_apollo * 3
+        est_minutes = max(0.5, round(est_seconds / 60, 1))
 
         return {
             "total":               total,
-            "from_master_leads":   from_master,
+            "from_master_leads":   0,
             "need_apollo":         need_apollo,
             "est_credits":         est_credits,
             "est_minutes":         est_minutes,
