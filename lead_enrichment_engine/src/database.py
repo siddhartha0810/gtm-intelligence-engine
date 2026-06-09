@@ -303,7 +303,10 @@ class PipelineDB:
                 (_now(),),
             )
             cached = cur.fetchone()["n"]
-            cur.execute("SELECT COUNT(*) AS n FROM master_leads")
+            cur.execute(
+                "SELECT COUNT(*) AS n FROM contacts_master"
+                " WHERE UPPER(TRIM(zb_valid_email)) = 'YES'"
+            )
             master = cur.fetchone()["n"]
         return {"domains": domains, "patterns": patterns,
                 "cached_leads": cached, "master_leads": master}
@@ -318,20 +321,33 @@ class PipelineDB:
         with self._conn() as cur:
             cur.execute(
                 """
-                SELECT company_normalized, domain, COUNT(*) AS cnt
-                FROM master_leads
-                WHERE company_normalized = ANY(%s) AND domain != ''
+                SELECT
+                    LOWER(REGEXP_REPLACE(
+                        COALESCE(NULLIF(new_company,''), NULLIF(existing_company,'')),
+                        '\\s+(llc|inc|ltd|corp|limited|plc|llp|gmbh|sa|ag|nv|bv|co)\\.?$',
+                        '', 'i'
+                    ))                               AS company_normalized,
+                    domain,
+                    COUNT(*)                         AS cnt,
+                    SUM(CASE WHEN validated_email_status = 'valid' THEN 1 ELSE 0 END) AS valid_cnt
+                FROM contacts_master
+                WHERE LOWER(REGEXP_REPLACE(
+                          COALESCE(NULLIF(new_company,''), NULLIF(existing_company,'')),
+                          '\\s+(llc|inc|ltd|corp|limited|plc|llp|gmbh|sa|ag|nv|bv|co)\\.?$',
+                          '', 'i'
+                      )) = ANY(%s)
+                  AND domain IS NOT NULL AND domain != ''
+                  AND UPPER(TRIM(zb_valid_email)) = 'YES'
                 GROUP BY company_normalized, domain
-                ORDER BY company_normalized,
-                         SUM(CASE WHEN email_validation_status = 'valid' THEN 1 ELSE 0 END) DESC,
-                         COUNT(*) DESC
+                ORDER BY company_normalized, valid_cnt DESC, cnt DESC
                 """,
                 (company_norms,),
             )
             result: Dict[str, str] = {}
             for r in cur.fetchall():
-                if r["company_normalized"] not in result:
-                    result[r["company_normalized"]] = r["domain"]
+                key = r["company_normalized"]
+                if key not in result:
+                    result[key] = r["domain"]
         return result
 
     def get_validation_by_email(self, emails: List[str]) -> Dict[str, Dict]:
@@ -343,15 +359,19 @@ class PipelineDB:
         with self._conn() as cur:
             cur.execute(
                 """
-                SELECT email, email_validation_status, email_validation_sub_status
-                FROM master_leads
-                WHERE LOWER(email) = ANY(%s)
-                  AND email_validation_status IN
+                SELECT
+                    COALESCE(NULLIF(validated_email,''), NULLIF(email,''))  AS email,
+                    validated_email_status                                   AS email_validation_status,
+                    ''                                                       AS email_validation_sub_status
+                FROM contacts_master
+                WHERE LOWER(COALESCE(NULLIF(validated_email,''), NULLIF(email,''))) = ANY(%s)
+                  AND UPPER(TRIM(zb_valid_email)) = 'YES'
+                  AND validated_email_status IN
                       ('valid','invalid','catch-all','spamtrap','abuse','do_not_mail')
                 """,
                 (clean,),
             )
-            return {r["email"].lower(): dict(r) for r in cur.fetchall()}
+            return {r["email"].lower(): dict(r) for r in cur.fetchall() if r.get("email")}
 
     def find_contacts_by_name_company(self, leads: List[Dict]) -> Dict[str, Dict]:
         if not leads:
@@ -369,15 +389,34 @@ class PipelineDB:
                     continue
                 cur.execute(
                     """
-                    SELECT * FROM master_leads
-                    WHERE LOWER(first_name) = %s AND LOWER(last_name) = %s
-                      AND company_normalized = %s AND email != ''
+                    SELECT
+                        id::TEXT                                                               AS lead_id,
+                        firstname                                                              AS first_name,
+                        lastname                                                               AS last_name,
+                        title                                                                  AS job_title,
+                        COALESCE(NULLIF(validated_email,''), NULLIF(email,''))                 AS email,
+                        validated_email_status                                                 AS email_validation_status,
+                        COALESCE(NULLIF(linkedin_url__c,''), NULLIF(linkedin_url_enriched,'')) AS linkedin_url,
+                        domain,
+                        COALESCE(NULLIF(new_company,''), NULLIF(existing_company,''))          AS company,
+                        phone, mailingstreet AS street, mailingcity AS city,
+                        mailingstate AS state, mailingcountry AS country,
+                        mailingpostalcode AS postal_code
+                    FROM contacts_master
+                    WHERE LOWER(firstname) = %s
+                      AND LOWER(lastname)  = %s
+                      AND LOWER(REGEXP_REPLACE(
+                              COALESCE(NULLIF(new_company,''), NULLIF(existing_company,'')),
+                              '\\s+(llc|inc|ltd|corp|limited|plc|llp|gmbh|sa|ag|nv|bv|co)\\.?$',
+                              '', 'i'
+                          )) = %s
+                      AND UPPER(TRIM(zb_valid_email)) = 'YES'
+                      AND COALESCE(NULLIF(validated_email,''), NULLIF(email,'')) IS NOT NULL
                     ORDER BY
-                        CASE email_validation_status
+                        CASE validated_email_status
                             WHEN 'valid'     THEN 0
                             WHEN 'catch-all' THEN 1
-                            ELSE 2 END,
-                        last_updated_at DESC
+                            ELSE 2 END
                     LIMIT 1
                     """,
                     (fn, ln, cn),
@@ -387,39 +426,51 @@ class PipelineDB:
                     result[key] = dict(row)
         return result
 
-    # ── master_leads write (kept for SQLite-era callers) ──────────────────
+    # ── contacts_master write (no-op — read-only Salesforce export) ──────────
 
     def upsert_master_leads(self, records: List[Dict]) -> int:
-        """Delegates to oracle_intent_engine's upsert — single source of truth."""
-        import sys
-        from pathlib import Path
-        oracle_dir = Path(__file__).parent.parent.parent / "oracle_intent_engine"
-        if str(oracle_dir) not in sys.path:
-            sys.path.insert(0, str(oracle_dir))
-        from src.database import upsert_master_leads as _upsert
-        return _upsert(records)
+        """contacts_master is a read-only Salesforce export — writes are no-ops."""
+        return 0
 
     def get_master_leads_by_ids(self, lead_ids: List[str]) -> Dict[str, Dict]:
+        """Look up contacts by Salesforce ID. Only returns ZB-validated contacts."""
         if not lead_ids:
             return {}
         with self._conn() as cur:
             cur.execute(
                 """
-                SELECT * FROM master_leads
-                WHERE lead_id = ANY(%s) AND email != ''
+                SELECT
+                    id::TEXT                                                               AS lead_id,
+                    firstname                                                              AS first_name,
+                    lastname                                                               AS last_name,
+                    title                                                                  AS job_title,
+                    COALESCE(NULLIF(validated_email,''), NULLIF(email,''))                 AS email,
+                    validated_email_status                                                 AS email_validation_status,
+                    COALESCE(NULLIF(linkedin_url__c,''), NULLIF(linkedin_url_enriched,'')) AS linkedin_url,
+                    domain,
+                    COALESCE(NULLIF(new_company,''), NULLIF(existing_company,''))          AS company,
+                    phone, mailingstreet AS street, mailingcity AS city,
+                    mailingstate AS state, mailingcountry AS country,
+                    mailingpostalcode AS postal_code
+                FROM contacts_master
+                WHERE id::TEXT = ANY(%s)
+                  AND UPPER(TRIM(zb_valid_email)) = 'YES'
                 """,
                 (lead_ids,),
             )
             return {r["lead_id"]: dict(r) for r in cur.fetchall()}
 
     def master_stats(self) -> Dict:
+        """Row counts from contacts_master."""
         with self._conn() as cur:
             cur.execute("""
                 SELECT
-                    COUNT(*)                                                        AS total,
-                    COUNT(CASE WHEN email != ''              THEN 1 END)            AS with_email,
-                    COUNT(CASE WHEN email_validation_status = 'valid' THEN 1 END)   AS valid,
-                    COUNT(CASE WHEN ready_for_outreach = 'yes'        THEN 1 END)   AS ready
-                FROM master_leads
+                    COUNT(*)                                                              AS total,
+                    COUNT(COALESCE(NULLIF(validated_email,''), NULLIF(email,'')))         AS with_email,
+                    COUNT(CASE WHEN UPPER(TRIM(zb_valid_email)) = 'YES' THEN 1 END)      AS valid,
+                    COUNT(CASE WHEN UPPER(TRIM(zb_valid_email)) = 'YES'
+                               AND (hasoptedoutemail IS NULL OR hasoptedoutemail = FALSE)
+                               THEN 1 END)                                                AS ready
+                FROM contacts_master
             """)
             return dict(cur.fetchone())

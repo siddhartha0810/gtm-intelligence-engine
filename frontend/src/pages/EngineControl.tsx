@@ -350,7 +350,6 @@ function ScanResultsModal({ onClose, onDeleted }: { onClose: () => void; onDelet
       toast.error('Select a specific scan run first (not "All time")')
       return
     }
-    const count = companies.length
     setConfirmDelete(true)
     return
   }
@@ -917,13 +916,12 @@ export default function EngineControl() {
                 )}
                 {isEnrichment && (
                   enrichState === 'idle' ? (
-                    <button onClick={fetchPreflight} disabled={preflightLoading || !apolloOk}
+                    <button onClick={fetchPreflight} disabled={preflightLoading}
                       style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', gap:8, padding:'9px 0', borderRadius:8, border:'none',
-                        background: apolloOk ? engine.color : 'rgba(203,213,225,0.5)',
-                        color: apolloOk ? 'white' : '#94a3b8',
-                        fontSize:13, fontWeight:500, cursor: apolloOk ? 'pointer' : 'not-allowed',
-                        opacity: preflightLoading ? 0.7 : 1 }}
-                      title={!apolloOk ? 'Add APOLLO_API_KEY to oracle_intent_engine/.env' : ''}>
+                        background: engine.color,
+                        color: 'white',
+                        fontSize:13, fontWeight:500, cursor: 'pointer',
+                        opacity: preflightLoading ? 0.7 : 1 }}>
                       {preflightLoading
                         ? <><span style={{ animation:'spin 1s linear infinite', display:'inline-block' }}>⟳</span> Loading...</>
                         : <><Zap size={13} /> {pending > 0 ? `Enrich ${pending}` : 'Run Enrichment'}</>}

@@ -537,7 +537,7 @@ def main() -> None:
         print(f"\n  WARNING: Could not connect to Inoapps-Data-DB master store: {exc}")
         pg_master = None
 
-    print(f"\n  Database : {stats['domains']} domains  |  {stats['patterns']} patterns  |  {stats['cached_leads']} cached leads  |  {stats.get('master_leads', 0)} master leads", end="")
+    print(f"\n  Database : {stats['domains']} domains  |  {stats['patterns']} patterns  |  {stats['cached_leads']} cached leads  |  {stats.get('master_leads', 0)} contacts (ZB-validated)", end="")
     if imported:
         print(f"  (+{imported} imported from CSV)", end="")
     print()

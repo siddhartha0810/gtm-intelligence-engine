@@ -770,8 +770,8 @@ def enrich(df: pd.DataFrame, checkpoint_fn: Optional[Callable] = None) -> pd.Dat
 
     # ── Enrichment cache + master store check ─────────────────────────────
     # Two-layer lookup before any API calls:
-    #   Layer 1 — enrichment_cache (30-day TTL, fast SQLite lookup)
-    #   Layer 2 — master_leads     (permanent, no expiry — any prior run)
+    #   Layer 1 — enrichment_cache (30-day TTL, fast lookup)
+    #   Layer 2 — contacts_master  (read-only Salesforce export, ZB-validated only)
     # A hit in either layer skips Apollo/Apify entirely for that lead.
     from .database import get_db
     db = get_db()

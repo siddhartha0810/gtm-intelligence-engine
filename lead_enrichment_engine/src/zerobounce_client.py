@@ -280,9 +280,9 @@ def validate_emails(df: pd.DataFrame, source_filter: list | None = None) -> pd.D
     mask = mask & ~already_validated
 
     # ── DB pre-check: restore validation status for known emails ──────────────
-    # Before spending any ZeroBounce credits, check master_leads for emails
-    # that were already validated in a previous run.  Restores the known
-    # status directly onto the DataFrame so those rows never reach the API.
+    # Before spending any ZeroBounce credits, check contacts_master for emails
+    # already validated (ZB_Valid_Email = Yes).  Restores the known status
+    # directly onto the DataFrame so those rows never reach the API.
     candidate_emails = (
         df.loc[mask, "email"].astype(str).str.lower().str.strip()
         .drop_duplicates().tolist()
