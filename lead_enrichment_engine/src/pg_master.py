@@ -1,17 +1,38 @@
 """
 pg_master.py
 ============
-PostgreSQL-backed permanent master store for the Lead Enrichment Engine.
+Read-only interface to contacts_master (Salesforce CRM export).
 
-Stores every enriched lead from every pipeline run, accumulating data
-across runs.  Never expires.  Referenced by:
-  - domain_resolver.py  — skip re-resolving domains for known companies
-  - orchestrator.py     — skip Apollo/Apify for leads already enriched
-  - pipeline.py         — persist results and surface cumulative stats
+contacts_master is a pre-existing table in Inoapps-Data-DB — it is
+populated by Salesforce exports and is never written to by this pipeline.
+
+All write operations (upsert_master_leads) are no-ops.
+All read operations query contacts_master with correct Salesforce column names.
+
+Column mapping (Salesforce → PostgreSQL lowercase):
+  FirstName               → firstname
+  LastName                → lastname
+  Title                   → title
+  Email                   → email
+  Validated_Email         → validated_email
+  ZB_Valid_Email          → zb_valid_email  (Yes/No flag — filter = 'Yes')
+  Validated_Email_Status  → validated_email_status
+  LinkedIn_URL__c         → linkedin_url__c
+  LinkedIn_URL_Enriched   → linkedin_url_enriched
+  New_Company             → new_company
+  Existing_Company        → existing_company
+  Domain                  → domain
+  Phone                   → phone
+  MailingStreet           → mailingstreet
+  MailingCity             → mailingcity
+  MailingState            → mailingstate
+  MailingCountry          → mailingcountry
+  MailingPostalCode       → mailingpostalcode
+  HasOptedOutOfEmail      → hasoptedoutemail
 """
 
 import contextlib
-from datetime import datetime, timezone
+import re
 from typing import Dict, List, Optional
 
 try:
@@ -21,58 +42,13 @@ try:
 except ImportError:
     _HAS_PSYCOPG2 = False
 
-
-# ── Table definition ───────────────────────────────────────────────────────
-
-_CREATE_STATEMENTS = [
-    """
-    CREATE TABLE IF NOT EXISTS master_leads (
-        lead_id                      TEXT PRIMARY KEY,
-        first_name                   TEXT DEFAULT '',
-        last_name                    TEXT DEFAULT '',
-        company                      TEXT DEFAULT '',
-        company_normalized           TEXT DEFAULT '',
-        domain                       TEXT DEFAULT '',
-        email                        TEXT DEFAULT '',
-        email_source                 TEXT DEFAULT '',
-        email_validation_status      TEXT DEFAULT '',
-        email_validation_sub_status  TEXT DEFAULT '',
-        email_prediction_pattern     TEXT DEFAULT '',
-        linkedin_url                 TEXT DEFAULT '',
-        linkedin_source              TEXT DEFAULT '',
-        job_title                    TEXT DEFAULT '',
-        ready_for_outreach           TEXT DEFAULT '',
-        failure_reason               TEXT DEFAULT '',
-        run_count                    INTEGER DEFAULT 1,
-        first_seen_at                TEXT DEFAULT CURRENT_TIMESTAMP,
-        last_updated_at              TEXT DEFAULT CURRENT_TIMESTAMP
-    )
-    """,
-    "CREATE INDEX IF NOT EXISTS idx_ml_company ON master_leads (company_normalized)",
-    "CREATE INDEX IF NOT EXISTS idx_ml_domain  ON master_leads (domain)",
-    "CREATE INDEX IF NOT EXISTS idx_ml_email   ON master_leads (email)",
-]
-
-_FIELDS = [
-    "lead_id", "first_name", "last_name", "company", "company_normalized",
-    "domain", "email", "email_source", "email_validation_status",
-    "email_validation_sub_status", "email_prediction_pattern",
-    "linkedin_url", "linkedin_source", "job_title",
-    "ready_for_outreach", "failure_reason",
-]
-
-
-def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
-
-
-# ── Module-level singleton ─────────────────────────────────────────────────
-
 import os as _os
+
+
+# ── DSN builder ───────────────────────────────────────────────────────────────
 
 def _build_oracle_dsn() -> str:
     """Build DSN from environment variables — never hardcode credentials."""
-    # ORACLE_PG_DSN takes priority (set by unified_app.py at startup)
     dsn = _os.environ.get("ORACLE_PG_DSN", "").strip()
     if dsn:
         return dsn
@@ -83,6 +59,8 @@ def _build_oracle_dsn() -> str:
     password = _os.environ.get("DB_PASSWORD", "")
     return f"host={host} port={port} dbname={dbname} user={user} password={password}"
 
+
+# ── Module-level singleton ────────────────────────────────────────────────────
 
 _pg_master: Optional["PGMasterStore"] = None
 
@@ -96,17 +74,51 @@ def init_pg_master(connection_string: str = "") -> "PGMasterStore":
 
 
 def get_pg_master() -> Optional["PGMasterStore"]:
-    # Auto-initialise on first call so callers don't need explicit init
     global _pg_master
     if _pg_master is None:
         _pg_master = PGMasterStore(_build_oracle_dsn())
     return _pg_master
 
 
-# ── Store class ────────────────────────────────────────────────────────────
+# ── Helpers ──────────────────────────────────────────────────────────────────
+
+def _norm_company(name: str) -> str:
+    """Lowercase + strip common legal suffixes for consistent company matching."""
+    n = (name or "").lower().strip()
+    n = re.sub(
+        r"\b(incorporated|inc|llc|ltd|limited|corp|corporation|co|company|plc|private|pvt|gmbh|sa|ag|nv|bv|lp|llp)\b",
+        "", n,
+    )
+    return re.sub(r"\s+", " ", n).strip()
+
+
+# ── SELECT template (all callers use same column shape) ──────────────────────
+
+_SELECT_COLS = """
+    id::TEXT                                                              AS lead_id,
+    firstname                                                             AS first_name,
+    lastname                                                              AS last_name,
+    title                                                                 AS job_title,
+    COALESCE(NULLIF(validated_email,''), NULLIF(email,''))                AS email,
+    validated_email_status                                                AS email_validation_status,
+    COALESCE(NULLIF(linkedin_url__c,''), NULLIF(linkedin_url_enriched,'')) AS linkedin_url,
+    domain,
+    COALESCE(NULLIF(new_company,''), NULLIF(existing_company,''))         AS company,
+    phone,
+    mailingstreet                                                         AS street,
+    mailingcity                                                           AS city,
+    mailingstate                                                          AS state,
+    mailingcountry                                                        AS country,
+    mailingpostalcode                                                     AS postal_code
+"""
+
+_ZB_FILTER = "UPPER(TRIM(zb_valid_email)) = 'YES'"
+
+
+# ── Store class ───────────────────────────────────────────────────────────────
 
 class PGMasterStore:
-    """PostgreSQL-backed permanent master store."""
+    """Read-only interface to contacts_master (Salesforce CRM export)."""
 
     def __init__(self, connection_string: str):
         if not _HAS_PSYCOPG2:
@@ -115,7 +127,7 @@ class PGMasterStore:
                 "Install it with:  pip install psycopg2-binary"
             )
         self._dsn = connection_string
-        self._init_table()
+        # No table creation — contacts_master is a pre-existing Salesforce export
 
     @contextlib.contextmanager
     def _conn(self):
@@ -129,135 +141,107 @@ class PGMasterStore:
         finally:
             conn.close()
 
-    def _init_table(self) -> None:
-        with self._conn() as conn:
-            with conn.cursor() as cur:
-                for stmt in _CREATE_STATEMENTS:
-                    cur.execute(stmt)
+    # ── Writes (no-op — contacts_master is read-only) ────────────────────────
 
     def upsert_master_leads(self, records: List[Dict]) -> int:
-        if not records:
-            return 0
-        now = _now()
-        rows = []
-        for r in records:
-            row = {f: str(r.get(f) or "").strip() for f in _FIELDS}
-            # Never persist invalid emails — strip them so the upsert's
-            # _keep_better logic preserves any previously-good value instead.
-            if row.get("email_validation_status") == "invalid":
-                row["email"]                       = ""
-                row["email_source"]                = ""
-                row["email_validation_status"]     = ""
-                row["email_validation_sub_status"] = ""
-            row["first_seen_at"]   = now
-            row["last_updated_at"] = now
-            rows.append(row)
+        """contacts_master is a read-only Salesforce export — writes are no-ops."""
+        return 0
 
-        update_cols = [c for c in _FIELDS if c != "lead_id"]
-
-        def _keep_better(col):
-            return (
-                f"{col} = CASE WHEN EXCLUDED.{col} != '' "
-                f"THEN EXCLUDED.{col} ELSE master_leads.{col} END"
-            )
-
-        set_clause  = ",\n                    ".join(_keep_better(c) for c in update_cols)
-        set_clause += ",\n                    run_count       = master_leads.run_count + 1"
-        set_clause += ",\n                    last_updated_at = EXCLUDED.last_updated_at"
-
-        all_fields   = _FIELDS + ["first_seen_at", "last_updated_at"]
-        col_list     = ", ".join(all_fields)
-        placeholders = ", ".join(f"%({f})s" for f in all_fields)
-
-        sql = f"""
-            INSERT INTO master_leads ({col_list})
-            VALUES ({placeholders})
-            ON CONFLICT (lead_id) DO UPDATE SET
-                {set_clause}
-        """
-
-        with self._conn() as conn:
-            with conn.cursor() as cur:
-                psycopg2.extras.execute_batch(cur, sql, rows, page_size=200)
-        return len(rows)
+    # ── Reads ─────────────────────────────────────────────────────────────────
 
     def get_master_leads_by_ids(self, lead_ids: List[str]) -> Dict[str, Dict]:
+        """Look up contacts by Salesforce ID. Only returns ZB-validated contacts."""
         if not lead_ids:
             return {}
         with self._conn() as conn:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
                 cur.execute(
-                    "SELECT * FROM master_leads WHERE lead_id = ANY(%s) AND email != ''",
+                    f"""
+                    SELECT {_SELECT_COLS}
+                    FROM contacts_master
+                    WHERE id::TEXT = ANY(%s)
+                      AND {_ZB_FILTER}
+                    """,
                     (lead_ids,),
                 )
                 rows = cur.fetchall()
         return {r["lead_id"]: dict(r) for r in rows}
 
     def get_master_domains_for_companies(self, company_norms: List[str]) -> Dict[str, str]:
+        """
+        Return the best known email domain for each normalised company name.
+        Only uses contacts with a ZB-validated email.
+        """
         if not company_norms:
             return {}
         with self._conn() as conn:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
                 cur.execute(
-                    """
-                    SELECT company_normalized, domain, COUNT(*) AS cnt
-                    FROM master_leads
-                    WHERE company_normalized = ANY(%s) AND domain != ''
+                    f"""
+                    SELECT
+                        LOWER(REGEXP_REPLACE(
+                            COALESCE(new_company, existing_company, ''),
+                            '\\s+(llc|inc|ltd|corp|limited|plc|llp|gmbh|sa|ag|nv|bv|co)\\.?$',
+                            '', 'i'
+                        ))                                           AS company_normalized,
+                        domain,
+                        COUNT(*)                                     AS cnt,
+                        SUM(CASE WHEN validated_email_status = 'valid' THEN 1 ELSE 0 END) AS valid_cnt
+                    FROM contacts_master
+                    WHERE LOWER(REGEXP_REPLACE(
+                              COALESCE(new_company, existing_company, ''),
+                              '\\s+(llc|inc|ltd|corp|limited|plc|llp|gmbh|sa|ag|nv|bv|co)\\.?$',
+                              '', 'i'
+                          )) = ANY(%s)
+                      AND domain IS NOT NULL AND domain != ''
+                      AND {_ZB_FILTER}
                     GROUP BY company_normalized, domain
-                    ORDER BY company_normalized,
-                             SUM(CASE WHEN email_validation_status = 'valid' THEN 1 ELSE 0 END) DESC,
-                             COUNT(*) DESC
+                    ORDER BY company_normalized, valid_cnt DESC, cnt DESC
                     """,
                     (company_norms,),
                 )
                 rows = cur.fetchall()
         result: Dict[str, str] = {}
         for r in rows:
-            if r["company_normalized"] not in result:
-                result[r["company_normalized"]] = r["domain"]
+            key = r["company_normalized"]
+            if key not in result:
+                result[key] = r["domain"]
         return result
 
     def get_contacts_by_company(self, company_names: List[str]) -> Dict[str, List[Dict]]:
         """
-        Return validated contacts keyed by company_normalized for the given company names.
-
-        Accepts raw company name strings, normalises them internally, then queries
-        master_leads for rows that have a non-empty, valid email.  Only rows with
-        email_validation_status = 'valid' (or any non-empty email when no status
-        is set) are returned so callers get actionable contacts only.
-
-        Returns: { company_normalized -> [contact_dict, ...] }
+        Return ZB-validated contacts keyed by company_normalized.
+        Only returns contacts where zb_valid_email = 'Yes'.
         """
-        import re
-
-        def _norm(v: str) -> str:
-            v = v.lower()
-            v = re.sub(
-                r"\b(incorporated|inc|llc|ltd|limited|corp|corporation|co|company|plc|private|pvt)\b",
-                "", v,
-            )
-            v = re.sub(r"[^a-z0-9]+", " ", v)
-            return re.sub(r"\s+", " ", v).strip()
-
-        norms = [_norm(n) for n in company_names if n]
+        norms = [_norm_company(n) for n in company_names if n]
         if not norms:
             return {}
-
         with self._conn() as conn:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
                 cur.execute(
-                    """
-                    SELECT *
-                    FROM   master_leads
-                    WHERE  company_normalized = ANY(%s)
-                      AND  email != ''
-                      AND  (email_validation_status = 'valid' OR email_validation_status = '')
-                    ORDER  BY company_normalized, ready_for_outreach DESC
+                    f"""
+                    SELECT {_SELECT_COLS},
+                        LOWER(REGEXP_REPLACE(
+                            COALESCE(new_company, existing_company, ''),
+                            '\\s+(llc|inc|ltd|corp|limited|plc|llp|gmbh|sa|ag|nv|bv|co)\\.?$',
+                            '', 'i'
+                        )) AS company_normalized
+                    FROM contacts_master
+                    WHERE LOWER(REGEXP_REPLACE(
+                              COALESCE(new_company, existing_company, ''),
+                              '\\s+(llc|inc|ltd|corp|limited|plc|llp|gmbh|sa|ag|nv|bv|co)\\.?$',
+                              '', 'i'
+                          )) = ANY(%s)
+                      AND {_ZB_FILTER}
+                    ORDER BY
+                        CASE validated_email_status
+                            WHEN 'valid'     THEN 0
+                            WHEN 'catch-all' THEN 1
+                            ELSE 2 END
                     """,
                     (norms,),
                 )
                 rows = cur.fetchall()
-
         result: Dict[str, List[Dict]] = {}
         for r in rows:
             key = r["company_normalized"]
@@ -266,34 +250,35 @@ class PGMasterStore:
 
     def get_validation_by_email(self, emails: List[str]) -> Dict[str, Dict]:
         """
-        Return known validation status for the given email addresses from master_leads.
-        Used by ZeroBounce pre-check to skip re-validating emails already in the DB.
-        Only returns rows with a definitive, non-empty validation status.
+        Return known validation status for given emails from contacts_master.
+        Only returns contacts where zb_valid_email = 'Yes'.
         """
         if not emails:
             return {}
         clean = [e.lower().strip() for e in emails if e]
         if not clean:
             return {}
-        _DEFINITIVE = ["valid", "invalid", "catch-all", "spamtrap", "abuse", "do_not_mail"]
         with self._conn() as conn:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
                 cur.execute(
-                    """SELECT email, email_validation_status, email_validation_sub_status
-                       FROM master_leads
-                       WHERE LOWER(email) = ANY(%s)
-                         AND email_validation_status = ANY(%s)""",
-                    (clean, _DEFINITIVE),
+                    """
+                    SELECT
+                        COALESCE(NULLIF(validated_email,''), NULLIF(email,''))  AS email,
+                        validated_email_status                                   AS email_validation_status
+                    FROM contacts_master
+                    WHERE LOWER(COALESCE(NULLIF(validated_email,''), NULLIF(email,''))) = ANY(%s)
+                      AND UPPER(TRIM(zb_valid_email)) = 'YES'
+                    """,
+                    (clean,),
                 )
                 rows = cur.fetchall()
-        return {r["email"].lower(): dict(r) for r in rows}
+        return {r["email"].lower(): dict(r) for r in rows if r.get("email")}
 
     def find_contacts_by_name_company(self, leads: List[Dict]) -> Dict[str, Dict]:
         """
-        Look up leads in master_leads by (first_name, last_name, company_normalized).
-        Fallback for leads that don't match by lead_id (e.g. sourced from a different pipeline).
-        Only returns records that have a non-empty email.
-        Returns dict keyed by "firstname|lastname|company_normalized".
+        Look up contacts_master by (first_name, last_name, company_normalized).
+        Only returns records where zb_valid_email = 'Yes'.
+        Returns dict keyed by 'firstname|lastname|company_normalized'.
         """
         if not leads:
             return {}
@@ -302,7 +287,7 @@ class PGMasterStore:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
                 for lead in leads:
                     fn = str(lead.get("first_name") or "").lower().strip()
-                    ln = str(lead.get("last_name") or "").lower().strip()
+                    ln = str(lead.get("last_name")  or "").lower().strip()
                     cn = str(lead.get("company_normalized") or "").lower().strip()
                     if not fn or not ln or not cn:
                         continue
@@ -310,16 +295,24 @@ class PGMasterStore:
                     if key in result:
                         continue
                     cur.execute(
-                        """SELECT * FROM master_leads
-                           WHERE LOWER(first_name) = %s AND LOWER(last_name) = %s
-                             AND company_normalized = %s AND email != ''
-                           ORDER BY
-                               CASE email_validation_status
-                                   WHEN 'valid'     THEN 0
-                                   WHEN 'catch-all' THEN 1
-                                   ELSE 2 END,
-                               last_updated_at DESC
-                           LIMIT 1""",
+                        f"""
+                        SELECT {_SELECT_COLS}
+                        FROM contacts_master
+                        WHERE LOWER(firstname) = %s
+                          AND LOWER(lastname)  = %s
+                          AND LOWER(REGEXP_REPLACE(
+                                  COALESCE(new_company, existing_company, ''),
+                                  '\\s+(llc|inc|ltd|corp|limited|plc|llp|gmbh|sa|ag|nv|bv|co)\\.?$',
+                                  '', 'i'
+                              )) = %s
+                          AND {_ZB_FILTER}
+                        ORDER BY
+                            CASE validated_email_status
+                                WHEN 'valid'     THEN 0
+                                WHEN 'catch-all' THEN 1
+                                ELSE 2 END
+                        LIMIT 1
+                        """,
                         (fn, ln, cn),
                     )
                     row = cur.fetchone()
@@ -328,18 +321,29 @@ class PGMasterStore:
         return result
 
     def master_stats(self) -> Dict:
+        """Row counts from contacts_master."""
         with self._conn() as conn:
             with conn.cursor() as cur:
-                cur.execute("SELECT COUNT(*) FROM master_leads")
+                cur.execute("SELECT COUNT(*) FROM contacts_master")
                 total = cur.fetchone()[0]
-                cur.execute("SELECT COUNT(*) FROM master_leads WHERE email != ''")
-                with_email = cur.fetchone()[0]
+
                 cur.execute(
-                    "SELECT COUNT(*) FROM master_leads WHERE email_validation_status = 'valid'"
+                    """SELECT COUNT(*) FROM contacts_master
+                       WHERE COALESCE(NULLIF(validated_email,''), NULLIF(email,'')) IS NOT NULL"""
+                )
+                with_email = cur.fetchone()[0]
+
+                cur.execute(
+                    """SELECT COUNT(*) FROM contacts_master
+                       WHERE UPPER(TRIM(zb_valid_email)) = 'YES'"""
                 )
                 valid = cur.fetchone()[0]
+
                 cur.execute(
-                    "SELECT COUNT(*) FROM master_leads WHERE ready_for_outreach = 'yes'"
+                    """SELECT COUNT(*) FROM contacts_master
+                       WHERE UPPER(TRIM(zb_valid_email)) = 'YES'
+                         AND (hasoptedoutemail IS NULL OR hasoptedoutemail = FALSE)"""
                 )
                 ready = cur.fetchone()[0]
+
         return {"total": total, "with_email": with_email, "valid": valid, "ready": ready}
