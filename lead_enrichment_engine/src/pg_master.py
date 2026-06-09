@@ -78,7 +78,7 @@ def _build_oracle_dsn() -> str:
         return dsn
     host     = _os.environ.get("DB_HOST", "localhost")
     port     = _os.environ.get("DB_PORT", "5432")
-    dbname   = _os.environ.get("DB_NAME", "oracle_intent")
+    dbname   = _os.environ.get("DB_NAME", "Inoapps-Data-DB")
     user     = _os.environ.get("DB_USER", "postgres")
     password = _os.environ.get("DB_PASSWORD", "")
     return f"host={host} port={port} dbname={dbname} user={user} password={password}"

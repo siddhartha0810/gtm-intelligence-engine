@@ -2,16 +2,14 @@
 database.py
 ===========
 PostgreSQL-backed persistent knowledge store for the lead enrichment pipeline.
-Replaced the previous SQLite implementation — all data now lives in the
-oracle_intent PostgreSQL database on 10.0.0.149.
+All data lives in the Inoapps-Data-DB PostgreSQL database.
 
 Tables (created by oracle_intent_engine/src/database.py DDL):
   domain_knowledge  — company -> email domain map, persists across runs
   email_patterns    — domain -> naming-pattern frequency table
   enrichment_cache  — Apollo/ZeroBounce short-term cache (TTL 30d / 7d)
 
-The master_leads table lives in the same DB and is managed via
-oracle_intent_engine/src/database.py + pg_master.py.
+contacts_master is a read-only Salesforce CRM export (no writes).
 
 API is identical to the old SQLite version — callers unchanged.
 """
@@ -32,7 +30,7 @@ ZB_TTL_DAYS     = 7
 # ── Connection string — read from environment (set by unified_app.py) ────────
 _ORACLE_INTENT_DSN = os.environ.get(
     "ORACLE_PG_DSN",
-    "host=10.0.0.149 port=5432 dbname=oracle_intent user=postgres password=",
+    "host=10.0.0.149 port=5432 dbname=Inoapps-Data-DB user=postgres password=",
 )
 
 # ── Module-level singleton ───────────────────────────────────────────────────
@@ -42,7 +40,7 @@ _lock: threading.Lock          = threading.Lock()
 
 def init_db(path: Optional[str] = None) -> "PipelineDB":
     """
-    Connect to the oracle_intent PostgreSQL database.
+    Connect to the Inoapps-Data-DB PostgreSQL database.
     The `path` argument is accepted for backwards-compatibility but ignored.
     Call once from pipeline.py before stages begin.
     """

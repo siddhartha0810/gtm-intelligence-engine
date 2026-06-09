@@ -21,7 +21,7 @@ if str(ORACLE_DIR) not in sys.path:
 # Point to a test DB or the real DB — tests use read-only queries where possible
 os.environ.setdefault("DB_HOST",     "localhost")
 os.environ.setdefault("DB_PORT",     "5432")
-os.environ.setdefault("DB_NAME",     "oracle_intent")
+os.environ.setdefault("DB_NAME",     "Inoapps-Data-DB")
 os.environ.setdefault("DB_USER",     "postgres")
 os.environ.setdefault("DB_PASSWORD", os.getenv("DB_PASSWORD", ""))
 os.environ.setdefault("JWT_SECRET",  "test-secret-key-not-for-production-use-only")

@@ -34,7 +34,7 @@ if str(ORACLE_DIR) not in sys.path:
 from dotenv import load_dotenv  # noqa: E402
 load_dotenv(ORACLE_DIR / ".env")
 
-# Set ORACLE_PG_DSN so database.py connects to oracle_intent DB
+# Set ORACLE_PG_DSN so database.py connects to Inoapps-Data-DB
 _dotenv_path = ORACLE_DIR / ".env"
 _oracle_env: dict = {}
 if _dotenv_path.exists():
@@ -47,7 +47,7 @@ if _dotenv_path.exists():
 os.environ["ORACLE_PG_DSN"] = (
     f"host={_oracle_env.get('DB_HOST', '10.0.0.149')} "
     f"port={_oracle_env.get('DB_PORT', '5432')} "
-    f"dbname={_oracle_env.get('DB_NAME', 'oracle_intent')} "
+    f"dbname={_oracle_env.get('DB_NAME', 'Inoapps-Data-DB')} "
     f"user={_oracle_env.get('DB_USER', 'postgres')} "
     f"password={_oracle_env.get('DB_PASSWORD', '')}"
 )

@@ -89,7 +89,7 @@ if _dotenv_path.exists():
 _oracle_pg_dsn = (
     f"host={_oracle_env.get('DB_HOST','10.0.0.149')} "
     f"port={_oracle_env.get('DB_PORT','5432')} "
-    f"dbname={_oracle_env.get('DB_NAME','oracle_intent')} "
+    f"dbname={_oracle_env.get('DB_NAME','Inoapps-Data-DB')} "
     f"user={_oracle_env.get('DB_USER','postgres')} "
     f"password={_oracle_env.get('DB_PASSWORD','')}"
 )

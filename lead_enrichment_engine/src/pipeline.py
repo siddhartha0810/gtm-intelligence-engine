@@ -526,7 +526,7 @@ def main() -> None:
     imported = db.import_csv(DOMAIN_LOOKUP)
     stats    = db.stats()
 
-    # Initialize PostgreSQL master store (always oracle_intent)
+    # Initialize PostgreSQL master store (always Inoapps-Data-DB)
     pg_master = None
     try:
         from .pg_master import init_pg_master
@@ -534,7 +534,7 @@ def main() -> None:
         pg_ms = pg_master.master_stats()
         print(f"\n  Master store (PG) : {pg_ms['total']:,} total  |  {pg_ms['with_email']:,} with email  |  {pg_ms['valid']:,} validated  |  {pg_ms['ready']:,} ready")
     except Exception as exc:
-        print(f"\n  WARNING: Could not connect to oracle_intent master store: {exc}")
+        print(f"\n  WARNING: Could not connect to Inoapps-Data-DB master store: {exc}")
         pg_master = None
 
     print(f"\n  Database : {stats['domains']} domains  |  {stats['patterns']} patterns  |  {stats['cached_leads']} cached leads  |  {stats.get('master_leads', 0)} master leads", end="")
