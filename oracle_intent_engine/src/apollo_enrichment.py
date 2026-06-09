@@ -631,15 +631,6 @@ def enrich_companies(
             for c in master_rows:
                 first = c.get("first_name") or ""
                 last  = c.get("last_name")  or ""
-                # Build location string from Mailing address fields
-                location_parts = [
-                    c.get("street")      or "",
-                    c.get("city")        or "",
-                    c.get("state")       or "",
-                    c.get("postal_code") or "",
-                    c.get("country")     or "",
-                ]
-                location = ", ".join(p for p in location_parts if p)
                 to_save.append({
                     "full_name":               f"{first} {last}".strip(),
                     "first_name":              first,

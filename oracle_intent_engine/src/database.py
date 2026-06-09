@@ -1137,7 +1137,8 @@ def upsert_master_leads(records: list) -> int:
 def get_master_leads_by_email(emails: list) -> dict:
     """
     Look up contacts_master by email address (case-insensitive).
-    Checks zb_valid_email → validated_email → email in priority order.
+    Only returns contacts where zb_valid_email = 'Yes'.
+    Email resolved from validated_email → email.
     Returns {email_lower: record_dict}. Returns {} if table absent.
     """
     if not emails:
@@ -1150,19 +1151,24 @@ def get_master_leads_by_email(emails: list) -> dict:
             cur.execute(
                 """
                 SELECT
-                    id                                                           AS lead_id,
-                    firstname                                                    AS first_name,
-                    lastname                                                     AS last_name,
-                    title                                                        AS job_title,
-                    COALESCE(NULLIF(zb_valid_email,''), NULLIF(validated_email,''), NULLIF(email,'')) AS email,
-                    validated_email_status                                       AS email_validation_status,
-                    COALESCE(NULLIF(linkedin_url_enriched,''), NULLIF(linkedin_url__c,'')) AS linkedin_url,
+                    id                                                              AS lead_id,
+                    firstname                                                       AS first_name,
+                    lastname                                                        AS last_name,
+                    title                                                           AS job_title,
+                    COALESCE(NULLIF(validated_email,''), NULLIF(email,''))          AS email,
+                    validated_email_status                                          AS email_validation_status,
+                    COALESCE(NULLIF(linkedin_url__c,''), NULLIF(linkedin_url_enriched,'')) AS linkedin_url,
                     domain,
-                    COALESCE(NULLIF(new_company,''), NULLIF(existing_company,'')) AS company,
-                    phone
+                    COALESCE(NULLIF(new_company,''), NULLIF(existing_company,''))   AS company,
+                    phone,
+                    mailingstreet                                                   AS street,
+                    mailingcity                                                     AS city,
+                    mailingstate                                                    AS state,
+                    mailingcountry                                                  AS country,
+                    mailingpostalcode                                               AS postal_code
                 FROM contacts_master
-                WHERE LOWER(COALESCE(zb_valid_email, validated_email, email, '')) = ANY(%s)
-                  AND validated_email_status IN ('valid','invalid','catch-all','spamtrap','abuse','do_not_mail')
+                WHERE LOWER(COALESCE(NULLIF(validated_email,''), NULLIF(email,''))) = ANY(%s)
+                  AND UPPER(TRIM(zb_valid_email)) = 'YES'
                 """,
                 (clean,),
             )
