@@ -111,9 +111,6 @@ class OracleWebsiteSignal(BaseSignal):
         # Tier 1a: Direct oracle.com scraping (works intermittently, often 403)
         results.extend(self._scrape_oracle_direct())
 
-        # Tier 1b: ScrapeGraphAI — LLM + headless browser (bypasses 403, best quality)
-        results.extend(self._scrape_oracle_scrapegraph())
-
         # Tier 2: Bing News RSS for customer stories (real URLs, no Google redirects)
         results.extend(self._fetch_bing_rss_customers())
 
@@ -255,77 +252,6 @@ class OracleWebsiteSignal(BaseSignal):
                         ))
             except Exception:
                 pass
-
-        return results
-
-    # ------------------------------------------------------------------ #
-    #  Tier 1b — ScrapeGraphAI (LLM + headless browser → oracle.com)
-    # ------------------------------------------------------------------ #
-    def _scrape_oracle_scrapegraph(self) -> list[dict]:
-        from src import scrapegraph_client as sgai
-        if not sgai.is_available():
-            return []
-
-        prompt = (
-            "Extract all Oracle customer success stories visible on this page. "
-            "For each story return: "
-            "company_name (the customer company, not Oracle itself), "
-            "oracle_product (e.g. Oracle Cloud ERP, Oracle HCM, Oracle SCM, NetSuite, Oracle OCI), "
-            "description (what they achieved in one sentence), "
-            "url (link to the full case study if present). "
-            "Return as JSON: {\"stories\": [...]}"
-        )
-
-        results: list[dict] = []
-        # Limit to top product pages to keep runtime reasonable
-        target_paths = ORACLE_CUSTOMER_PATHS[:5]
-
-        for path in target_paths:
-            try:
-                data = sgai.scrape_page(path, prompt)
-                if not data:
-                    continue
-
-                stories = (
-                    data if isinstance(data, list)
-                    else data.get("stories")
-                    or data.get("items")
-                    or []
-                )
-
-                for story in stories:
-                    if not isinstance(story, dict):
-                        continue
-                    company = (story.get("company_name") or "").strip()
-                    product = story.get("oracle_product") or "Oracle Cloud"
-                    description = story.get("description") or ""
-                    url = story.get("url") or path
-
-                    if not company or not is_valid_company_name(company):
-                        continue
-                    if "oracle" in company.lower():
-                        continue
-
-                    if url and not url.startswith("http"):
-                        url = f"https://www.oracle.com{url}"
-
-                    results.append(self._make_signal(
-                        company_name=company,
-                        job_title=f"{company} — {product}",
-                        description=description,
-                        url=url,
-                        extra={
-                            "signal_type": "customer_story",
-                            "oracle_product_hint": product,
-                            "phase_hint": "post_live",
-                        },
-                    ))
-
-                logger.info(f"ScrapeGraphAI oracle.com {path} → {len(stories)} stories")
-                random_delay(2, 4)
-
-            except Exception as e:
-                logger.error(f"ScrapeGraphAI oracle error for {path}: {e}")
 
         return results
 
