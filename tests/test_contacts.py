@@ -53,7 +53,7 @@ class TestEnrichmentStatus:
         assert resp.status_code == 200
         data = resp.json()
         assert "total" in data
-        assert "from_master_leads" in data
+        assert "from_contacts_master" in data
         assert "need_apollo" in data
 
 

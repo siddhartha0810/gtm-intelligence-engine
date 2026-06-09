@@ -1709,16 +1709,16 @@ async def api_reporting(current_user: dict = Depends(oracle_auth.require_user)):
         # Companies covered per source
         cur.execute("""
             SELECT
-                COUNT(DISTINCT CASE WHEN source IN ('master_leads','280k_master_db','master db') THEN company_id END) AS master_leads,
+                COUNT(DISTINCT CASE WHEN source IN ('contacts_master','master_leads','280k_master_db','master db') THEN company_id END) AS contacts_master,
                 COUNT(DISTINCT CASE WHEN source IN ('apollo','apollo.io') THEN company_id END)                        AS apollo,
                 COUNT(DISTINCT CASE WHEN source IN ('zoominfo','zoom info','zoom_info') THEN company_id END)          AS zoominfo
             FROM company_contacts
         """)
         sc = cur.fetchone()
         company_coverage_by_source = {
-            "master_leads": int(sc["master_leads"] or 0),
-            "apollo":       int(sc["apollo"] or 0),
-            "zoominfo":     int(sc["zoominfo"] or 0),
+            "contacts_master": int(sc["contacts_master"] or 0),
+            "apollo":          int(sc["apollo"] or 0),
+            "zoominfo":        int(sc["zoominfo"] or 0),
         }
 
         # Contact reach breakdown
@@ -1755,7 +1755,7 @@ async def api_reporting(current_user: dict = Depends(oracle_auth.require_user)):
             SELECT
                 CASE
                     WHEN source IN ('apollo', 'apollo.io') THEN 'Apollo'
-                    WHEN source IN ('master_leads', '280k_master_db', 'master db') THEN 'Master Leads'
+                    WHEN source IN ('contacts_master', 'master_leads', '280k_master_db', 'master db') THEN 'Contacts Master'
                     WHEN source IN ('zoominfo', 'ZoomInfo') THEN 'ZoomInfo'
                     WHEN source IN ('phantombuster', 'PhantomBuster') THEN 'PhantomBuster'
                     ELSE COALESCE(NULLIF(TRIM(source), ''), 'Other')
@@ -1793,7 +1793,7 @@ async def api_reporting(current_user: dict = Depends(oracle_auth.require_user)):
 async def enrich_preflight(current_user: dict = Depends(oracle_auth.require_analyst)):
     """
     Pre-flight estimate: how many companies need enrichment, how many can be served
-    from master_leads (free), how many need Apollo (credit cost), and estimated time.
+    from contacts_master (free), how many need Apollo (credit cost), and estimated time.
     """
     try:
         companies = oracle_db.get_companies_needing_enrichment(5000)
@@ -1801,13 +1801,13 @@ async def enrich_preflight(current_user: dict = Depends(oracle_auth.require_anal
 
         if not total:
             return {
-                "total": 0, "from_master_leads": 0, "need_apollo": 0,
+                "total": 0, "from_contacts_master": 0, "need_apollo": 0,
                 "est_credits": 0, "est_minutes": 0,
                 "apollo_configured": bool(APOLLO_API_KEY),
                 "zerobounce_configured": bool(ZEROBOUNCE_API_KEY),
             }
 
-        # All companies go through Apollo — master_leads removed
+        # All companies go through Apollo — contacts_master is checked first (no credit cost)
         need_apollo = total
 
         # Apollo credit estimate: 2 credits per company (targeted pass + possible broad pass)
@@ -1818,7 +1818,7 @@ async def enrich_preflight(current_user: dict = Depends(oracle_auth.require_anal
 
         return {
             "total":               total,
-            "from_master_leads":   0,
+            "from_contacts_master": 0,
             "need_apollo":         need_apollo,
             "est_credits":         est_credits,
             "est_minutes":         est_minutes,

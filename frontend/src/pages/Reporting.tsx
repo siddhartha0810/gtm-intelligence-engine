@@ -11,7 +11,7 @@ interface ReportingData {
   scan_runs: { id: number; started_at: string; completed_at: string; status: string; total_signals: number; total_companies: number }[]
   companies_by_product: { product: string; count: number }[]
   company_contact_stats: { total: number; with_contacts: number; without_contacts: number }
-  company_coverage_by_source: { master_leads: number; apollo: number; zoominfo: number }
+  company_coverage_by_source: { contacts_master: number; apollo: number; zoominfo: number }
   contact_reach_stats: { total: number; email_and_linkedin: number; email_only: number; linkedin_only: number; no_reach: number; valid_emails: number }
   contact_by_source: { label: string; count: number; pct: number }[]
 }
@@ -189,7 +189,7 @@ export default function Reporting() {
                   </div>
                   <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                     {[
-                      { label: 'Master Leads', count: covSrc.master_leads, color: '#3b82f6' },
+                      { label: 'Contacts Master', count: covSrc.contacts_master, color: '#3b82f6' },
                       { label: 'Apollo',        count: covSrc.apollo,       color: '#8b5cf6' },
                       { label: 'ZoomInfo',      count: covSrc.zoominfo,     color: '#10b981' },
                     ].map(s => (

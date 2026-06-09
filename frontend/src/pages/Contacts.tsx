@@ -100,7 +100,7 @@ export default function Contacts() {
   const [total, setTotal]         = useState(0)
   const [selected, setSelected]   = useState<number[]>([])
   const [openMenu, setOpenMenu]   = useState<number | null>(null)
-  const [sourceFilter, setSourceFilter] = useState<'all' | 'apollo' | 'master_leads'>('all')
+  const [sourceFilter, setSourceFilter] = useState<'all' | 'apollo' | 'contacts_master'>('all')
   const menuRefs = useRef<Map<number, HTMLButtonElement>>(new Map())
   const PAGE_SIZE = 500
 
@@ -160,7 +160,7 @@ export default function Contacts() {
     .filter(c =>
       (sourceFilter === 'all') ||
       (sourceFilter === 'apollo' && isApollo(c.source || '')) ||
-      (sourceFilter === 'master_leads' && !isApollo(c.source || ''))
+      (sourceFilter === 'contacts_master' && !isApollo(c.source || ''))
     )
 
   const toggleSelect = (id: number) => setSelected(s => s.includes(id) ? s.filter(x => x !== id) : [...s, id])
@@ -245,10 +245,10 @@ export default function Contacts() {
             style={{ width: '100%', padding: '8px 12px 8px 36px', borderRadius: 8, background: '#ffffff', border: '1px solid #d1d5db', color: '#0f172a', fontSize: 13, outline: 'none', boxSizing: 'border-box' }} />
         </div>
         <div style={{ display: 'flex', padding: 3, borderRadius: 8, background: '#f8fafc', border: '1px solid #e2e8f0', gap: 2 }}>
-          {([['all', 'All'], ['apollo', '🔵 Apollo'], ['master_leads', '📋 Master Leads']] as const).map(([val, label]) => (
+          {([['all', 'All'], ['apollo', '🔵 Apollo'], ['contacts_master', '📋 Contacts Master']] as const).map(([val, label]) => (
             <button key={val} onClick={() => setSourceFilter(val)}
               style={{ padding: '5px 12px', borderRadius: 6, border: 'none', fontSize: 12, fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap',
-                background: sourceFilter === val ? (val === 'apollo' ? '#6366f1' : val === 'master_leads' ? '#0f172a' : '#3b82f6') : 'transparent',
+                background: sourceFilter === val ? (val === 'apollo' ? '#6366f1' : val === 'contacts_master' ? '#0f172a' : '#3b82f6') : 'transparent',
                 color: sourceFilter === val ? 'white' : '#64748b', transition: 'all 0.15s' }}>
               {label}
             </button>
@@ -328,7 +328,7 @@ export default function Contacts() {
                   <td style={{ padding: '12px 16px' }}>
                     {isApollo(c.source || '')
                       ? <span style={{ fontSize: 11, padding: '3px 8px', borderRadius: 999, background: 'rgba(99,102,241,0.12)', color: '#818cf8', fontWeight: 600 }}>Apollo</span>
-                      : c.source === 'master_leads' || c.source === '280k_master_db'
+                      : c.source === 'contacts_master' || c.source === 'master_leads' || c.source === '280k_master_db'
                         ? <span style={{ fontSize: 11, padding: '3px 8px', borderRadius: 999, background: 'rgba(107,114,128,0.1)', color: '#94a3b8', fontWeight: 500 }}>Master DB</span>
                         : <span style={{ fontSize: 11, padding: '3px 8px', borderRadius: 999, background: 'rgba(245,158,11,0.1)', color: '#f59e0b', fontWeight: 500 }}>{c.source || '—'}</span>
                     }

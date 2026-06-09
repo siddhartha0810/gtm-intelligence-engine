@@ -529,8 +529,8 @@ def resolve_domains(df: pd.DataFrame, lookup_path: str) -> pd.DataFrame:
     df["domain"] = df.apply(_from_lookup, axis=1)
 
     # ── Pass 1b: Master store lookup ──────────────────────────────────────
-    # Before hitting any external API, check master_leads for companies we've
-    # successfully resolved in a previous run.  This is free and instant.
+    # Before hitting any external API, check contacts_master for known domains.
+    # This is free and instant — no API call needed.
     missing_mask = df["domain"].str.strip() == ""
     if missing_mask.any() and db:
         missing_norms = (

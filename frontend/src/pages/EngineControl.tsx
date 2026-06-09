@@ -57,7 +57,7 @@ const ALL_ROLES = [...EXACT_ROLES, ...KEYWORD_ROLES]
 
 const ENGINES = [
   { id: 'oracle',     label: 'Oracle Intent Engine',   desc: 'Scans job boards, oracle.com, news & case studies for Oracle/JDE signals', color: '#3b82f6', modules: 18 },
-  { id: 'enrichment', label: 'Lead Enrichment Engine', desc: '7-stage: master_leads → Apollo → ZeroBounce → prediction → HubSpot',       color: '#6366f1', modules: 7 },
+  { id: 'enrichment', label: 'Lead Enrichment Engine', desc: '7-stage: contacts_master → Apollo → ZeroBounce → prediction → HubSpot',    color: '#6366f1', modules: 7 },
   { id: 'hubspot',    label: 'HubSpot Sync Engine',    desc: 'Pushes approved contacts from Review Queue to CRM',                         color: '#f59e0b', modules: 1 },
 ]
 
@@ -92,7 +92,7 @@ const levelColor = (l: string) =>
 
 interface LogEntry  { t: string; level: string; msg: string }
 interface Preflight {
-  total: number; from_master_leads: number; need_apollo: number;
+  total: number; from_contacts_master: number; need_apollo: number;
   est_credits: number; est_minutes: number;
   apollo_configured: boolean; zerobounce_configured: boolean;
 }
@@ -128,7 +128,7 @@ function PreflightModal({
 
   const numBatches = batchSize > 0 ? Math.ceil(Math.min(enrichLimit, preflight.total) / batchSize) : 1
   const apolloNeeded = Math.min(preflight.need_apollo, enrichLimit)
-  const masterNeeded = Math.min(preflight.from_master_leads, enrichLimit)
+  const masterNeeded = Math.min(preflight.from_contacts_master, enrichLimit)
   const creditsNeeded = apolloNeeded * 2
 
   const stat = (icon: React.ReactNode, label: string, val: string | number, color: string, sub?: string) => (
@@ -289,7 +289,7 @@ function PreflightModal({
               style={{ padding:'9px 20px', borderRadius:8, border:'1px solid #e2e8f0', background:'transparent', color:'#64748b', fontSize:13, fontWeight:500, cursor:'pointer' }}>
               Cancel
             </button>
-            <button onClick={onStart} disabled={!preflight.apollo_configured && preflight.need_apollo > 0 && preflight.from_master_leads === 0}
+            <button onClick={onStart} disabled={!preflight.apollo_configured && preflight.need_apollo > 0 && preflight.from_contacts_master === 0}
               style={{ padding:'9px 24px', borderRadius:8, border:'none',
                 background: '#6366f1', color:'white',
                 fontSize:13, fontWeight:600, cursor:'pointer',
@@ -1106,7 +1106,7 @@ export default function EngineControl() {
           <div>
             <div style={{ fontSize:14, fontWeight:600, color:'#0f172a' }}>Contact Enrichment Pipeline</div>
             <div style={{ fontSize:12, color:'#475569', marginTop:3 }}>
-              master_leads DB check → Apollo people search → ZeroBounce → email prediction → store
+              contacts_master check → Apollo people search → ZeroBounce → email prediction → store
             </div>
           </div>
           <div style={{ display:'flex', alignItems:'center', gap:10 }}>

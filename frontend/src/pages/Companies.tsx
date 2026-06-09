@@ -50,7 +50,7 @@ interface Company {
 }
 
 interface Contact {
-  id: number | string        // number from company_contacts, "ml_xxx" from master_leads
+  id: number | string        // number from company_contacts, Salesforce ID from contacts_master
   first_name: string
   last_name: string
   title: string
@@ -219,7 +219,7 @@ function ContactsPanel({ company, onClose }: { company: Company; onClose: () => 
                           {conf}%
                         </span>
                       )}
-                      {c.source === 'master_leads' && (
+                      {(c.source === 'contacts_master' || c.source === 'master_leads') && (
                         <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: 'rgba(99,102,241,0.1)', color: '#818cf8', fontWeight: 500 }}>DB</span>
                       )}
                     </div>
