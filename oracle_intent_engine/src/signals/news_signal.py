@@ -41,6 +41,9 @@ class NewsSignal(BaseSignal):
         # LLM batch first; regex fallback for any article the LLM couldn't resolve
         if llm_extractor.is_available():
             names = llm_extractor.extract_companies_batch(raw)
+            # Pad to raw length in case LLM returns fewer items than articles
+            if len(names) < len(raw):
+                names = names + [""] * (len(raw) - len(names))
         else:
             names = [""] * len(raw)
 

@@ -236,6 +236,8 @@ class OracleWebsiteSignal(BaseSignal):
                 import json
                 data = json.loads(script.string or "{}")
                 if isinstance(data, list):
+                    if not data:
+                        continue
                     data = data[0]
                 name = data.get("name") or data.get("headline", "")
                 desc = data.get("description", "")

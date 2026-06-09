@@ -104,7 +104,10 @@ def _get_current_user(
             detail="Authorization header required",
         )
     payload = decode_token(creds.credentials)
-    user = get_user_by_id(int(payload["sub"]))
+    sub = payload.get("sub")
+    if not sub:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+    user = get_user_by_id(int(sub))
     if not user or not user.get("is_active"):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

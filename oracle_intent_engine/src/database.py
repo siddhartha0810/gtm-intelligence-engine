@@ -433,6 +433,8 @@ _DDL = [
     "ALTER TABLE company_contacts ADD COLUMN IF NOT EXISTS unique_key           TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE company_contacts ADD COLUMN IF NOT EXISTS status               TEXT NOT NULL DEFAULT 'staged' CHECK (status IN ('staged','pending_review','approved','pushed_to_hubspot','rejected'))",
     "ALTER TABLE company_contacts ADD COLUMN IF NOT EXISTS hubspot_synced_at    TIMESTAMPTZ",
+    "ALTER TABLE company_contacts ADD COLUMN IF NOT EXISTS street               TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE company_contacts ADD COLUMN IF NOT EXISTS postal_code          TEXT NOT NULL DEFAULT ''",
 
     # scan_runs: link to technology profile
     "ALTER TABLE scan_runs ADD COLUMN IF NOT EXISTS technology_profile_id BIGINT REFERENCES technology_profiles(id) ON DELETE SET NULL",
@@ -754,12 +756,13 @@ def save_contacts(company_id: int, contacts: list):
                     (company_id, full_name, first_name, last_name, title,
                      email, linkedin_url, seniority, confidence, is_target, source,
                      email_validation_status, email_source, email_prediction_pattern,
+                     phone, street, city, state, country, postal_code,
                      unique_key)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 ON CONFLICT (company_id, email) WHERE email IS NOT NULL AND email != '' DO UPDATE SET
                     title      = CASE WHEN EXCLUDED.title <> '' THEN EXCLUDED.title
                                       ELSE company_contacts.title END,
-                    linkedin_url = COALESCE(EXCLUDED.linkedin_url, company_contacts.linkedin_url),
+                    linkedin_url = COALESCE(NULLIF(EXCLUDED.linkedin_url,''), company_contacts.linkedin_url),
                     seniority  = CASE WHEN EXCLUDED.seniority <> '' THEN EXCLUDED.seniority
                                       ELSE company_contacts.seniority END,
                     confidence = GREATEST(EXCLUDED.confidence, company_contacts.confidence),
@@ -767,7 +770,19 @@ def save_contacts(company_id: int, contacts: list):
                                       THEN EXCLUDED.source ELSE company_contacts.source END,
                     email_validation_status = COALESCE(EXCLUDED.email_validation_status,
                                                        company_contacts.email_validation_status),
-                    is_target  = GREATEST(EXCLUDED.is_target, company_contacts.is_target)
+                    is_target  = GREATEST(EXCLUDED.is_target, company_contacts.is_target),
+                    phone      = CASE WHEN EXCLUDED.phone <> '' THEN EXCLUDED.phone
+                                      ELSE company_contacts.phone END,
+                    street     = CASE WHEN EXCLUDED.street <> '' THEN EXCLUDED.street
+                                      ELSE company_contacts.street END,
+                    city       = CASE WHEN EXCLUDED.city <> '' THEN EXCLUDED.city
+                                      ELSE company_contacts.city END,
+                    state      = CASE WHEN EXCLUDED.state <> '' THEN EXCLUDED.state
+                                      ELSE company_contacts.state END,
+                    country    = CASE WHEN EXCLUDED.country <> '' THEN EXCLUDED.country
+                                      ELSE company_contacts.country END,
+                    postal_code = CASE WHEN EXCLUDED.postal_code <> '' THEN EXCLUDED.postal_code
+                                       ELSE company_contacts.postal_code END
             """, (
                 company_id,
                 c.get("full_name", ""),
@@ -783,6 +798,12 @@ def save_contacts(company_id: int, contacts: list):
                 c.get("email_validation_status") or None,
                 c.get("email_source", "") or "",
                 c.get("email_prediction_pattern", "") or "",
+                c.get("phone", "") or "",
+                c.get("street", "") or "",
+                c.get("city", "") or "",
+                c.get("state", "") or "",
+                c.get("country", "") or "",
+                c.get("postal_code", "") or "",
                 _gen_unique_key(),
             ))
         # Keep denormalized contact_count in sync after batch insert
@@ -1147,12 +1168,14 @@ def get_master_leads_by_email(emails: list) -> dict:
             )
             rows = cur.fetchall()
             return {dict(r)["email"].lower(): dict(r) for r in rows if dict(r).get("email")}
-    except Exception:
+    except Exception as e:
+        logger.error(f"get_master_leads_by_email failed: {e}", exc_info=True)
         return {}
 
 def get_master_leads_by_company(company_normalized: str) -> list:
     """
     Return contacts from contacts_master for a given company name.
+    Only returns contacts that have a ZeroBounce-validated email (zb_valid_email not empty).
     Matches on new_company or existing_company (case-insensitive normalised).
     Returns [] if table absent or no match.
     """
@@ -1162,21 +1185,27 @@ def get_master_leads_by_company(company_normalized: str) -> list:
             cur.execute(
                 """
                 SELECT
-                    id                                                           AS lead_id,
-                    firstname                                                    AS first_name,
-                    lastname                                                     AS last_name,
-                    title                                                        AS job_title,
-                    COALESCE(NULLIF(zb_valid_email,''), NULLIF(validated_email,''), NULLIF(email,'')) AS email,
-                    validated_email_status                                       AS email_validation_status,
-                    COALESCE(NULLIF(linkedin_url_enriched,''), NULLIF(linkedin_url__c,'')) AS linkedin_url,
+                    id                                                              AS lead_id,
+                    firstname                                                       AS first_name,
+                    lastname                                                        AS last_name,
+                    title                                                           AS job_title,
+                    COALESCE(NULLIF(validated_email,''), NULLIF(email,''))          AS email,
+                    validated_email_status                                          AS email_validation_status,
+                    COALESCE(NULLIF(linkedin_url__c,''), NULLIF(linkedin_url_enriched,'')) AS linkedin_url,
                     domain,
-                    COALESCE(NULLIF(new_company,''), NULLIF(existing_company,'')) AS company,
-                    phone
+                    COALESCE(NULLIF(new_company,''), NULLIF(existing_company,''))   AS company,
+                    phone,
+                    mailingstreet                                                   AS street,
+                    mailingcity                                                     AS city,
+                    mailingstate                                                    AS state,
+                    mailingcountry                                                  AS country,
+                    mailingpostalcode                                               AS postal_code
                 FROM contacts_master
                 WHERE LOWER(REGEXP_REPLACE(
                           COALESCE(new_company, existing_company, ''),
                           '\\s+(llc|inc|ltd|corp|limited|plc|llp|gmbh|sa|ag|nv|bv|co)\\.?$',
                           '', 'i')) = %s
+                  AND UPPER(TRIM(zb_valid_email)) = 'YES'
                 ORDER BY
                     CASE validated_email_status
                         WHEN 'valid'     THEN 0
@@ -1187,7 +1216,8 @@ def get_master_leads_by_company(company_normalized: str) -> list:
                 (norm,),
             )
             return cur.fetchall()
-    except Exception:
+    except Exception as e:
+        logger.error(f"get_master_leads_by_company failed for '{company_normalized}': {e}", exc_info=True)
         return []
 
 def master_leads_stats() -> dict:
@@ -1200,12 +1230,13 @@ def master_leads_stats() -> dict:
                     COUNT(CASE WHEN COALESCE(zb_valid_email, validated_email, email, '') != '' THEN 1 END) AS with_email,
                     COUNT(CASE WHEN validated_email_status = 'valid'                           THEN 1 END) AS valid_email,
                     COUNT(CASE WHEN validated_email_status = 'valid'
-                                AND (hasoptedoutofEmail IS NULL OR hasoptedoutofEmail = FALSE) THEN 1 END) AS ready
+                                AND (hasoptedoutemail IS NULL OR hasoptedoutemail = FALSE) THEN 1 END) AS ready
                 FROM contacts_master
             """)
             row = cur.fetchone()
             return dict(row)
-    except Exception:
+    except Exception as e:
+        logger.error(f"master_leads_stats failed: {e}", exc_info=True)
         return {"total": 0, "with_email": 0, "valid_email": 0, "ready": 0}
 
 # email pattern operations
@@ -1303,7 +1334,8 @@ def upsert_hubspot_config(api_key: str, portal_id: str) -> dict:
                RETURNING *""",
             (api_key, portal_id),
         )
-        return dict(cur.fetchone())
+        row = cur.fetchone()
+        return dict(row) if row else {}
 
 def update_hubspot_sync_status(status: str, companies: int = 0, contacts: int = 0):
     with db_cursor() as cur:

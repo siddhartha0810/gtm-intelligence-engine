@@ -136,7 +136,9 @@ def main() -> None:
     try:
         db.init_db()
     except Exception as exc:
-        print(f"[enrichment_worker] DB init error: {exc}", file=sys.stderr)
+        print(f"[enrichment_worker] DB init error — cannot continue: {exc}", file=sys.stderr)
+        stop_evt.set()
+        sys.exit(1)
 
     # Read API keys from environment (set by unified_app.py before launching subprocess)
     apollo_key     = os.environ.get("APOLLO_API_KEY", "").strip()

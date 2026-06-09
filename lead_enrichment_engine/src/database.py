@@ -14,6 +14,7 @@ contacts_master is a read-only Salesforce CRM export (no writes).
 API is identical to the old SQLite version — callers unchanged.
 """
 
+import os
 import threading
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone

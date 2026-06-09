@@ -133,7 +133,9 @@ def main() -> None:
     try:
         db.init_db()
     except Exception as exc:
-        print(f"[scan_worker] DB init error: {exc}", file=sys.stderr)
+        print(f"[scan_worker] DB init error — cannot continue: {exc}", file=sys.stderr)
+        stop_evt.set()
+        sys.exit(1)
 
     # Run the scan synchronously — this is the only thread doing CPU/network work
     result = pipeline.run_scan(

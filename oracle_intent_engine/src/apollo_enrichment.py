@@ -627,30 +627,47 @@ def enrich_companies(
         # Check contacts_master first (Salesforce export — no API cost)
         master_rows = db.get_master_leads_by_company(name)
         if master_rows:
-            to_save = [
-                {
-                    "full_name":               f"{c['first_name']} {c['last_name']}".strip(),
-                    "first_name":              c["first_name"] or "",
-                    "last_name":               c["last_name"] or "",
+            to_save = []
+            for c in master_rows:
+                first = c.get("first_name") or ""
+                last  = c.get("last_name")  or ""
+                # Build location string from Mailing address fields
+                location_parts = [
+                    c.get("street")      or "",
+                    c.get("city")        or "",
+                    c.get("state")       or "",
+                    c.get("postal_code") or "",
+                    c.get("country")     or "",
+                ]
+                location = ", ".join(p for p in location_parts if p)
+                to_save.append({
+                    "full_name":               f"{first} {last}".strip(),
+                    "first_name":              first,
+                    "last_name":               last,
                     "title":                   c.get("job_title") or "",
                     "email":                   c.get("email") or None,
                     "linkedin_url":            c.get("linkedin_url") or None,
+                    "phone":                   c.get("phone") or "",
+                    "city":                    c.get("city") or "",
+                    "state":                   c.get("state") or "",
+                    "country":                 c.get("country") or "",
+                    "street":                  c.get("street") or "",
+                    "postal_code":             c.get("postal_code") or "",
                     "domain":                  c.get("domain") or "",
                     "source":                  "contacts_master",
                     "confidence":              0.9,
                     "is_target":               1,
                     "email_validation_status": c.get("email_validation_status") or None,
-                }
-                for c in master_rows
-            ]
+                })
             db.save_contacts(company_id, to_save)
-            valid_ct = sum(1 for c in master_rows if c.get("email_validation_status") == "valid")
-            total_contacts  += len(to_save)
+            # All rows returned already passed the zb_valid_email = 'Yes' filter
+            valid_ct = len(to_save)
+            total_contacts  += valid_ct
             total_validated += valid_ct
             _status["contacts_found"]     = total_contacts
             _status["contacts_validated"] = total_validated
             _status["companies_processed"] += 1
-            log(f"  + {len(to_save)} contacts from contacts_master ({valid_ct} valid) — skipped Apollo")
+            log(f"  + {valid_ct} contacts from contacts_master (ZB validated) — skipped Apollo")
             continue
 
         contacts, pass_used = _apollo_search(name, apollo_key, max_per_company,
