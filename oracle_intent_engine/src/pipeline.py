@@ -425,6 +425,37 @@ def run_scan(
         except Exception as e:
             _log(f"  [target_product] Warning: {e}")
 
+        # contacts_master pre-check (FREE — runs before any paid enrichment):
+        # every scanned company is checked against the Salesforce export first.
+        # Matches get their contacts saved immediately, so those companies are
+        # already satisfied and never appear in the paid-enrichment queue.
+        # Companies that already have contacts in the DB are skipped entirely.
+        _current_scan["progress"] = "Checking contacts_master for known contacts..."
+        _log("▶ Checking scanned companies against contacts_master (no credits used)...")
+        master_companies = master_contacts = 0
+        from src.apollo_enrichment import master_rows_to_contacts, _score_contacts
+        for company in companies:
+            if _is_stopped():
+                break
+            try:
+                row = db.get_company_by_name(company["company_name"])
+                if not row:
+                    continue  # failed validation gate — was never saved
+                if (row.get("contact_count") or 0) > 0:
+                    continue  # already has contacts — no enrichment needed
+                master_rows = db.get_master_leads_by_company(row["name"])
+                if not master_rows:
+                    continue
+                to_save = master_rows_to_contacts(master_rows)
+                to_save = _score_contacts(to_save, row.get("target_product") or "")
+                db.save_contacts(row["id"], to_save)
+                master_companies += 1
+                master_contacts  += len(to_save)
+            except Exception as e:
+                _log(f"  [contacts_master] Error for {company['company_name']}: {e}")
+        _log(f"✓ contacts_master check done — {master_contacts} contacts pulled for "
+             f"{master_companies} companies (these skip paid enrichment)")
+
         # csv contact matching (all companies, from 280k contacts database)
         if csv_contacts.is_available():
             _current_scan["progress"] = "Matching contacts from CSV database..."

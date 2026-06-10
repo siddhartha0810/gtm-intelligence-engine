@@ -1192,7 +1192,8 @@ export default function EngineControl() {
                   Scan complete — {pendingCompanies.length} companies awaiting enrichment
                 </div>
                 <div style={{ fontSize:12, color:'#64748b', marginTop:2 }}>
-                  Select the companies to enrich, then launch the enrichment workflow
+                  Select the companies to enrich, then launch the enrichment workflow.
+                  Companies matched in contacts_master or already enriched are excluded automatically.
                 </div>
               </div>
             </div>

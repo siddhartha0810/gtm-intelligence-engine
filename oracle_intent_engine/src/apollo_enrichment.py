@@ -624,6 +624,36 @@ def _zb_validate_batch(emails: list, api_key: str) -> dict:
     return result
 
 
+def master_rows_to_contacts(master_rows: list) -> list:
+    """Convert contacts_master rows (Salesforce export) into the standard
+    pipeline contact shape. All rows passed the ZB_Valid_Email = 'Yes' filter,
+    so they arrive pre-validated — no ZeroBounce credits needed."""
+    contacts = []
+    for c in master_rows:
+        first = c.get("first_name") or ""
+        last  = c.get("last_name")  or ""
+        contacts.append({
+            "full_name":               f"{first} {last}".strip(),
+            "first_name":              first,
+            "last_name":               last,
+            "title":                   c.get("job_title") or "",
+            "email":                   c.get("email") or None,
+            "linkedin_url":            c.get("linkedin_url") or None,
+            "phone":                   c.get("phone") or "",
+            "city":                    c.get("city") or "",
+            "state":                   c.get("state") or "",
+            "country":                 c.get("country") or "",
+            "street":                  c.get("street") or "",
+            "postal_code":             c.get("postal_code") or "",
+            "domain":                  c.get("domain") or "",
+            "source":                  "contacts_master",
+            "confidence":              0.9,
+            "is_target":               1,
+            "email_validation_status": c.get("email_validation_status") or None,
+        })
+    return contacts
+
+
 # ── Stage 7 — scoring ────────────────────────────────────────────────────────
 
 def _score_contacts(contacts: list, target_product: str) -> list:
@@ -784,29 +814,7 @@ def enrich_companies(
         # Stage 3a — check contacts_master first (Salesforce export — no API cost)
         master_rows = db.get_master_leads_by_company(name)
         if master_rows:
-            to_save = []
-            for c in master_rows:
-                first = c.get("first_name") or ""
-                last  = c.get("last_name")  or ""
-                to_save.append({
-                    "full_name":               f"{first} {last}".strip(),
-                    "first_name":              first,
-                    "last_name":               last,
-                    "title":                   c.get("job_title") or "",
-                    "email":                   c.get("email") or None,
-                    "linkedin_url":            c.get("linkedin_url") or None,
-                    "phone":                   c.get("phone") or "",
-                    "city":                    c.get("city") or "",
-                    "state":                   c.get("state") or "",
-                    "country":                 c.get("country") or "",
-                    "street":                  c.get("street") or "",
-                    "postal_code":             c.get("postal_code") or "",
-                    "domain":                  c.get("domain") or "",
-                    "source":                  "contacts_master",
-                    "confidence":              0.9,
-                    "is_target":               1,
-                    "email_validation_status": c.get("email_validation_status") or None,
-                })
+            to_save = master_rows_to_contacts(master_rows)
             to_save = _score_contacts(to_save, target_product)
             db.save_contacts(company_id, to_save)
             # All rows returned already passed the zb_valid_email = 'Yes' filter
