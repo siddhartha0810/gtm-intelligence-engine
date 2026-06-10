@@ -3,29 +3,61 @@ orchestrator.py
 ===============
 STAGE 3 — Vendor Enrichment
 
-The core enrichment engine. For every lead that is missing an email or
-LinkedIn URL, it calls external APIs to find them.
+PURPOSE:
+  For every lead that is still missing an email or LinkedIn URL after domain
+  resolution, call external APIs to fill in the gaps.  Prioritises Apollo
+  (batch, fast, expensive) over Apify (per-lead, slow, cheaper) and always
+  checks the local master store before spending any API credits.
 
-Vendors supported:
-  Apollo  — bulk people enrichment API (email + LinkedIn from name + company + domain)
-  Apify   — LinkedIn scraper (Phase 1: find LinkedIn URL, Phase 2: find email from LinkedIn)
-  ZoomInfo — optional premium enrichment (disabled by default, needs domain override)
+HOW IT FITS IN THE SYSTEM:
+  Called by pipeline.py after Stage 2 (domain_resolver) completes.
+  Operates on the full DataFrame in memory.
 
-Vendor routing (default order = Apollo → Apify):
-  - Apollo runs first as a bulk batch (all leads in one API call, chunked at 10)
-  - Apify runs per-lead as a fallback if Apollo found nothing
-  - If a lead already has both email AND LinkedIn → skip all vendors entirely
-  - ZoomInfo is available in _VENDOR_FNS but not in the default route;
-    add "zoominfo" to DOMAIN_OVERRIDES to use it for specific domains
+  Three-layer cache check (in order, before any API):
+    Layer 1: enrichment_cache table    — 30-day TTL for Apollo results
+    Layer 2: contacts_master by SF ID  — Salesforce CRM export, email confirmed
+    Layer 3: contacts_master by name+company — fuzzy match on normalised name
 
-Parallelism:
-  - Apollo results are pre-fetched in bulk BEFORE the thread pool starts
-  - The thread pool (10 workers) processes all leads concurrently
-  - Each worker picks up the pre-fetched Apollo result or calls Apify
+  Only if all three layers miss does it call the external API.
 
-Performance tracking:
-  - Every vendor call (hit or miss) is recorded by _Tracker
-  - Results saved to output/vendor_performance.csv after the run
+VENDOR ROUTING:
+  Apollo  — bulk_match endpoint: all 10 leads per request, pre-fetched in one
+            pass before the thread pool starts.  Max 10 records/request (API limit).
+            Auth: X-Api-Key header — NOT Authorization: Bearer.
+  Apify   — Phase 1: find LinkedIn URL from name + company (sync, up to 270s).
+             Phase 2: find email from LinkedIn URL (sync, up to 270s).
+             Apify costs fewer credits but is much slower.
+  ZoomInfo — Optional premium.  Disabled by default.  Enable by adding a company
+             domain to DOMAIN_OVERRIDES = {"acme.com": ["zoominfo", "apollo"]}.
+
+PARALLELISM:
+  Apollo results are pre-fetched BEFORE the ThreadPoolExecutor starts.
+  The 10-worker thread pool then processes each lead concurrently, picking up
+  the pre-fetched Apollo result or calling Apify if Apollo missed.
+  Pre-fetching Apollo in one pass is critical — avoids 10 threads all hitting
+  Apollo simultaneously which would blow the rate limit.
+
+KEY CLASSES/FUNCTIONS:
+  enrich()               — main entry point; returns enriched DataFrame
+  _pre_fetch_apollo()    — fetches all Apollo results in bulk before threading
+  _enrich_one()          — per-lead logic: master lookup → vendor API
+  _apollo_bulk_match()   — calls Apollo bulk_match for a chunk of ≤10 leads
+  _apify_find_linkedin() — Phase 1 Apify: LinkedIn URL from name+company
+  _apify_find_email()    — Phase 2 Apify: email from LinkedIn URL
+  get_apollo_credits()   — fetches current Apollo credit balance
+  _Tracker               — records vendor hit/miss per lead for reporting
+
+DEPENDENCIES:
+  - Apollo API     : APOLLO_API_KEY, X-Api-Key header
+  - Apify API      : APIFY_TOKEN, actor IDs in config.py
+  - database.py    : enrichment_cache read/write
+  - pg_master.py   : contacts_master read (free, no API cost)
+
+COST:
+  Apollo : 1 credit per successful email reveal
+  Apify  : billed per actor run (see your Apify plan)
+  Always check the master store first — it is free and typically covers 30-50%
+  of a warm lead list.
 """
 
 import re

@@ -3,30 +3,53 @@ zerobounce_client.py
 ====================
 STAGES 4 & 6 — Email Validation
 
-Sends email addresses to ZeroBounce to verify whether they actually exist
-and are safe to send to. Called twice in the pipeline:
-  Stage 4: validate emails found by Apollo/Apify
-  Stage 6: validate emails predicted by the pattern engine
+PURPOSE:
+  Verifies that email addresses actually exist and are safe to send to before
+  the sales team wastes time on bounced outreach.  Called twice in the pipeline:
+    Stage 4: validates Apollo/Apify-sourced emails
+    Stage 6: validates pattern-predicted emails (these have a much higher
+             failure rate — pattern prediction is a best guess)
 
-Two validation modes (selected automatically based on volume):
-  BATCH API   — up to 200 emails per call, ~70s response time
-  BULK FILE API — for 200+ emails, uploads a CSV file and polls for results
+HOW IT FITS IN THE SYSTEM:
+  pipeline.py calls validate_emails(df, source_filter=["apollo","apify"]) for Stage 4.
+  pipeline.py calls validate_emails(df, source_filter=["predicted"]) for Stage 6.
+  source_filter ensures only the new emails from each stage are re-validated,
+  not emails already validated in a prior stage (avoids double-spending credits).
 
-ZeroBounce status codes:
+  COST CONTROL — DB pre-check before any API call:
+  Before spending credits, validate_emails() checks contacts_master via pg_master.py
+  for emails already known to be valid (ZB_Valid_Email = 'Yes').  Known-valid emails
+  are restored directly to the DataFrame — no credit spent.
+
+VALIDATION MODES (auto-selected based on volume):
+  BATCH API   — up to 200 emails per POST, ~70s response time.
+                Synchronous — waits for the result in the same HTTP call.
+  BULK FILE API — for 200+ emails: upload CSV → poll filestatus → download results CSV.
+                  Asynchronous — polls every 10s, max 600s wait time.
+                  Falls back to batch mode if the file upload fails.
+
+ZEROBOUNCE STATUS CODES:
   valid       — safe to send, <2% bounce rate
-  invalid     — do not send, mailbox doesn't exist
-  catch-all   — server accepts all mail (may or may not be real)
-  spamtrap    — never send, will damage sender reputation
+  invalid     — do not send (mailbox does not exist)
+  catch-all   — server accepts ALL mail (may or may not be real)
+  spamtrap    — never send (will damage sender reputation permanently)
   abuse       — user marks mail as spam, avoid
-  do_not_mail — role-based/disposable/toxic address
+  do_not_mail — role-based (info@, sales@), disposable, or toxic
   unknown     — could not verify (ZeroBounce refunds credits for these)
 
-ZeroBounce sub-status codes used in scoring:
-  gold          — high-engagement address
+ZEROBOUNCE SUB-STATUS CODES:
+  gold          — high-engagement address (extra positive signal)
   accept_all    — catch-all domain vetted as safe
-  disposable    — temporary address
-  toxic         — known abuse/bot account
-  role_based    — info@/sales@ etc.
+  disposable    — temporary/throwaway address
+  toxic         — known abuse / bot account
+  role_based    — generic role address (info@, support@, etc.)
+  mailbox_not_found — specific failure reason for invalid emails
+
+KEY FUNCTIONS:
+  validate_emails(df, source_filter) — main entry point; returns enriched DataFrame
+  get_credits()                      — fetches current credit balance
+  _validate_batch(emails)            — calls the batch API for ≤200 emails
+  _validate_bulk_file(emails)        — uploads CSV and polls for ≥200 emails
 """
 
 import csv

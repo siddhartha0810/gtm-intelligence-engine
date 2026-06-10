@@ -1,7 +1,38 @@
 """
-Scrapes Indeed public job search for Oracle-related postings.
-Primary: HTML scraping. Fallback: Indeed public RSS feed.
-Rate-limited with random delays.
+indeed_signal.py
+================
+Scrapes Indeed for Oracle-related job postings.
+
+PURPOSE:
+  Indeed job postings are the single strongest buying signal in the system.
+  A company actively posting for an "Oracle Fusion ERP Implementation Manager"
+  is definitively in the implementing phase, which scores 40/40 for phase weight.
+
+HOW IT FITS IN THE SYSTEM:
+  Registered in SIGNAL_REGISTRY in scan_worker.py.
+  scan_worker.py calls fetch() for each query in config.ORACLE_SEARCH_QUERIES,
+  then passes results to phase_classifier.py → database.py.
+
+SCRAPING STRATEGY:
+  Primary: HTML scraping via BeautifulSoup (Indeed web UI).
+           Uses random User-Agent headers and random delay between pages
+           to avoid triggering Indeed's bot detection.
+  Fallback: Indeed public RSS feed (?q=...&sort=date&fromage=30).
+            RSS is triggered when HTML returns 0 results (e.g. Indeed has
+            updated its HTML structure and the selectors broke).
+            UK location → uses indeed.co.uk subdomain for better results.
+
+CONFIDENCE SCORING:
+  Signals from Indeed are assigned confidence in phase_classifier.py:
+    0.90 — Oracle product name + company name both explicitly in job title
+    0.80 — Oracle product name in job title alone
+    0.75 — strong Oracle product keyword in description (confirmed by string match)
+    0.60 — generic "Oracle consultant" (could be staffing agency)
+
+STAFFING FILTER:
+  staffing_filter.py is called by scan_worker.py AFTER fetch() returns.
+  It filters out signals from staffing agencies (Robert Half, TEKsystems, etc.)
+  so only genuine Oracle end-users appear in the companies table.
 """
 
 import re

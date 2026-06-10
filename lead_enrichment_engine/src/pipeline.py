@@ -1,7 +1,61 @@
 """
 pipeline.py
 ===========
-MAIN ENTRY POINT — orchestrates all 7 pipeline stages end-to-end.
+MAIN ENTRY POINT for the Lead Enrichment Engine.
+Orchestrates all 7 pipeline stages end-to-end for a batch of leads.
+
+PURPOSE:
+  Takes a raw list of leads (names, company, title — no email) and produces
+  a fully-enriched, ZeroBounce-validated list with emails and LinkedIn URLs
+  that the sales team can import directly into their outreach tool.
+
+HOW IT FITS IN THE SYSTEM:
+  Invoked by enrichment_worker.py as:
+    python -m src.pipeline <path_to_xlsx> --restart|--resume
+
+  Also callable directly from the CLI for local testing.
+
+  Data flow:
+    Input Excel/CSV
+      → Stage 1: clean + deduplicate
+      → Stage 2: resolve company domains (8 parallel workers)
+      → Stage 3: Apollo bulk_match + Apify fallback (10 parallel workers)
+      → Stage 4: ZeroBounce validate vendor emails
+      → Stage 5: email pattern engine predicts missing emails
+      → Stage 6: ZeroBounce validate predicted emails
+      → Stage 7: scoring — set ready_for_outreach = True/False
+      → Output CSV + Excel write-back
+
+KEY CLASSES/FUNCTIONS:
+  run_pipeline()            — main orchestrator: calls stages in order
+  _checkpoint_path()        — returns the .pkl checkpoint file path
+  _save_checkpoint()        — saves DataFrame + stage name to disk
+  _load_checkpoint()        — loads a checkpoint if --resume was passed
+  _print_stage_summary()    — prints lead counts + credit usage after each stage
+  _invalidate_suspect_domains() — evicts stale cached domains where all
+                                  ZeroBounce-validated predictions failed
+  _propagate_email_domains()    — fills missing domains for same-company leads
+                                  once any lead in the group has a confirmed domain
+
+CHECKPOINT / RESUME:
+  Each stage saves a .pkl checkpoint after completing.
+  --resume skips stages that already completed.
+  --restart wipes the checkpoint and starts from Stage 1.
+  This prevents losing hours of work if a run is interrupted.
+
+EXCEL WRITE-BACK:
+  The original .xlsx file is updated in-place using openpyxl.
+  Columns added: email, linkedin_url, email_source, email_validation_status,
+  ready_for_outreach (green = True, red = False), confidence_score.
+  Header row: dark blue background, white bold text.
+
+DEPENDENCIES:
+  - orchestrator.py    : Stage 3 (vendor enrichment)
+  - domain_resolver.py : Stage 2
+  - zerobounce_client.py : Stages 4 + 6
+  - email_pattern_engine.py : Stage 5
+  - database.py        : caches domain lookups + Apollo results
+  - pg_master.py       : contacts_master (read-only Salesforce CRM export)
 
 Usage (from inside the lead_enrichment_engine folder):
   python -m src.pipeline "path/to/your/file.xlsx" --restart

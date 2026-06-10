@@ -1,8 +1,44 @@
 """
-database.py — PostgreSQL backend for Oracle Intent Engine.
-Uses ThreadedConnectionPool (max 10) — never saturates the server.
-ORACLE_PG_DSN env var takes priority over DB_* vars so unified_app.py
-can cleanly separate the oracle DB from the enrichment DB.
+database.py  (oracle_intent_engine)
+=====================================
+PostgreSQL backend for the entire Oracle Intent Engine.
+
+PURPOSE:
+  All persistent state for the Oracle Intent side of the tool lives here:
+  companies, signals, contacts, scan runs, auth users, audit logs, events,
+  technology profiles, and more.  This module owns the DDL (CREATE TABLE),
+  the connection pool, and every read/write function.
+
+HOW IT FITS IN THE SYSTEM:
+  - unified_app.py imports this module and calls all db.* functions for
+    Oracle Intent API endpoints.
+  - enrichment_worker.py (and apollo_enrichment.py) call company_contacts
+    write functions after enrichment completes.
+  - scan_worker.py calls upsert_company() and upsert_signal() during scraping.
+
+KEY CLASSES/FUNCTIONS:
+  db_cursor(commit)         — context manager that borrows from the pool,
+                              auto-commits or rolls back, then returns connection
+  init_db()                 — creates tables if missing; called at startup
+  upsert_company()          — inserts or updates a company row; maintains
+                              denormalised signal_count via UPDATE after insert
+  upsert_signal()           — inserts a signal and increments company.signal_count
+  get_all_companies_with_signals() — main read for the companies tab
+  upsert_company_contact()  — inserts/updates a contact; increments contact_count
+  get_contacts_for_export() — returns contacts joined to company for CSV export
+
+DEPENDENCIES:
+  - psycopg2 (threaded connection pool, DictCursor)
+  - Inoapps-Data-DB PostgreSQL on 10.0.0.149:5432
+  - ORACLE_PG_DSN env var (set by unified_app.py at startup)
+
+IMPORTANT:
+  - Uses ThreadedConnectionPool(max=10) — never open more than 10 concurrent
+    connections or the pool will block.
+  - ORACLE_PG_DSN env var takes priority over DB_* vars so unified_app.py
+    can cleanly separate oracle DB from the enrichment DB connection strings.
+  - denormalized signal_count and contact_count on the companies table are
+    maintained on every insert via UPDATE — never query COUNT(*) in hot paths.
 """
 
 import os
@@ -22,7 +58,10 @@ import psycopg2.pool
 
 logger = get_logger(__name__)
 
-# connection pool
+# ═══════════════════ CONNECTION POOL ═══════════════════════════════════════════
+# ThreadedConnectionPool(max=10) — safe for up to 10 concurrent API request threads.
+# The pool is created lazily on first use and held open for the process lifetime.
+# ORACLE_PG_DSN env var takes priority over DB_* vars (set by unified_app.py at boot).
 _pool: Optional[psycopg2.pool.ThreadedConnectionPool] = None
 _pool_lock = threading.Lock()
 
@@ -64,7 +103,10 @@ def close_pool():
             _pool.closeall()
             _pool = None
 
-# ddl
+# ═══════════════════ DDL — TABLE DEFINITIONS ════════════════════════════════════
+# All tables for the Oracle Intent Engine are created here via CREATE TABLE IF NOT EXISTS.
+# init_db() runs these DDL statements at startup — safe to run repeatedly.
+# Changing column types requires a separate migration script; never alter these in-place.
 _DDL = [
     """
     CREATE TABLE IF NOT EXISTS companies (
@@ -514,7 +556,22 @@ CREATE TABLE IF NOT EXISTS review_queue (
 # core context manager
 @contextmanager
 def db_cursor(commit: bool = True):
-    """Check out a pooled connection, yield a RealDictCursor, then return it."""
+    """
+    Context manager: borrow a connection from the pool, yield a RealDictCursor,
+    then commit (or rollback on exception) and return the connection to the pool.
+
+    Args:
+        commit: If True (default), commit after the with block exits cleanly.
+                Pass False for read-only queries to skip the unnecessary commit.
+
+    Usage:
+        with db_cursor() as cur:
+            cur.execute("INSERT INTO companies (name) VALUES (%s)", ("Acme",))
+        # auto-committed here
+
+    Raises:
+        psycopg2.Error: Re-raised after rollback if the query fails.
+    """
     pool = _get_pool()
     conn = pool.getconn()
     try:
@@ -529,8 +586,13 @@ def db_cursor(commit: bool = True):
     finally:
         pool.putconn(conn)
 
-# schema init
+# ═══════════════════ SCHEMA INIT ════════════════════════════════════════════════
 def init_db():
+    """
+    Create all tables if they do not exist, then run one-time backfills.
+    Safe to call on every startup — uses CREATE TABLE IF NOT EXISTS.
+    Called by unified_app.py lifespan() at server boot.
+    """
     with db_cursor() as cur:
         for stmt in _DDL:
             cur.execute(stmt)
@@ -610,6 +672,16 @@ def _backfill_signal_counts() -> None:
 def upsert_company(name: str, domain: str = None, industry: str = None,
                    size: str = None, location: str = None, website: str = None,
                    first_scan_run_id: int = None) -> int:
+    """
+    Insert a new company or update an existing one (matched on unique name).
+
+    Uses COALESCE on all nullable fields so existing non-NULL values are never
+    overwritten by a new NULL from a later scan run.  Only the first scan's data
+    wins for each field; subsequent scans only update last_updated.
+
+    Returns:
+        The company's database ID (whether newly inserted or existing).
+    """
     with db_cursor() as cur:
         cur.execute("""
             INSERT INTO companies (name, domain, industry, size, location, website,
@@ -665,7 +737,7 @@ def reset_all_data():
     logger.info("Oracle intent data reset")
     return {"companies": 0, "signals": 0}
 
-# signal operations
+# ═══════════════════ SIGNAL OPERATIONS ══════════════════════════════════════════
 def insert_signal(company_id: int, oracle_product: str, phase: str, source: str,
                   signal_type: str, job_title: str, evidence: str,
                   url: str, confidence: float, scan_run_id: int = None) -> int:
@@ -1118,7 +1190,9 @@ def test_connection() -> bool:
         logger.error(f"Connection test failed: {e}")
         return False
 
-# master_leads operations
+# ═══════════════════ CONTACTS_MASTER — READ-ONLY SALESFORCE EXPORT ══════════════
+# contacts_master is populated by Salesforce exports and NEVER written to by this engine.
+# All functions here are read-only.  upsert_master_leads() is a no-op for API compat.
 def _norm_company(name: str) -> str:
     """Lowercase + strip common legal suffixes for consistent company matching."""
     import re
@@ -1131,7 +1205,12 @@ def _norm_company(name: str) -> str:
     return re.sub(r"\s+", " ", n).strip()
 
 def upsert_master_leads(records: list) -> int:
-    """contacts_master is a read-only Salesforce export — writes are no-ops."""
+    """
+    NO-OP — contacts_master is a read-only Salesforce export.
+
+    This function exists for API compatibility with pg_master.py's PGMasterStore,
+    which is also a no-op.  Never writes to contacts_master.  Returns 0 always.
+    """
     return 0
 
 def get_master_leads_by_email(emails: list) -> dict:

@@ -1,3 +1,34 @@
+"""
+config.py  (oracle_intent_engine)
+==================================
+Central configuration loader for the Oracle Intent Engine.
+
+PURPOSE:
+  Single source of truth for all API keys, database connection details, rate-limit
+  settings, and the master list of search queries that drive the job-board scrapers.
+  All secrets come from oracle_intent_engine/.env — never hardcoded.
+
+HOW IT FITS IN THE SYSTEM:
+  Imported at the top of almost every oracle_intent_engine module.
+  unified_app.py loads the .env file BEFORE importing this module, so any env vars
+  set by unified_app.py (e.g. ORACLE_PG_DSN) are already visible when config
+  attributes are first read.
+
+KEY ATTRIBUTES:
+  DB_*                  — PostgreSQL connection details for Inoapps-Data-DB
+  APOLLO_API_KEY        — used by apollo_enrichment.py (X-Api-Key header, NOT Bearer)
+  ZEROBOUNCE_API_KEY    — used by apollo_enrichment.py for email validation
+  ORACLE_SEARCH_QUERIES — 100+ job-board queries that drive the scanner
+  JDE_MANUFACTURING_QUERIES — extra queries for the JDE Manufacturing Focus mode
+  NEWS_QUERIES          — queries consumed by news_signal.py
+  MAX_PAGES             — per-source page cap (prevents runaway scraping costs)
+  SCAN_DELAY_MIN/MAX    — seconds to sleep between HTTP requests (politeness tier)
+
+DEPENDENCIES:
+  - python-dotenv (reads oracle_intent_engine/.env)
+  - No DB or API calls occur at import time
+"""
+
 import os
 from dotenv import load_dotenv
 

@@ -1,8 +1,53 @@
 """
+phase_classifier.py
+====================
 Classifies a raw signal (job posting, news article) into:
-  - oracle_product  : which Oracle product is involved
-  - phase           : where the company is in its Oracle journey
-  - confidence      : 0.0 – 1.0
+  oracle_product — which Oracle product family is involved
+  phase          — where the company is in its Oracle journey
+  confidence     — 0.0 to 1.0 (how certain we are about the classification)
+
+PURPOSE:
+  Transforms unstructured text (job title + description) into structured
+  metadata that drives the priority scoring, filtering, and export.
+  Also exports PHASE_LABELS and PHASE_COLORS used by unified_app.py for the
+  React frontend badges and filter dropdowns.
+
+HOW IT FITS IN THE SYSTEM:
+  Called by scan_worker.py for every raw signal returned by a scraper:
+    1. scraper.fetch()   → raw dict with job_title + description
+    2. classify()        → adds oracle_products[], phases[], confidence
+    3. database.upsert_signal() → stored in oracle_signals table
+
+KEY FUNCTIONS:
+  detect_oracle_product(text)  — returns (product_name, confidence) or (None, 0)
+  detect_phase(text)           — returns (phase_name, confidence) or (None, 0)
+  classify(title, description) — combines both; returns full classification dict
+
+CONFIDENCE SCORING:
+  Product confidence: min(keyword_match_count / 3.0, 1.0)
+    — 3+ keyword matches = full confidence (1.0)
+    — 1 match = 0.33 (single keyword, low confidence)
+  Phase confidence: weighted keyword counts
+    — Title keywords score 1.5x vs description keywords (title is more reliable)
+    — Normalized by expected match count for the phase
+  Combined: (product_conf + phase_conf) / 2
+
+  Per signals.md rules:
+    Never set confidence > 0.75 if you cannot confirm Oracle product by string match.
+    0.90 = explicit Oracle product + company in same post (set externally, not here)
+    0.80 = Oracle product in job title
+    0.75 = strong Oracle indicator in description
+    0.60 = generic Oracle context
+    0.50 = weak signal
+    <0.40 = not stored (filtered before DB insert)
+
+PHASE DEFINITIONS:
+  researching   — early awareness stage (Oracle mentioned in passing)
+  evaluating    — actively comparing vendors (RFP, selection keywords)
+  budgeting     — budget approval cycle (capex, approvals, business case)
+  hiring        — actively hiring Oracle staff = strongest implementation signal
+  implementing  — go-live underway (highest confidence, highest lead score)
+  post_live     — live on Oracle (support/admin roles = expansion opportunity)
 """
 
 from src.utils import clean_text

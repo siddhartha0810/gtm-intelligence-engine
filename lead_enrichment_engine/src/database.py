@@ -1,17 +1,49 @@
 """
-database.py
-===========
+database.py  (lead_enrichment_engine)
+=======================================
 PostgreSQL-backed persistent knowledge store for the lead enrichment pipeline.
-All data lives in the Inoapps-Data-DB PostgreSQL database.
 
-Tables (created by oracle_intent_engine/src/database.py DDL):
-  domain_knowledge  — company -> email domain map, persists across runs
-  email_patterns    — domain -> naming-pattern frequency table
-  enrichment_cache  — Apollo/ZeroBounce short-term cache (TTL 30d / 7d)
+PURPOSE:
+  Caches expensive API results (Apollo, ZeroBounce) and stores learned domain
+  knowledge between runs so the same company domain is never resolved twice and
+  the same email is never validated twice.
 
-contacts_master is a read-only Salesforce CRM export (no writes).
+HOW IT FITS IN THE SYSTEM:
+  Called by pipeline.py via init_db() at startup.
+  Consumed by orchestrator.py (enrichment_cache read/write) and
+  domain_resolver.py (domain_knowledge read/write).
 
-API is identical to the old SQLite version — callers unchanged.
+  IMPORTANT: This module does NOT own the DDL for these tables.
+  The DDL lives in oracle_intent_engine/src/database.py._DDL which runs
+  at startup when unified_app.py calls oracle_db.init_db().  Both engines
+  share the same Inoapps-Data-DB PostgreSQL database.
+
+KEY TABLES:
+  domain_knowledge  — company_name → email_domain.  Persists across ALL runs.
+                      Never expires: a correct domain stays correct indefinitely.
+  email_patterns    — domain → [{pattern, count}].  Learned from contacts_master
+                      (COMPANY_FORMAT_ANALYSIS.xlsx source) — tells the pattern
+                      engine what naming convention a company uses (flast, first.last).
+  enrichment_cache  — stores Apollo + ZeroBounce results with TTL:
+                      Apollo: 30 days (APOLLO_TTL_DAYS)
+                      ZeroBounce: 7 days (ZB_TTL_DAYS)
+                      Checked by orchestrator.py before ANY external API call.
+
+KEY CLASSES/FUNCTIONS:
+  PipelineDB                  — main class, thread-safe via ThreadedConnectionPool
+  PipelineDB.get_domain()     — returns cached domain for a company name
+  PipelineDB.save_domain()    — stores a resolved domain
+  PipelineDB.get_cached_enrichment() — returns cached Apollo/ZB result if not expired
+  PipelineDB.save_enrichment()       — stores a vendor result with timestamp
+  PipelineDB.get_email_patterns()    — returns known naming patterns for a domain
+  init_db()                   — creates the singleton PipelineDB; accepts a path
+                                 arg for backwards-compat but ignores it (was SQLite)
+  get_db()                    — returns the active singleton
+
+MIGRATION NOTE:
+  This module was previously SQLite-backed (pipeline.db).
+  The init_db(path) parameter is kept for backwards compatibility but is ignored.
+  The API surface is identical so all callers work unchanged.
 """
 
 import os

@@ -1,17 +1,42 @@
 """
-Lead Priority Scorer — produces a 0-100 score per company.
+lead_scorer.py
+==============
+Produces a 0-100 priority score for each company detected during a scan.
 
-Score breakdown (total = 100):
-  Phase weight     (0-40)  What stage of Oracle adoption?
-  Signal tier      (0-20)  Are they actively posting Oracle jobs on job boards?
-  Source diversity (0-15)  Do multiple independent sources agree?
-  Signal volume    (0-10)  How many corroborating signals exist?
-  Confidence       (0-15)  How strong is the aggregate signal quality?
+PURPOSE:
+  Lets the sales team triage companies by buying likelihood without manual review.
+  A company with score HOT (70+) should be called this week.  COLD (<45) can
+  be monitored for future signal volume before investing outreach effort.
 
-Labels:
+HOW IT FITS IN THE SYSTEM:
+  Called by scan_worker.py AFTER all signals are collected for a run.
+  annotate() mutates the company dict in-place, adding:
+    priority_score  (int 0-100)
+    priority_label  ("HOT" / "WARM" / "COLD")
+    priority_color  (hex colour for the React UI badge)
+
+  unified_app.py reads these fields from the companies table and sends them
+  to the frontend for display in the Oracle Intent tab.
+
+SCORE BREAKDOWN (total = 100 points):
+  Phase weight     (0-40): What stage of the Oracle adoption cycle?
+    implementing=40, hiring=30, budgeting=25, evaluating=20,
+    post_live=15, researching=10
+  Signal tier      (0-20): Are they posting Oracle jobs on job boards?
+    _TIER1 (indeed, linkedin, google_jobs) = 20 pts — active hiring intent
+    _TIER2 (news) = 10 pts — public announcement
+    _TIER3 (oracle_website) = 5 pts — confirmed Oracle customer
+  Source diversity (0-15): Do independent sources agree?
+    3+ sources = 15, 2 sources = 8, 1 source = 0
+  Signal volume    (0-10): How many corroborating signals exist?
+    10+ = 10, 5+ = 7, 3+ = 4, 1+ = 1
+  Confidence       (0-15): Aggregate signal confidence quality.
+    conf * 15 (confidence ranges from 0.0 to 1.0)
+
+LABELS:
   HOT  70-100  → call this week
-  WARM 45-69   → nurture / sequence
-  COLD  0-44   → monitor only
+  WARM 45-69   → nurture / add to sequence
+  COLD  0-44   → monitor only, revisit next scan
 """
 
 # Phase contribution — higher = deeper in buying cycle

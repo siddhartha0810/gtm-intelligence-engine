@@ -1,22 +1,57 @@
 """
 apollo_enrichment.py
 ====================
-Post-scan contact enrichment pipeline for Oracle Intent Engine.
+Post-scan contact enrichment pipeline for the Oracle Intent Engine.
+Called by enrichment_worker.py as a child subprocess after each scan.
 
-Workflow (per company):
-  1. Check company_contacts — if contacts already exist, skip (free)
-  2. Apollo people search — filter by Oracle/JDE-relevant titles
-  3. Reveal locked emails via Apollo people/match endpoint
-  4. ZeroBounce batch email validation (vendor emails)
-  5. Email pattern prediction — guess emails for contacts Apollo couldn't
-     supply an email for, using naming patterns learned from same-domain
-     contacts that already have validated emails (e.g. jsmith@acme.com,
-     john.smith@acme.com).  Falls back to 3 global patterns when no
-     domain evidence exists.
-  6. ZeroBounce validate predicted emails
-  7. Store validated contacts in company_contacts table
+PURPOSE:
+  For every company detected during a scan, find the decision-makers
+  (CIOs, ERP managers, IT directors) with validated email addresses so
+  the sales team can reach them.  Prioritises free data sources before
+  spending Apollo or ZeroBounce credits.
 
-Called by enrichment_worker.py as a subprocess.
+HOW IT FITS IN THE SYSTEM:
+  scan_worker.py scrapes job boards → writes companies to DB
+       ↓
+  enrichment_worker.py spawns this module
+       ↓
+  apollo_enrichment.py:
+    1. contacts_master lookup (Salesforce CRM export — free, no API cost)
+    2. Apollo people search  (costs credits — only if contacts_master miss)
+    3. ZeroBounce validation (costs 1 credit/email)
+    4. Email pattern prediction for contacts still missing emails
+    5. ZeroBounce validate predicted emails
+    6. Writes validated contacts → company_contacts table
+
+KEY CLASSES/FUNCTIONS:
+  enrich_companies()        — main entry point, loops over all companies
+  _apollo_search()          — two-pass Apollo search (targeted → broad)
+  _zb_batch_validate()      — validates a list of emails via ZeroBounce
+  _predict_and_fill_emails() — learns email naming patterns, predicts + validates
+  _detect_email_pattern()   — maps (first, last, email) → pattern name
+  _build_predicted_email()  — applies a pattern to produce a candidate email
+
+DEPENDENCIES:
+  - Apollo API  : X-Api-Key header (NOT Authorization: Bearer)
+  - ZeroBounce  : batch API, 1 credit per email validated
+  - oracle_intent_engine/src/database.py  : reads/writes company_contacts
+  - contacts_master table : READ-ONLY Salesforce CRM export
+  - email_patterns table  : domain → naming pattern (from COMPANY_FORMAT_ANALYSIS)
+
+DOMAIN KNOWLEDGE:
+  Apollo confidence scores (oracle_signals.confidence):
+    0.90 — explicit Oracle product + company name in same job post
+    0.80 — Oracle product name in job title
+    0.75 — strong Oracle indicator in job description
+    0.60 — generic Oracle context (could be staffing)
+    0.50 — weak signal, Oracle mentioned in passing
+    <0.40 — not stored at all
+  ZeroBounce status:
+    valid       — safe to contact
+    invalid     — do not send (mailbox does not exist)
+    catch-all   — server accepts all mail (may or may not be real)
+    spamtrap    — will damage sender reputation, never send
+    do_not_mail — role address or disposable domain
 """
 
 import json

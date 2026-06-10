@@ -1,15 +1,52 @@
 """
 pg_master.py
 ============
-Read-only interface to contacts_master (Salesforce CRM export).
+Read-only interface to contacts_master — the Salesforce CRM export table.
 
-contacts_master is a pre-existing table in Inoapps-Data-DB — it is
-populated by Salesforce exports and is never written to by this pipeline.
+PURPOSE:
+  Provides free email + LinkedIn data before spending Apollo or ZeroBounce credits.
+  contacts_master is a pre-existing table in Inoapps-Data-DB; it is populated by
+  Salesforce exports and is NEVER written to by any pipeline code.
 
-All write operations (upsert_master_leads) are no-ops.
-All read operations query contacts_master with correct Salesforce column names.
+HOW IT FITS IN THE SYSTEM:
+  orchestrator.py calls get_pg_master() then runs three lookup methods in order:
+    1. find_contacts_by_sf_id()         — exact Salesforce contact ID match
+    2. find_contacts_by_email()         — exact email match
+    3. find_contacts_by_name_company()  — fuzzy match on (firstname, lastname, company)
 
-Column mapping (Salesforce → PostgreSQL lowercase):
+  zerobounce_client.py calls get_validation_by_email() to restore already-known
+  validation statuses without spending ZeroBounce credits.
+
+  All callers must accept that upsert_master_leads() is a no-op — contacts_master
+  is read-only from this pipeline's perspective.
+
+KEY CLASSES/FUNCTIONS:
+  PGMasterStore              — main class wrapping contacts_master queries
+  PGMasterStore.find_contacts_by_name_company() — most-used lookup path;
+                               normalises company name before matching
+  PGMasterStore.get_validation_by_email()        — restores ZeroBounce status
+                               without API call (free)
+  PGMasterStore.master_stats()                   — total / with_email / valid counts
+  get_pg_master()            — module-level singleton accessor
+  init_pg_master()           — called once from pipeline.py at startup
+
+CRITICAL EMAIL FIELD LOGIC:
+  Salesforce stores two email fields:
+    email           — raw email (may be unverified)
+    validated_email — ZeroBounce-confirmed email (preferred)
+  All selects use: COALESCE(validated_email, email) AS email
+  This ensures we always use the best available email.
+
+  ZB_Valid_Email is a Yes/No TEXT flag, NOT an email address.
+  Filter: UPPER(TRIM(zb_valid_email)) = 'YES'
+  This is the canonical "this contact is safe to email" check.
+
+LINKEDIN FIELD LOGIC:
+  linkedin_url__c        — Salesforce custom field (older records)
+  linkedin_url_enriched  — added by a prior enrichment run (newer records)
+  All selects use: COALESCE(linkedin_url__c, linkedin_url_enriched) AS linkedin_url
+
+COLUMN MAPPING (Salesforce field → PostgreSQL lowercase):
   FirstName               → firstname
   LastName                → lastname
   Title                   → title

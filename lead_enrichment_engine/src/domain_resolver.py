@@ -3,21 +3,63 @@ domain_resolver.py
 ==================
 STAGE 2 — Resolve Company Domains
 
-Fills in the "domain" column for leads that don't have one.
-Knowing the domain (e.g. "aarp.org") dramatically improves Apollo's
-match rate because Apollo can search within a specific company's email space.
+PURPOSE:
+  Fills in the "domain" column for leads that don't have one.
+  Knowing the domain (e.g. "aarp.org") dramatically improves Apollo's match
+  rate because Apollo can constrain its people search to a specific company's
+  email namespace rather than guessing across millions of contacts.
+  Domain resolution is free — run it before spending any Apollo credits.
 
-Resolution order for each company (stops at the first hit):
-  1. Already on the row  — input CSV had a domain column
-  2. Manual lookup CSV   — input/domain_lookup.csv (your own curated list)
-  3. Clearbit Autocomplete — free, no API key required
-  4. Wikidata SPARQL      — free, no API key required
-  5. DuckDuckGo Instant Answer — free, no API key required
+HOW IT FITS IN THE SYSTEM:
+  pipeline.py calls resolve_domains(df) between Stage 1 (clean) and Stage 3
+  (vendor enrichment).  The enriched DataFrame with domains filled is passed
+  directly to orchestrator.py.
 
-All newly resolved domains are written back to domain_lookup.csv so
-subsequent runs skip the API calls entirely (much faster on re-runs).
+  All resolved domains are persisted to:
+    domain_knowledge table (Inoapps-Data-DB) — primary cache
+    input/domain_lookup.csv               — human-readable backup / manual override
 
-Parallelism: up to 8 companies are resolved simultaneously using threads.
+  On re-runs, the DB/CSV cache is checked first so no API calls are made for
+  companies that were resolved in a prior run.
+
+RESOLUTION ORDER (stops at first valid hit):
+  Step 1: Row value               — input CSV already had a domain column
+  Step 2: DB/CSV lookup           — domain_knowledge table or domain_lookup.csv
+  Step 3: MX validation           — if domain found in steps 1-2, confirm it
+                                    has a working MX record before trusting it
+  Step 4: Apollo org search       — APOLLO_ORG_URL (needs APOLLO_API_KEY)
+  Step 5: Clearbit Autocomplete   — free, no key needed
+  Step 6: Wikidata SPARQL         — free, no key needed
+  Step 7: DuckDuckGo Instant      — free, no key needed
+  Step 8: Scrape mailto links     — HTTP GET homepage, look for mailto: in HTML
+
+MX VALIDATION:
+  After finding a domain, dns.resolver.resolve(domain, 'MX') confirms it
+  is a real email-receiving domain.
+  Cloud provider MX records (Google Workspace, Microsoft 365, etc.) are
+  detected via _GENERIC_MX set and treated as valid.
+  Third-party relay providers (SendGrid, Mailgun) are rejected — those
+  domains cannot be used for email pattern prediction.
+
+SELF-HEALING:
+  _invalidate_suspect_domains() is called by pipeline.py after Stage 6.
+  Any domain where ALL ZeroBounce-validated predictions failed is evicted
+  from the domain cache — it was probably the wrong domain.
+
+PARALLELISM:
+  MAX_WORKERS=8 threads resolve up to 8 companies simultaneously.
+  Each thread makes its own HTTP requests (no shared state except the DB pool).
+  Results are merged back into the DataFrame after all futures complete.
+
+KEY FUNCTIONS:
+  resolve_domains(df)        — main entry point; returns DataFrame with domains filled
+  _resolve_one(company_name) — resolves a single company; called per thread
+  _clearbit(name)            — Clearbit Autocomplete API
+  _wikidata(name)            — Wikidata SPARQL query
+  _duckduckgo(name)          — DuckDuckGo Instant Answer API
+  _apollo_org(name)          — Apollo company search (costs credits — use last)
+  _validate_mx(domain)       — confirms domain has working MX record
+  _query_variants(name)      — generates cleaned name variants for search
 """
 
 import re

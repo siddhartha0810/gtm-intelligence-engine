@@ -1,12 +1,44 @@
 """
-News signal scraper — three tiers:
-  1. NewsAPI (if NEWSAPI_KEY set)
-  2. Bing News Search API (if BING_NEWS_KEY set)
-  3. Google News RSS fallback (always available)
+news_signal.py
+==============
+News signal scraper — detects companies announcing Oracle ERP implementations
+in press releases, trade publications, and technology news.
 
-Company name extraction:
-  Primary  — Ollama LLM (batch, 10 articles/call) when available
-  Fallback — Precise regex patterns requiring Oracle + company + action verb
+PURPOSE:
+  News signals differ from job-board signals: they indicate a company has ALREADY
+  decided to implement Oracle (not just hiring for it).  They typically produce
+  signals with phase="implementing" or phase="evaluating" and confidence 0.50-0.75.
+
+HOW IT FITS IN THE SYSTEM:
+  Registered in SIGNAL_REGISTRY in scan_worker.py alongside job-board scrapers.
+  news_signal.py produces lower-confidence signals than IndeedSignal (0.60 vs 0.80)
+  because extracting the exact Oracle product and the exact company name from
+  article text is harder than reading a structured job-post title.
+
+ARTICLE COLLECTION (three tiers, in priority order):
+  Tier 1: NewsAPI — paid, structured JSON, best quality.
+           Requires NEWSAPI_KEY in .env.  100 requests/day free.
+  Tier 2: Bing News Search API — paid Microsoft API, broad coverage.
+           Requires BING_NEWS_KEY in .env.
+  Tier 3: Google News RSS — free, always available, ~10 articles/query.
+           Uses feedparser; no key needed.
+
+COMPANY NAME EXTRACTION (two methods):
+  Primary:  Ollama LLM batch extraction — sends 10 article titles/descriptions
+            to a local Llama model and asks it to extract company names.
+            Requires Ollama running at OLLAMA_URL (default: localhost:11434).
+            Much more accurate than regex for real-world article phrasing.
+  Fallback: Regex patterns that require structural patterns like:
+              "[Company] goes live with Oracle Fusion"
+              "[Company] selects Oracle Cloud ERP"
+            Regex is strict on purpose — avoids returning Oracle itself or
+            consulting firms as "companies that selected Oracle".
+
+CONFIDENCE NOTE:
+  News signals are assigned confidence 0.50-0.75 in phase_classifier.py.
+  Never above 0.75 because we cannot always confirm the exact Oracle product
+  name from article text (requirement per signals.md: confidence > 0.75 only
+  if Oracle product name confirmed by string match).
 """
 
 import re

@@ -1,10 +1,48 @@
 """
 unified_app.py
 ==============
-Single FastAPI server for all three tabs:
-  • Oracle Intent  (scan, companies, signals, contacts, export)
-  • Lead Enrichment (upload, pipeline, results, download)
-  • Prospect       (DB search, Apollo people search, streaming)
+The single FastAPI server that hosts the entire DATA TOOL.
+All three product tabs (Oracle Intent, Lead Enrichment, Prospect) are served
+from this one process so the React SPA has a single origin to call.
+
+PURPOSE:
+  Entry point for the entire application.  Manages the lifecycle of two
+  long-running child subprocesses (scan_worker.py and enrichment_worker.py),
+  exposes all REST API endpoints consumed by the React frontend, and mounts
+  the built React SPA on the root path so the browser gets both API and UI
+  from port 8000.
+
+HOW IT FITS IN THE SYSTEM:
+  ┌─────────────────────────────────┐
+  │  Browser → :8000                │
+  │    /api/*  → FastAPI routes     │
+  │    /*      → React SPA          │
+  └─────────────────────────────────┘
+  Two subprocesses are spawned at startup:
+    scan_worker.py      — runs the Oracle Intent scanner (signal scraping)
+    enrichment_worker.py — runs the contact enrichment pipeline
+
+  Status files on disk track subprocess progress because the children
+  write JSON to _scan_status.json / _enrich_status.json which the API
+  reads and streams back to the browser over SSE.
+
+KEY CLASSES/FUNCTIONS:
+  lifespan()                — FastAPI startup/shutdown lifecycle handler
+  _start_scan_worker()      — spawns scan_worker.py as a subprocess
+  _start_enrich_worker()    — spawns enrichment_worker.py as a subprocess
+  _stream_job_output()      — generator that yields SSE lines from subprocess stdout
+  POST /api/scan/start      — begins a new Oracle Intent scan
+  POST /api/enrich/start    — begins a new contact enrichment run
+  GET  /api/companies       — returns all companies with signal counts
+  GET  /api/contacts        — returns all enriched contacts
+  POST /api/auth/login      — JWT auth login
+  GET  /api/auth/me         — returns current user from JWT
+
+DEPENDENCIES:
+  - oracle_intent_engine/src/  (imported directly via sys.path)
+  - lead_enrichment_engine/    (invoked as subprocess, never imported)
+  - PostgreSQL on 10.0.0.149:5432 (Inoapps-Data-DB)
+  - .env files in each engine folder (loaded at startup via python-dotenv)
 
 Run from DATA TOOL root:
   uvicorn unified_app:app --reload --port 8000
@@ -108,7 +146,21 @@ PG_OUTPUT_TABLE          = os.getenv("PG_OUTPUT_TABLE", "enriched_leads").strip(
 # application lifespan
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Initialise resources on startup; clean up on shutdown."""
+    """
+    FastAPI lifespan handler — runs once at startup and once at shutdown.
+
+    Startup tasks:
+      1. oracle_db.init_db()       — CREATE TABLE IF NOT EXISTS (safe to re-run)
+      2. tp_mod.seed_default_profile() — ensure at least one tech profile exists
+      3. oracle_db.seed_engine_configs() — populate default engine config rows
+      4. Create required input/ and output/ directories if they don't exist
+
+    All startup steps are wrapped in try/except so a DB hiccup doesn't prevent
+    the server from booting — it logs a warning and continues.
+
+    The `yield` separates startup code (above) from shutdown code (below).
+    Shutdown: psycopg2 pool connections are reclaimed by GC automatically.
+    """
     _startup_log = logging.getLogger("unified_app.startup")
     try:
         oracle_db.init_db()
@@ -481,18 +533,14 @@ def _launch_subprocess(cmd: list, cwd: Path, env: dict, job_id: str, q: queue.Qu
     threading.Thread(target=_read, args=(proc, q), daemon=True).start()
     return proc
 
-# ---
-# ROOT — serve React app (production) or redirect to Vite (dev)
-# ---
+# ═══ ROOT — serve React app (production) or redirect to Vite (dev) ════════════
 def _react_index() -> HTMLResponse:
     """Return the React index.html, falling back to old unified.html."""
     if REACT_DIST.exists():
         return HTMLResponse((REACT_DIST / "index.html").read_text(encoding="utf-8"))
     return HTMLResponse((STATIC_DIR / "unified.html").read_text(encoding="utf-8"))
 
-# ---
-# SHARED: SSE STREAM + STATUS + CANCEL
-# ---
+# ═══ SHARED: SSE STREAM + STATUS + CANCEL ═════════════════════════════════════
 @app.get("/stream/{job_id}")
 async def stream_output(job_id: str, current_user: dict = Depends(oracle_auth.require_user)):
     if job_id not in _jobs:
@@ -537,9 +585,7 @@ async def cancel_job(job_id: str, current_user: dict = Depends(oracle_auth.requi
         _jobs[job_id]["status"] = "cancelled"
     return {"status": "cancelled"}
 
-# ---
-# ORACLE INTENT — scan control
-# ---
+# ═══ ORACLE INTENT — scan control ═════════════════════════════════════════════
 @app.get("/oracle/config")
 async def oracle_config(current_user: dict = Depends(oracle_auth.require_user)):
     try:
@@ -617,9 +663,7 @@ async def purge_scan_companies(
     deleted = oracle_db.purge_scan_companies(run_id)
     return {"deleted": deleted, "run_id": run_id, "message": f"Removed {deleted} companies from scan run #{run_id}."}
 
-# ---
-# ORACLE INTENT — data / companies
-# ---
+# ═══ ORACLE INTENT — data / companies ═════════════════════════════════════════
 def _annotate_and_sort(companies: list) -> list:
     from src import lead_scorer
     for c in companies:
@@ -894,9 +938,7 @@ async def api_bulk_enrich(request: Request, current_user: dict = Depends(oracle_
 async def api_bulk_enrich_progress(current_user: dict = Depends(oracle_auth.require_user)):
     return dict(_bulk_enrich_state)
 
-# ---
-# ORACLE INTENT — admin
-# ---
+# ═══ ORACLE INTENT — admin ════════════════════════════════════════════════════
 @app.post("/admin/purge-invalid")
 async def purge_invalid(current_user: dict = Depends(oracle_auth.require_admin)):
     count = oracle_db.purge_invalid_companies(is_valid_company_name)
@@ -909,9 +951,7 @@ async def reset_all(current_user: dict = Depends(oracle_auth.require_admin)):
     log_audit(current_user, "reset_all", "system", "")
     return {"message": "All data cleared. Ready for a fresh scan."}
 
-# ---
-# ORACLE INTENT — export
-# ---
+# ═══ ORACLE INTENT — export ═══════════════════════════════════════════════════
 def _companies_to_export_format(db_rows) -> list:
     result = []
     for row in db_rows:
@@ -966,9 +1006,7 @@ async def export_csv_all(current_user: dict = Depends(oracle_auth.require_analys
     path = oracle_exporter.export_csv(_companies_to_export_format(companies), filename=filename)
     return FileResponse(path, filename=os.path.basename(path), media_type="text/csv")
 
-# ---
-# LEAD ENRICHMENT — config / upload / run / results / download
-# ---
+# ═══ LEAD ENRICHMENT — config / upload / run / results / download ═════════════
 @app.get("/config")
 async def get_config(current_user: dict = Depends(oracle_auth.require_user)):
     return {
@@ -1218,9 +1256,7 @@ async def download_file(filename: str, current_user: dict = Depends(oracle_auth.
         return JSONResponse({"error": "File not ready — run the pipeline first"}, status_code=404)
     return FileResponse(path, filename=filename, media_type="text/csv")
 
-# ---
-# PROSPECT — estimate / run / db-search / status / results / download
-# ---
+# ═══ PROSPECT — estimate / run / db-search / status / results / download ══════
 # In-memory store for the last prospect result set (single-user tool)
 _prospect_results: list = []
 _prospect_stats: dict   = {}
@@ -1466,9 +1502,7 @@ async def prospect_download_excel(current_user: dict = Depends(oracle_auth.requi
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
-# ---
-# DASHBOARD — combined stats for the React frontend
-# ---
+# ═══ DASHBOARD — combined stats for the React frontend ════════════════════════
 # dashboard ttl cache — 60 s so 5-s polling never hits the db
 _dashboard_cache: Dict[str, object] = {}
 _DASHBOARD_TTL = 60  # seconds
@@ -1612,9 +1646,7 @@ async def api_contacts(
         logger.exception("Unhandled error in GET /api/contacts")
         return JSONResponse({"error": str(e)}, status_code=500)
 
-# ---
-# STARTUP
-# ---
+# ═══ STARTUP ══════════════════════════════════════════════════════════════════
 # SIGNALS  /  REVIEW QUEUE  /  REPORTING
 # ---
 @app.get("/api/signals")
@@ -1886,9 +1918,7 @@ async def enrich_stats(current_user: dict = Depends(oracle_auth.require_user)):
         return {"error": str(e)}
 
 # ---
-# ---
-# AUTH / RBAC
-# ---
+# ═══ AUTH / RBAC ══════════════════════════════════════════════════════════════
 @app.post("/api/auth/register")
 @limiter.limit("10/minute")
 async def auth_register(request: Request):
@@ -1944,9 +1974,7 @@ async def auth_change_password(request: Request,
     log_audit(current_user, "change_password", "user", str(current_user["id"]))
     return {"ok": True}
 
-# ---
-# USER MANAGEMENT  (admin / owner only)
-# ---
+# ═══ USER MANAGEMENT  (admin / owner only) ════════════════════════════════════
 @app.get("/api/users")
 async def list_users(current_user: dict = Depends(oracle_auth.require_admin)):
     return oracle_auth.list_users()
@@ -1968,9 +1996,7 @@ async def deactivate_user(user_id: int,
     log_audit(current_user, "deactivate_user", "user", str(user_id))
     return {"ok": True}
 
-# ---
-# AUDIT LOGS
-# ---
+# ═══ AUDIT LOGS ═══════════════════════════════════════════════════════════════
 @app.get("/api/audit-logs")
 async def api_audit_logs(
     entity_type: str = "", entity_id: str = "",
@@ -1980,9 +2006,7 @@ async def api_audit_logs(
 ):
     return get_audit_logs(entity_type, entity_id, user_email, action, limit, offset)
 
-# ---
-# TECHNOLOGY PROFILES
-# ---
+# ═══ TECHNOLOGY PROFILES ══════════════════════════════════════════════════════
 @app.get("/api/technology-profiles")
 async def api_list_profiles(active_only: bool = False, current_user: dict = Depends(oracle_auth.require_user)):
     return tp_mod.list_profiles(active_only=active_only)
@@ -2054,9 +2078,7 @@ async def api_delete_taxonomy(taxonomy_id: int,
     log_audit(current_user, "delete", "product_taxonomy", str(taxonomy_id))
     return {"ok": True}
 
-# ---
-# EVENTS INTELLIGENCE
-# ---
+# ═══ EVENTS INTELLIGENCE ══════════════════════════════════════════════════════
 @app.get("/api/events")
 async def api_list_events(profile_id: int = 0, limit: int = 100, current_user: dict = Depends(oracle_auth.require_user)):
     return events_mod.list_events(profile_id or None, limit)
@@ -2105,9 +2127,7 @@ async def api_remove_attendee(event_id: int, contact_id: int,
     events_mod.remove_attendee(event_id, contact_id)
     return {"ok": True}
 
-# ---
-# MANUFACTURER INTELLIGENCE
-# ---
+# ═══ MANUFACTURER INTELLIGENCE ════════════════════════════════════════════════
 @app.get("/api/manufacturer-contacts")
 async def api_list_mfr(profile_id: int = 0, limit: int = 200, current_user: dict = Depends(oracle_auth.require_user)):
     return mfr_mod.list_manufacturer_contacts(profile_id or None, limit)
@@ -2151,9 +2171,7 @@ async def api_unlink_mfr(contact_id: int, company_id: int,
 async def api_company_mfr(company_id: int, current_user: dict = Depends(oracle_auth.require_user)):
     return mfr_mod.get_company_manufacturer_contacts(company_id)
 
-# ---
-# LIST IMPORT
-# ---
+# ═══ LIST IMPORT ══════════════════════════════════════════════════════════════
 _MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
 
 @app.get("/api/import/fields/{entity_type}")
@@ -2229,9 +2247,7 @@ async def api_delete_template(template_id: int,
     import_mod.delete_template(template_id)
     return {"ok": True}
 
-# ---
-# DATA QUALITY ENGINE
-# ---
+# ═══ DATA QUALITY ENGINE ══════════════════════════════════════════════════════
 @app.post("/api/dqe/check/company")
 async def api_dqe_company(request: Request, current_user: dict = Depends(oracle_auth.require_user)):
     data   = await request.json()
@@ -2255,9 +2271,7 @@ async def api_promote_staged(
     log_audit(current_user, "dqe_promote_staged", "company", "", new_value=result)
     return result
 
-# ---
-# COMPANY STATUS LIFECYCLE
-# ---
+# ═══ COMPANY STATUS LIFECYCLE ═════════════════════════════════════════════════
 ORACLE_PRODUCTS = [
     "JD Edwards", "Oracle Cloud ERP", "Oracle EBS", "Oracle HCM",
     "Oracle SCM", "Oracle EPM", "Oracle CX", "Oracle Database",
@@ -2316,9 +2330,7 @@ async def api_company_status(
               new_value={"status": new_status})
     return dict(row)
 
-# ---
-# HUBSPOT SYNC PULL (two-way)
-# ---
+# ═══ HUBSPOT SYNC PULL (two-way) ══════════════════════════════════════════════
 @app.post("/api/hubspot/sync-pull")
 async def api_hubspot_sync_pull(
     request: Request,
