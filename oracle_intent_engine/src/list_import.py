@@ -9,6 +9,20 @@ Workflow:
   3. User maps columns → HubSpot fields (optionally saves template)
   4. POST /api/import/process runs ETL: parse → validate → DQE → stage
   5. Staged records flow into companies / company_contacts tables with status='staged'
+
+POST-IMPORT COMPLETION (automatic):
+  Company imports — every imported company is queued for the contact-enrichment
+    pipeline (same Oracle/IT/finance title criteria as the lead enrichment
+    workflow). unified_app launches the enrichment subprocess with the
+    imported company ids right after the upload completes.
+
+  Contact imports — each row is completed before saving:
+    • email + LinkedIn  → ZeroBounce validates the email; saved with its status
+                          (hard failures: invalid/spamtrap/abuse are NOT saved)
+    • email only        → Apollo person-match fills the missing LinkedIn URL,
+                          then ZeroBounce validates the email
+    • name only         → Apollo person-match (name + company) finds the email
+                          AND LinkedIn, then ZeroBounce validates
 """
 
 import csv
@@ -300,12 +314,17 @@ def process_import(
     batch_id: int,
     user_id: int = None,
     default_product: str = "",
+    apollo_key: str = "",
+    zerobounce_key: str = "",
 ) -> dict:
     """
     Run the ETL pipeline for an uploaded CSV.
     mappings = { "CSV Column Header": "hs_field_key", ... }
 
-    Returns { success_count, error_count, errors[] }
+    apollo_key / zerobounce_key enable the contact completion flow
+    (LinkedIn/email discovery + email validation) during contact imports.
+
+    Returns { success_count, error_count, errors[], company_names[] }
     """
     if _is_xlsx(content):
         rows = _parse_xlsx_rows(content)
@@ -315,6 +334,7 @@ def process_import(
         rows = list(reader)
 
     success, errors = 0, []
+    company_names: list = []   # companies imported this batch → auto-enrichment
 
     for idx, row in enumerate(rows, start=2):
         # Map CSV columns → HubSpot fields
@@ -329,8 +349,11 @@ def process_import(
                 if default_product and not record.get("target_product"):
                     record["target_product"] = default_product
                 _import_company(record, user_id)
+                if record.get("name"):
+                    company_names.append(record["name"].strip())
             elif entity_type == "contact":
-                _import_contact(record, user_id)
+                _import_contact(record, user_id,
+                                apollo_key=apollo_key, zerobounce_key=zerobounce_key)
             success += 1
         except Exception as e:
             errors.append({"row": idx, "error": str(e), "data": record})
@@ -345,7 +368,8 @@ def process_import(
             (success, len(errors), json.dumps(errors), batch_id),
         )
 
-    return {"success_count": success, "error_count": len(errors), "errors": errors[:50]}
+    return {"success_count": success, "error_count": len(errors),
+            "errors": errors[:50], "company_names": company_names}
 
 
 def _import_company(record: dict, user_id: int = None) -> None:
@@ -392,7 +416,77 @@ def _import_company(record: dict, user_id: int = None) -> None:
         )
 
 
-def _import_contact(record: dict, user_id: int = None) -> None:
+# ZeroBounce statuses that mean the email must NOT be saved or contacted
+_ZB_HARD_FAIL = {"invalid", "spamtrap", "abuse", "do_not_mail"}
+
+
+def _complete_contact(record: dict, apollo_key: str, zerobounce_key: str) -> dict:
+    """
+    Fill missing email / LinkedIn via Apollo and validate the email via
+    ZeroBounce, per the import completion rules (see module docstring).
+
+    Returns {email, linkedin_url, title, email_source, validation_status,
+             ready_for_outreach}.  Raises ValueError when the contact must
+    not be saved (hard-failed email, or nothing found to contact them by).
+    """
+    from src.apollo_enrichment import apollo_person_match, _zb_validate_batch
+
+    email        = str(record.get("email") or "").strip().lower()
+    linkedin     = str(record.get("linkedin_url") or "").strip()
+    title        = str(record.get("title") or "").strip()
+    company_name = str(record.get("company_name") or "").strip()
+    email_source = "import" if email else ""
+
+    if email and not linkedin and apollo_key:
+        # email only → Apollo fills the missing LinkedIn URL
+        match = apollo_person_match(apollo_key, email=email)
+        linkedin = match.get("linkedin_url") or linkedin
+        title    = title or match.get("title", "")
+    elif not email and apollo_key:
+        # name only → Apollo finds email AND LinkedIn from name + company
+        match = apollo_person_match(
+            apollo_key,
+            first_name=record.get("first_name", ""),
+            last_name=record.get("last_name", ""),
+            company_name=company_name or None,
+        )
+        if match.get("email"):
+            email        = match["email"]
+            email_source = "apollo"
+        linkedin = linkedin or match.get("linkedin_url", "")
+        title    = title or match.get("title", "")
+
+    # ZeroBounce validation — only saved when the email is usable
+    validation_status = ""
+    if email:
+        if zerobounce_key:
+            zb = _zb_validate_batch([email], zerobounce_key)
+            validation_status = zb.get(email, {}).get("status", "unknown")
+            if validation_status in _ZB_HARD_FAIL:
+                raise ValueError(
+                    f"Email {email} failed ZeroBounce ({validation_status}) — contact not saved"
+                )
+        else:
+            validation_status = "not_validated"
+    elif not linkedin:
+        raise ValueError("No email or LinkedIn found (Apollo had no match) — contact not saved")
+
+    ready = bool(email and (
+        validation_status == "valid"
+        or (validation_status in ("catch-all", "catchall") and linkedin)
+    ))
+    return {
+        "email":              email or None,
+        "linkedin_url":       linkedin or None,
+        "title":              title,
+        "email_source":       email_source,
+        "validation_status":  validation_status or None,
+        "ready_for_outreach": ready,
+    }
+
+
+def _import_contact(record: dict, user_id: int = None,
+                    apollo_key: str = "", zerobounce_key: str = "") -> None:
     first = record.get("first_name", "").strip()
     last  = record.get("last_name", "").strip()
     if not first or not last:
@@ -403,17 +497,24 @@ def _import_contact(record: dict, user_id: int = None) -> None:
     if critical:
         raise ValueError(f"DQE: {critical[0]['message']}")
 
-    # Find or create company
-    company_name = record.get("company_name", "").strip()
-    company_id = None
+    # Complete the contact (Apollo fill-in + ZeroBounce validation) BEFORE saving
+    completed = _complete_contact(record, apollo_key, zerobounce_key)
+
+    # Find or create company; inherit its target_product for the contact
+    company_name   = record.get("company_name", "").strip()
+    company_id     = None
+    target_product = ""
     if company_name:
         with db.db_cursor() as cur:
             cur.execute(
                 "INSERT INTO companies (name, source, status) VALUES (%s,'apollo','staged') "
-                "ON CONFLICT (name) DO UPDATE SET last_updated=NOW() RETURNING id",
+                "ON CONFLICT (name) DO UPDATE SET last_updated=NOW() "
+                "RETURNING id, target_product",
                 (company_name,),
             )
-            company_id = cur.fetchone()["id"]
+            row = cur.fetchone()
+            company_id     = row["id"]
+            target_product = row.get("target_product") or ""
 
     full_name = f"{first} {last}".strip()
     with db.db_cursor() as cur:
@@ -422,18 +523,25 @@ def _import_contact(record: dict, user_id: int = None) -> None:
                    (company_id, first_name, last_name, full_name, title, email, phone,
                     mobile_phone, linkedin_url, city, state, country,
                     job_function, level, oracle_alignment, oracle_department,
-                    oracle_team, source, email_validation_status, status)
-               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'apollo','valid','staged')
+                    oracle_team, source, email_validation_status, email_source,
+                    target_product, ready_for_outreach, status)
+               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,
+                       'import',%s,%s,%s,%s,'staged')
                ON CONFLICT DO NOTHING""",
             (
                 company_id, first, last, full_name,
-                record.get("title"), record.get("email"),
+                completed["title"] or record.get("title"),
+                completed["email"],
                 record.get("phone"), record.get("mobile_phone"),
-                record.get("linkedin_url"), record.get("city"),
+                completed["linkedin_url"], record.get("city"),
                 record.get("state"), record.get("country"),
                 record.get("job_function"), record.get("level"),
                 record.get("oracle_alignment"), record.get("oracle_department"),
                 record.get("oracle_team"),
+                completed["validation_status"],
+                completed["email_source"],
+                target_product,
+                completed["ready_for_outreach"],
             ),
         )
 

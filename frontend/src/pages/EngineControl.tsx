@@ -95,6 +95,17 @@ interface Preflight {
   total: number; from_contacts_master: number; need_apollo: number;
   est_credits: number; est_minutes: number;
   apollo_configured: boolean; zerobounce_configured: boolean;
+  zoominfo_configured: boolean;
+}
+
+type EnrichProvider = 'apollo' | 'zoominfo'
+
+interface PendingCompany {
+  id: number
+  name: string
+  domain: string | null
+  target_product: string
+  signal_count: number
 }
 interface EnrichStats {
   total_companies?: number; enriched_companies?: number; pending_companies?: number;
@@ -110,17 +121,32 @@ interface EnrichStatus {
 // ── Pre-flight modal ──────────────────────────────────────────────────────────
 
 function PreflightModal({
-  preflight, enrichLimit, enrichPerCo, batchSize, selectedRoles,
+  preflight, enrichLimit, enrichPerCo, batchSize, selectedRoles, provider,
+  pendingCompanies, selectedCompanyIds,
   onClose, onStart,
-  setEnrichLimit, setEnrichPerCo, setBatchSize, setSelectedRoles,
+  setEnrichLimit, setEnrichPerCo, setBatchSize, setSelectedRoles, setProvider,
+  setSelectedCompanyIds,
 }: {
   preflight: Preflight
   enrichLimit: number; enrichPerCo: number; batchSize: number; selectedRoles: string[]
+  provider: EnrichProvider
+  pendingCompanies: PendingCompany[]
+  selectedCompanyIds: number[]
   onClose: () => void; onStart: () => void
   setEnrichLimit: (v: number) => void; setEnrichPerCo: (v: number) => void
   setBatchSize: (v: number) => void; setSelectedRoles: (v: string[]) => void
+  setProvider: (v: EnrichProvider) => void
+  setSelectedCompanyIds: (v: number[]) => void
 }) {
   const [roleTab, setRoleTab] = useState<'exact' | 'keyword'>('exact')
+  const [coQuery, setCoQuery] = useState('')
+
+  const visibleCompanies = pendingCompanies.filter(c =>
+    !coQuery || c.name.toLowerCase().includes(coQuery.toLowerCase()))
+  const toggleCompany = (id: number) =>
+    setSelectedCompanyIds(selectedCompanyIds.includes(id)
+      ? selectedCompanyIds.filter(x => x !== id)
+      : [...selectedCompanyIds, id])
   const toggleRole = (r: string) =>
     setSelectedRoles(selectedRoles.includes(r) ? selectedRoles.filter(x => x !== r) : [...selectedRoles, r])
   const selectAll  = () => setSelectedRoles(ALL_ROLES)
@@ -187,6 +213,90 @@ function PreflightModal({
             )}
           </div>
 
+          {/* Companies to enrich — pick from intent scan results */}
+          {pendingCompanies.length > 0 && (
+            <div>
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:10 }}>
+                <div style={{ fontSize:12, fontWeight:600, color:'#94a3b8', letterSpacing:'0.06em' }}>COMPANIES TO ENRICH</div>
+                <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+                  <span style={{ fontSize:11, padding:'2px 8px', borderRadius:999, background:'rgba(59,130,246,0.12)', color:'#3b82f6' }}>
+                    {selectedCompanyIds.length} of {pendingCompanies.length} selected
+                  </span>
+                  <button onClick={() => setSelectedCompanyIds(pendingCompanies.map(c => c.id))}
+                    style={{ fontSize:11, color:'#3b82f6', background:'none', border:'none', cursor:'pointer', textDecoration:'underline' }}>All</button>
+                  <button onClick={() => setSelectedCompanyIds([])}
+                    style={{ fontSize:11, color:'#94a3b8', background:'none', border:'none', cursor:'pointer', textDecoration:'underline' }}>None</button>
+                </div>
+              </div>
+              <input value={coQuery} onChange={e => setCoQuery(e.target.value)}
+                placeholder="Search companies..."
+                style={{ width:'100%', boxSizing:'border-box', padding:'7px 12px', borderRadius:8, border:'1px solid #e2e8f0', fontSize:12, outline:'none', background:'#f8fafc', marginBottom:8 }} />
+              <div style={{ maxHeight:200, overflowY:'auto', border:'1px solid #e2e8f0', borderRadius:8 }}>
+                {visibleCompanies.map(c => {
+                  const on = selectedCompanyIds.includes(c.id)
+                  return (
+                    <label key={c.id}
+                      style={{ display:'flex', alignItems:'center', gap:10, padding:'7px 12px', cursor:'pointer',
+                        borderBottom:'1px solid #f1f5f9', background: on ? 'rgba(59,130,246,0.04)' : 'transparent' }}>
+                      <input type="checkbox" checked={on} onChange={() => toggleCompany(c.id)}
+                        style={{ accentColor:'#3b82f6', cursor:'pointer', flexShrink:0 }} />
+                      <span style={{ fontSize:12, fontWeight:500, color:'#0f172a', flex:1, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
+                        {c.name}
+                      </span>
+                      {c.target_product && (
+                        <span style={{ fontSize:10, padding:'2px 8px', borderRadius:999, background:'rgba(16,185,129,0.1)', color:'#10b981', whiteSpace:'nowrap', flexShrink:0 }}>
+                          {c.target_product}
+                        </span>
+                      )}
+                      <span style={{ fontSize:10, padding:'2px 7px', borderRadius:999, background:'rgba(99,102,241,0.1)', color:'#818cf8', whiteSpace:'nowrap', flexShrink:0 }}>
+                        {c.signal_count} signals
+                      </span>
+                    </label>
+                  )
+                })}
+                {visibleCompanies.length === 0 && (
+                  <div style={{ padding:'14px 12px', fontSize:12, color:'#94a3b8', textAlign:'center' }}>No companies match your search.</div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Enrichment tool selector */}
+          <div>
+            <div style={{ fontSize:12, fontWeight:600, color:'#94a3b8', letterSpacing:'0.06em', marginBottom:10 }}>ENRICHMENT TOOL</div>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+              {([
+                { id: 'apollo' as const,   label: 'Apollo.io', desc: 'People search + email reveal', ok: preflight.apollo_configured,   envHint: 'APOLLO_API_KEY' },
+                { id: 'zoominfo' as const, label: 'ZoomInfo',  desc: 'Contact search + enrich API',  ok: preflight.zoominfo_configured, envHint: 'ZOOMINFO_USERNAME / PASSWORD' },
+              ]).map(p => {
+                const on = provider === p.id
+                return (
+                  <button key={p.id} onClick={() => setProvider(p.id)} disabled={!p.ok}
+                    title={p.ok ? `Use ${p.label} for contact discovery` : `Add ${p.envHint} to oracle_intent_engine/.env`}
+                    style={{ padding:'12px 14px', borderRadius:10, textAlign:'left', cursor: p.ok ? 'pointer' : 'not-allowed',
+                      border:`1px solid ${on ? 'rgba(99,102,241,0.45)' : '#e2e8f0'}`,
+                      background: on ? 'rgba(99,102,241,0.08)' : p.ok ? '#f8fafc' : '#f1f5f9',
+                      opacity: p.ok ? 1 : 0.55, transition:'all 0.15s' }}>
+                    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                      <span style={{ fontSize:13, fontWeight:600, color: on ? '#6366f1' : '#0f172a' }}>
+                        {on && <span style={{ marginRight:6 }}>✓</span>}{p.label}
+                      </span>
+                      <span style={{ fontSize:10, fontWeight:600, padding:'2px 8px', borderRadius:999,
+                        background: p.ok ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.1)',
+                        color: p.ok ? '#10b981' : '#f87171' }}>
+                        {p.ok ? 'Configured' : 'Not configured'}
+                      </span>
+                    </div>
+                    <div style={{ fontSize:11, color:'#64748b', marginTop:4 }}>{p.desc}</div>
+                  </button>
+                )
+              })}
+            </div>
+            <div style={{ fontSize:11, color:'#94a3b8', marginTop:6 }}>
+              contacts_master (Salesforce export) is always checked first — the selected tool is only called on a miss.
+            </div>
+          </div>
+
           {/* Config row */}
           <div>
             <div style={{ fontSize:12, fontWeight:600, color:'#94a3b8', letterSpacing:'0.06em', marginBottom:10 }}>BATCH CONFIGURATION</div>
@@ -207,7 +317,7 @@ function PreflightModal({
                 </div>
                 <select value={enrichPerCo} onChange={e => setEnrichPerCo(+e.target.value)}
                   style={{ width:'100%', padding:'8px 10px', borderRadius:8, border:'1px solid #d1d5db', fontSize:13, color:'#0f172a', background:'#fff' }}>
-                  {[5,10,15,25].map(v => <option key={v} value={v}>{v} contacts max</option>)}
+                  {[2,5,10,15,20].map(v => <option key={v} value={v}>{v} contacts max</option>)}
                 </select>
                 <div style={{ fontSize:11, color:'#94a3b8', marginTop:4 }}>Apollo results per company</div>
               </div>
@@ -289,7 +399,9 @@ function PreflightModal({
               style={{ padding:'9px 20px', borderRadius:8, border:'1px solid #e2e8f0', background:'transparent', color:'#64748b', fontSize:13, fontWeight:500, cursor:'pointer' }}>
               Cancel
             </button>
-            <button onClick={onStart} disabled={!preflight.apollo_configured && preflight.need_apollo > 0 && preflight.from_contacts_master === 0}
+            <button onClick={onStart}
+              disabled={(provider === 'apollo' ? !preflight.apollo_configured : !preflight.zoominfo_configured)
+                        || (pendingCompanies.length > 0 && selectedCompanyIds.length === 0)}
               style={{ padding:'9px 24px', borderRadius:8, border:'none',
                 background: '#6366f1', color:'white',
                 fontSize:13, fontWeight:600, cursor:'pointer',
@@ -544,6 +656,9 @@ export default function EngineControl() {
   const [enrichLimit,     setEnrichLimit]     = useState(50)
   const [enrichPerCo,     setEnrichPerCo]     = useState(10)
   const [batchSize,       setBatchSize]       = useState(0)
+  const [provider,        setProvider]        = useState<EnrichProvider>('apollo')
+  const [pendingCompanies,   setPendingCompanies]   = useState<PendingCompany[]>([])
+  const [selectedCompanyIds, setSelectedCompanyIds] = useState<number[]>([])
   const [selectedRoles,   setSelectedRoles]   = useState<string[]>(EXACT_ROLES) // default: exact roles
   const [enrichStats,     setEnrichStats]     = useState<EnrichStats>({})
   const [enrichStatus,    setEnrichStatus]    = useState<EnrichStatus>({})
@@ -617,10 +732,19 @@ export default function EngineControl() {
   const fetchPreflight = async () => {
     setPreflightLoading(true)
     try {
-      const r = await fetch('/api/enrich/preflight', { headers: authH() })
+      const [r, rp] = await Promise.all([
+        fetch('/api/enrich/preflight', { headers: authH() }),
+        fetch('/api/enrich/pending',   { headers: authH() }),
+      ])
       if (r.ok) {
         const d = await r.json()
         setPreflight(d)
+        if (rp.ok) {
+          const dp = await rp.json()
+          const companies: PendingCompany[] = dp.companies || []
+          setPendingCompanies(companies)
+          setSelectedCompanyIds(companies.map(c => c.id))  // default: all selected
+        }
         setShowPreflight(true)
       } else {
         toast.error('Could not load preflight data')
@@ -632,21 +756,25 @@ export default function EngineControl() {
   // ── Start enrichment (called from modal) ────────────────────────────────────
   const startEnrichment = async () => {
     setShowPreflight(false)
+    const isSubset = selectedCompanyIds.length > 0 && selectedCompanyIds.length < pendingCompanies.length
     try {
       const res = await fetch('/api/enrich/start', {
         method: 'POST',
         headers: authH(),
         body: JSON.stringify({
-          limit:           enrichLimit,
+          // when the user hand-picked companies, enrich exactly those
+          limit:           isSubset ? selectedCompanyIds.length : enrichLimit,
           max_per_company: enrichPerCo,
           batch_size:      batchSize || null,
           role_filters:    selectedRoles.length > 0 ? selectedRoles : null,
+          provider,
+          company_ids:     isSubset ? selectedCompanyIds : null,
         }),
       })
       if (!res.ok) { toast.error((await res.json()).error || 'Failed to start enrichment'); return }
       setEnrichState('running')
       setShowEnrichLog(true)
-      toast.success(`Enrichment started — ${enrichLimit} companies, ${enrichPerCo} contacts each${batchSize ? `, ${batchSize}/batch` : ''}`)
+      toast.success(`Enrichment started via ${provider === 'zoominfo' ? 'ZoomInfo' : 'Apollo'} — ${enrichLimit} companies, ${enrichPerCo} contacts each${batchSize ? `, ${batchSize}/batch` : ''}`)
       if (enrichPoll.current) clearInterval(enrichPoll.current)
       enrichPoll.current = setInterval(async () => {
         await fetchEnrichLog()
@@ -678,8 +806,32 @@ export default function EngineControl() {
       const res = await fetch('/scan/start', {
         method: 'POST',
         headers: { ...authH(), 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sources: selectedSources, max_pages: maxPages, jde_manufacturing: jdeMfg }),
+        body: JSON.stringify({
+          sources: selectedSources, max_pages: maxPages, jde_manufacturing: jdeMfg,
+          auto_enrich: autoTrigger,
+          enrich_limit: enrichLimit, enrich_per_company: enrichPerCo,
+          enrich_provider: provider,
+        }),
       })
+      if (res.status === 409) {
+        // A scan is already running (e.g. started before a page refresh or
+        // left over from a crashed session). Sync the UI so the Stop button
+        // appears instead of leaving the user stuck on Start.
+        setOracleState('running')
+        toast.info('A scan is already running — Stop button enabled')
+        addLog('WARN', 'Scan already running on the server. Use Stop to cancel it.')
+        if (pollRef.current) clearInterval(pollRef.current)
+        pollRef.current = setInterval(async () => {
+          await fetchLog()
+          const s = await fetch('/scan/status', { headers: authH() }).then(r => r.json()).catch(() => null)
+          if (s && s.status !== 'running') {
+            setOracleState('idle')
+            clearInterval(pollRef.current!)
+            fetchEnrichStats()
+          }
+        }, 3000)
+        return
+      }
       if (!res.ok) { toast.error((await res.json()).error || 'Failed to start scan'); return }
       setOracleState('running')
       addLog('INFO', `Oracle Intent Engine starting... sources: ${selectedSources.join(', ')}${jdeMfg ? ' [JDE Mfg Focus]' : ''}`)
@@ -694,17 +846,25 @@ export default function EngineControl() {
           toast.success('Oracle Intent scan completed')
           clearInterval(pollRef.current!)
           fetchEnrichStats()
-          // Auto-trigger enrichment after scan if toggle is on
+          // Auto-enrich: the backend chains the full enrichment pipeline
+          // (stages 1-7) automatically — attach to its log/status stream.
           if (autoTrigger) {
-            addLog('INFO', 'Auto-trigger: loading enrichment preflight...')
-            toast.info('Auto-triggering enrichment...')
-            const pf = await fetch('/api/enrich/preflight', { headers: authH() }).then(r => r.json()).catch(() => null)
-            if (pf && pf.total > 0) {
-              setPreflight(pf)
-              setShowPreflight(true)
-            } else {
-              addLog('INFO', 'Auto-trigger: no new companies to enrich.')
-            }
+            addLog('INFO', 'Auto-enrich: full pipeline starting on the server...')
+            toast.info('Auto-enrichment starting...')
+            setEnrichState('running')
+            setShowEnrichLog(true)
+            if (enrichPoll.current) clearInterval(enrichPoll.current)
+            enrichPoll.current = setInterval(async () => {
+              await fetchEnrichLog()
+              const es = await fetch('/api/enrich/status', { headers: authH() }).then(r => r.json()).catch(() => null)
+              if (es) setEnrichStatus(es)
+              if (es && es.status !== 'running') {
+                setEnrichState('idle')
+                clearInterval(enrichPoll.current!)
+                fetchEnrichStats()
+                toast.success(`Enrichment done — ${es.contacts_found || 0} contacts, ${es.contacts_validated || 0} valid emails`)
+              }
+            }, 3000)
           }
         }
       }, 3000)
@@ -839,10 +999,15 @@ export default function EngineControl() {
           preflight={preflight}
           enrichLimit={enrichLimit} enrichPerCo={enrichPerCo}
           batchSize={batchSize}    selectedRoles={selectedRoles}
+          provider={provider}
+          pendingCompanies={pendingCompanies}
+          selectedCompanyIds={selectedCompanyIds}
           onClose={() => setShowPreflight(false)}
           onStart={startEnrichment}
           setEnrichLimit={setEnrichLimit} setEnrichPerCo={setEnrichPerCo}
           setBatchSize={setBatchSize}     setSelectedRoles={setSelectedRoles}
+          setProvider={setProvider}
+          setSelectedCompanyIds={setSelectedCompanyIds}
         />
       )}
 
@@ -966,8 +1131,8 @@ export default function EngineControl() {
               </button>
               <Zap size={14} color={autoTrigger ? '#6366f1' : '#475569'} />
               <div>
-                <div style={{ fontSize:13, fontWeight:600, color: autoTrigger ? '#6366f1' : '#0f172a' }}>Auto-trigger Enrichment</div>
-                <div style={{ fontSize:11, color:'#475569', marginTop:2 }}>Open pre-flight check when scan completes</div>
+                <div style={{ fontSize:13, fontWeight:600, color: autoTrigger ? '#6366f1' : '#0f172a' }}>Auto-enrich After Scan</div>
+                <div style={{ fontSize:11, color:'#475569', marginTop:2 }}>Full pipeline: domains → contacts → validation → target product</div>
               </div>
             </div>
           </div>

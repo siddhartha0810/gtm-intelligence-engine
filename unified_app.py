@@ -135,6 +135,8 @@ os.environ["ORACLE_PG_DSN"] = _oracle_pg_dsn
 
 APOLLO_API_KEY           = os.getenv("APOLLO_API_KEY", "").strip()
 ZEROBOUNCE_API_KEY       = os.getenv("ZEROBOUNCE_API_KEY", "").strip()
+ZOOMINFO_USERNAME        = os.getenv("ZOOMINFO_USERNAME", "").strip()
+ZOOMINFO_PASSWORD        = os.getenv("ZOOMINFO_PASSWORD", "").strip()
 APIFY_TOKEN              = os.getenv("APIFY_TOKEN", "").strip()
 APIFY_LINKEDIN_ACTOR_ID  = os.getenv("APIFY_LINKEDIN_ACTOR_ID", "").strip()
 APIFY_EMAIL_ACTOR_ID     = os.getenv("APIFY_EMAIL_ACTOR_ID", "").strip()
@@ -293,8 +295,25 @@ def _scan_get_log() -> list:
         logger.warning("Failed to read scan log file", exc_info=True)
     return []
 
+def _watch_scan_then_enrich(proc: subprocess.Popen, enrich_params: dict) -> None:
+    """Background thread: when the scan subprocess finishes successfully,
+    automatically launch the full enrichment pipeline (stages 1-7) so scanned
+    companies end up in the DB with validated contacts + target_product set."""
+    try:
+        proc.wait()
+        if proc.returncode != 0:
+            logger.info("Auto-enrich skipped — scan exited with errors or was stopped")
+            return
+        time.sleep(2)  # let the scan status file settle
+        started = _start_enrich_subprocess(**enrich_params)
+        logger.info(f"Auto-enrich after scan: {'started' if started else 'already running'}")
+    except Exception:
+        logger.warning("Auto-enrich watcher failed", exc_info=True)
+
 def _start_scan_subprocess(sources: list, location: str, max_pages: int,
-                           jde_manufacturing: bool = False) -> bool:
+                           jde_manufacturing: bool = False,
+                           auto_enrich: bool = False,
+                           enrich_params: Optional[dict] = None) -> bool:
     """Spawn scan_worker.py as a subprocess. Returns False if already running."""
     global _scan_proc
     with _scan_proc_lock:
@@ -333,6 +352,13 @@ def _start_scan_subprocess(sources: list, location: str, max_pages: int,
             stderr=subprocess.DEVNULL,
         )
         _SCAN_PID_FILE.write_text(str(_scan_proc.pid), encoding="utf-8")
+
+        if auto_enrich:
+            threading.Thread(
+                target=_watch_scan_then_enrich,
+                args=(_scan_proc, enrich_params or {}),
+                daemon=True,
+            ).start()
         return True
 
 def _stop_scan_subprocess() -> None:
@@ -409,6 +435,8 @@ def _start_enrich_subprocess(
     max_per_company: int = 10,
     batch_size: Optional[int] = None,
     role_filters: Optional[List[str]] = None,
+    provider: str = "apollo",
+    company_ids: Optional[List[int]] = None,
 ) -> bool:
     """Spawn enrichment_worker.py. Returns False if already running."""
     global _enrich_proc
@@ -429,6 +457,8 @@ def _start_enrich_subprocess(
         env = os.environ.copy()
         env["APOLLO_API_KEY"]     = APOLLO_API_KEY
         env["ZEROBOUNCE_API_KEY"] = ZEROBOUNCE_API_KEY
+        env["ZOOMINFO_USERNAME"]  = ZOOMINFO_USERNAME
+        env["ZOOMINFO_PASSWORD"]  = ZOOMINFO_PASSWORD
 
         cmd = [
             sys.executable,
@@ -437,11 +467,14 @@ def _start_enrich_subprocess(
             "--log-file",        str(_ENRICH_LOG_FILE),
             "--limit",           str(limit),
             "--max-per-company", str(max_per_company),
+            "--provider",        provider,
         ]
         if batch_size:
             cmd += ["--batch-size", str(batch_size)]
         if role_filters:
             cmd += ["--role-filters", json.dumps(role_filters)]
+        if company_ids:
+            cmd += ["--company-ids", json.dumps(company_ids)]
 
         _enrich_proc = subprocess.Popen(
             cmd,
@@ -608,12 +641,20 @@ async def start_scan(request: Request, current_user: dict = Depends(oracle_auth.
     location            = data.get("location",  "")
     max_pages           = int(data.get("max_pages", oracle_cfg.MAX_PAGES))
     jde_manufacturing   = bool(data.get("jde_manufacturing", False))
+    auto_enrich         = bool(data.get("auto_enrich", False))
+    enrich_params = {
+        "limit":           int(data.get("enrich_limit", 50)),
+        "max_per_company": int(data.get("enrich_per_company", 10)),
+        "provider":        str(data.get("enrich_provider", "apollo")),
+    }
 
     started = _start_scan_subprocess(sources=sources, location=location, max_pages=max_pages,
-                                     jde_manufacturing=jde_manufacturing)
+                                     jde_manufacturing=jde_manufacturing,
+                                     auto_enrich=auto_enrich, enrich_params=enrich_params)
     if not started:
         return JSONResponse({"error": "Scan already running."}, status_code=409)
-    return {"message": "Scan started.", "sources": sources, "jde_manufacturing": jde_manufacturing}
+    return {"message": "Scan started.", "sources": sources,
+            "jde_manufacturing": jde_manufacturing, "auto_enrich": auto_enrich}
 
 @app.get("/scan/status")
 async def scan_status(current_user: dict = Depends(oracle_auth.require_user)):
@@ -867,6 +908,33 @@ async def api_company_contacts(company_id: int, current_user: dict = Depends(ora
     """Return enriched contacts for a company from company_contacts table."""
     rows = jsonable_encoder([dict(c) for c in oracle_db.get_contacts_for_company(company_id)])
     return JSONResponse(rows)
+
+@app.delete("/api/companies/{company_id}")
+async def api_delete_company(company_id: int, current_user: dict = Depends(oracle_auth.require_admin)):
+    """Delete one company from the database. Signals and contacts cascade.
+    Admin/owner only. Cannot be undone."""
+    try:
+        deleted = oracle_db.delete_company(company_id)
+    except Exception:
+        logger.exception(f"delete_company id={company_id} failed")
+        raise HTTPException(status_code=500, detail="Internal server error")
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Company not found")
+    _invalidate_companies_cache()
+    return {"deleted": True, "company_id": company_id}
+
+@app.delete("/api/contacts/{contact_id}")
+async def api_delete_contact(contact_id: int, current_user: dict = Depends(oracle_auth.require_admin)):
+    """Delete one contact from the database. Admin/owner only. Cannot be undone."""
+    try:
+        deleted = oracle_db.delete_contact(contact_id)
+    except Exception:
+        logger.exception(f"delete_contact id={contact_id} failed")
+        raise HTTPException(status_code=500, detail="Internal server error")
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Contact not found")
+    _invalidate_companies_cache()
+    return {"deleted": True, "contact_id": contact_id}
 
 @app.post("/api/company/{company_id}/contacts/enrich")
 async def api_enrich_contacts(company_id: int, current_user: dict = Depends(oracle_auth.require_analyst)):
@@ -1821,6 +1889,16 @@ async def api_reporting(current_user: dict = Depends(oracle_auth.require_user)):
     }
 
 # enrichment endpoints
+@app.get("/api/enrich/pending")
+async def enrich_pending(limit: int = 500, current_user: dict = Depends(oracle_auth.require_analyst)):
+    """Companies awaiting enrichment — for the pick-companies UI in the pre-flight modal."""
+    try:
+        rows = oracle_db.get_companies_needing_enrichment(min(limit, 2000))
+        return {"total": len(rows), "companies": jsonable_encoder([dict(r) for r in rows])}
+    except Exception:
+        logger.exception("Unhandled error in GET /api/enrich/pending")
+        return JSONResponse({"error": "Internal server error"}, status_code=500)
+
 @app.get("/api/enrich/preflight")
 async def enrich_preflight(current_user: dict = Depends(oracle_auth.require_analyst)):
     """
@@ -1837,6 +1915,7 @@ async def enrich_preflight(current_user: dict = Depends(oracle_auth.require_anal
                 "est_credits": 0, "est_minutes": 0,
                 "apollo_configured": bool(APOLLO_API_KEY),
                 "zerobounce_configured": bool(ZEROBOUNCE_API_KEY),
+                "zoominfo_configured": bool(ZOOMINFO_USERNAME and ZOOMINFO_PASSWORD),
             }
 
         # All companies go through Apollo — contacts_master is checked first (no credit cost)
@@ -1856,6 +1935,7 @@ async def enrich_preflight(current_user: dict = Depends(oracle_auth.require_anal
             "est_minutes":         est_minutes,
             "apollo_configured":   bool(APOLLO_API_KEY),
             "zerobounce_configured": bool(ZEROBOUNCE_API_KEY),
+            "zoominfo_configured": bool(ZOOMINFO_USERNAME and ZOOMINFO_PASSWORD),
         }
     except Exception as e:
         logger.exception("Unhandled error in GET /api/enrich/preflight")
@@ -1872,11 +1952,21 @@ async def enrich_start(request: Request, current_user: dict = Depends(oracle_aut
     max_per_company = int(data.get("max_per_company", 10))
     batch_size      = data.get("batch_size")
     role_filters    = data.get("role_filters") or None
+    provider        = str(data.get("provider", "apollo")).lower().strip()
+    company_ids     = data.get("company_ids") or None
 
     if batch_size:
         batch_size = int(batch_size)
+    if company_ids:
+        try:
+            company_ids = [int(x) for x in company_ids]
+        except (TypeError, ValueError):
+            return JSONResponse({"error": "company_ids must be a list of integers"}, status_code=400)
 
-    if not APOLLO_API_KEY:
+    if provider == "zoominfo":
+        if not (ZOOMINFO_USERNAME and ZOOMINFO_PASSWORD):
+            return JSONResponse({"error": "ZoomInfo not configured. Add ZOOMINFO_USERNAME and ZOOMINFO_PASSWORD to oracle_intent_engine/.env"}, status_code=400)
+    elif not APOLLO_API_KEY:
         return JSONResponse({"error": "Apollo API key not configured. Add APOLLO_API_KEY to oracle_intent_engine/.env"}, status_code=400)
 
     started = _start_enrich_subprocess(
@@ -1884,11 +1974,15 @@ async def enrich_start(request: Request, current_user: dict = Depends(oracle_aut
         max_per_company=max_per_company,
         batch_size=batch_size,
         role_filters=role_filters,
+        provider=provider,
+        company_ids=company_ids,
     )
     if not started:
         return JSONResponse({"error": "Enrichment already running"}, status_code=409)
     return {"started": True, "limit": limit, "max_per_company": max_per_company,
-            "batch_size": batch_size, "role_filters_count": len(role_filters) if role_filters else 0}
+            "batch_size": batch_size, "provider": provider,
+            "company_ids_count": len(company_ids) if company_ids else 0,
+            "role_filters_count": len(role_filters) if role_filters else 0}
 
 @app.post("/api/enrich/stop")
 async def enrich_stop(current_user: dict = Depends(oracle_auth.require_analyst)):
@@ -2222,8 +2316,27 @@ async def api_import_upload(
     if template_name and mappings_dict:
         import_mod.save_template(template_name, entity_type, mappings_dict)
 
-    result = import_mod.process_import(content, entity_type, mappings_dict, batch["id"], default_product=default_product)
-    return {"batch_id": batch["id"], **result}
+    result = import_mod.process_import(
+        content, entity_type, mappings_dict, batch["id"],
+        default_product=default_product,
+        apollo_key=APOLLO_API_KEY,
+        zerobounce_key=ZEROBOUNCE_API_KEY,
+    )
+
+    # Company imports automatically flow into the contact-enrichment pipeline
+    # (same Oracle/IT/finance title criteria as the lead enrichment workflow).
+    auto_enrich_started = False
+    if entity_type == "company" and result.get("company_names") and APOLLO_API_KEY:
+        try:
+            ids = oracle_db.get_company_ids_by_names(result["company_names"])
+            if ids:
+                auto_enrich_started = _start_enrich_subprocess(
+                    limit=len(ids), company_ids=ids,
+                )
+        except Exception:
+            logger.exception("Auto-enrich after company import failed to start")
+
+    return {"batch_id": batch["id"], **result, "auto_enrich_started": auto_enrich_started}
 
 @app.get("/api/import/batches")
 async def api_import_batches(limit: int = 50, current_user: dict = Depends(oracle_auth.require_user)):

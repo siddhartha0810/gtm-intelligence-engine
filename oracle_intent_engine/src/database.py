@@ -171,6 +171,11 @@ _DDL = [
     "ALTER TABLE company_contacts ADD COLUMN IF NOT EXISTS email_validation_status TEXT",
     "ALTER TABLE company_contacts ADD COLUMN IF NOT EXISTS email_source TEXT DEFAULT ''",
     "ALTER TABLE company_contacts ADD COLUMN IF NOT EXISTS email_prediction_pattern TEXT DEFAULT ''",
+    # target_product: Oracle product this contact should be pitched (JD Edwards, Oracle Fusion, ...)
+    # copied from the company's dominant signal at enrichment time.
+    "ALTER TABLE company_contacts ADD COLUMN IF NOT EXISTS target_product TEXT NOT NULL DEFAULT ''",
+    # ready_for_outreach: Stage-7 scoring result — valid email OR catch-all + LinkedIn present.
+    "ALTER TABLE company_contacts ADD COLUMN IF NOT EXISTS ready_for_outreach BOOLEAN NOT NULL DEFAULT FALSE",
     # master_leads table intentionally removed — dropped 2026-06-08
     """
     CREATE TABLE IF NOT EXISTS domain_knowledge (
@@ -829,9 +834,12 @@ def save_contacts(company_id: int, contacts: list):
                      email, linkedin_url, seniority, confidence, is_target, source,
                      email_validation_status, email_source, email_prediction_pattern,
                      phone, street, city, state, country, postal_code,
-                     unique_key)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                     unique_key, target_product, ready_for_outreach)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 ON CONFLICT (company_id, email) WHERE email IS NOT NULL AND email != '' DO UPDATE SET
+                    target_product = CASE WHEN EXCLUDED.target_product <> '' THEN EXCLUDED.target_product
+                                          ELSE company_contacts.target_product END,
+                    ready_for_outreach = EXCLUDED.ready_for_outreach OR company_contacts.ready_for_outreach,
                     title      = CASE WHEN EXCLUDED.title <> '' THEN EXCLUDED.title
                                       ELSE company_contacts.title END,
                     linkedin_url = COALESCE(NULLIF(EXCLUDED.linkedin_url,''), company_contacts.linkedin_url),
@@ -877,6 +885,8 @@ def save_contacts(company_id: int, contacts: list):
                 c.get("country", "") or "",
                 c.get("postal_code", "") or "",
                 _gen_unique_key(),
+                c.get("target_product", "") or "",
+                bool(c.get("ready_for_outreach", False)),
             ))
         # Keep denormalized contact_count in sync after batch insert
         cur.execute("""
@@ -888,25 +898,43 @@ def save_contacts(company_id: int, contacts: list):
             WHERE id = %s
         """, (company_id, company_id))
 
-def get_companies_needing_enrichment(limit: int = 50) -> list:
-    """Return companies without contacts yet — signal-backed first, then CSV imports."""
+def get_companies_needing_enrichment(limit: int = 50, company_ids: list = None) -> list:
+    """Return companies without contacts yet — signal-backed first, then CSV imports.
+
+    company_ids: optional explicit selection — only these companies are returned
+                 (used when the user hand-picks scan results for enrichment).
+    """
+    id_filter = "AND c.id = ANY(%s)" if company_ids else ""
+    params: tuple = (company_ids, limit) if company_ids else (limit,)
     with db_cursor(commit=False) as cur:
-        cur.execute("""
+        cur.execute(f"""
             SELECT c.id, c.name, c.domain,
+                   COALESCE(NULLIF(c.target_product, ''), sig.top_product, '') AS target_product,
                    COALESCE(sig.signal_count, 0) AS signal_count
             FROM companies c
             LEFT JOIN (
-                SELECT company_id, COUNT(*) AS signal_count
+                SELECT company_id,
+                       COUNT(*) AS signal_count,
+                       (ARRAY_AGG(oracle_product ORDER BY confidence DESC NULLS LAST))[1] AS top_product
                 FROM oracle_signals
                 GROUP BY company_id
             ) sig ON sig.company_id = c.id
             WHERE NOT EXISTS (
                 SELECT 1 FROM company_contacts cc WHERE cc.company_id = c.id
             )
+            {id_filter}
             ORDER BY signal_count DESC, c.last_updated DESC
             LIMIT %s
-        """, (limit,))
+        """, params)
         return cur.fetchall()
+
+def get_company_ids_by_names(names: list) -> list:
+    """Resolve company names → ids (used after list import to auto-enrich)."""
+    if not names:
+        return []
+    with db_cursor(commit=False) as cur:
+        cur.execute("SELECT id FROM companies WHERE name = ANY(%s)", (names,))
+        return [row["id"] for row in cur.fetchall()]
 
 def get_enrichment_stats() -> dict:
     """Return counts for the enrichment dashboard."""
@@ -1059,6 +1087,41 @@ def set_company_target_product(company_id: int, product: str) -> None:
             "UPDATE companies SET target_product = %s WHERE id = %s",
             (product.strip(), company_id),
         )
+
+def set_company_domain(company_id: int, domain: str) -> None:
+    """Save a domain resolved during enrichment (only fills if currently empty)."""
+    with db_cursor() as cur:
+        cur.execute(
+            """UPDATE companies SET domain = %s
+               WHERE id = %s AND (domain IS NULL OR domain = '')""",
+            (domain.strip().lower(), company_id),
+        )
+
+def delete_company(company_id: int) -> bool:
+    """Hard-delete one company. Signals and contacts cascade (ON DELETE CASCADE)."""
+    with db_cursor() as cur:
+        cur.execute("DELETE FROM companies WHERE id = %s", (company_id,))
+        return cur.rowcount > 0
+
+def delete_contact(contact_id: int) -> bool:
+    """Hard-delete one contact and keep the company's contact_count in sync."""
+    with db_cursor() as cur:
+        cur.execute(
+            "DELETE FROM company_contacts WHERE id = %s RETURNING company_id",
+            (contact_id,),
+        )
+        row = cur.fetchone()
+        if not row:
+            return False
+        cur.execute("""
+            UPDATE companies
+            SET contact_count = (
+                SELECT COUNT(*) FROM company_contacts
+                WHERE company_id = %s AND email IS NOT NULL AND email != ''
+            )
+            WHERE id = %s
+        """, (row["company_id"], row["company_id"]))
+        return True
 
 def get_contacts_for_company(company_id: int) -> list:
     with db_cursor(commit=False) as cur:

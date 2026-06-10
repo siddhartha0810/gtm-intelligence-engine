@@ -37,10 +37,11 @@ const MENU_ITEMS = [
   { icon: Trash2,       label: 'Delete contact',          color: '#ef4444' },
 ]
 
-function ActionMenu({ onClose, anchorRef, contact }: {
+function ActionMenu({ onClose, anchorRef, contact, onDeleted }: {
   onClose: () => void
   anchorRef: React.RefObject<HTMLButtonElement | null>
   contact: Contact
+  onDeleted: (id: number) => void
 }) {
   const menuRef = useRef<HTMLDivElement>(null)
 
@@ -71,6 +72,19 @@ function ActionMenu({ onClose, anchorRef, contact }: {
       } catch { toast.error('Network error') }
     } else if (label === 'View on LinkedIn' && contact.linkedin_url) {
       window.open(contact.linkedin_url, '_blank')
+    } else if (label === 'Delete contact') {
+      try {
+        const r = await fetch(`/api/contacts/${contact.id}`, { method: 'DELETE', headers: authH() })
+        if (r.ok) {
+          toast.success(`${name} deleted from database`)
+          onDeleted(contact.id)
+        } else if (r.status === 403) {
+          toast.error('Only admin/owner can delete contacts')
+        } else {
+          const d = await r.json().catch(() => ({} as { detail?: string }))
+          toast.error(d.detail || 'Delete failed')
+        }
+      } catch { toast.error('Network error') }
     } else {
       toast.info(`${label}: ${name}`)
     }
@@ -357,7 +371,8 @@ export default function Contacts() {
                         <MoreHorizontal size={14} />
                       </button>
                       {openMenu === c.id && (
-                        <ActionMenu onClose={() => setOpenMenu(null)} anchorRef={{ current: menuRefs.current.get(c.id) ?? null }} contact={c} />
+                        <ActionMenu onClose={() => setOpenMenu(null)} anchorRef={{ current: menuRefs.current.get(c.id) ?? null }} contact={c}
+                          onDeleted={(id) => { setContacts(prev => prev.filter(x => x.id !== id)); setTotal(t => Math.max(0, t - 1)) }} />
                       )}
                     </div>
                   </td>

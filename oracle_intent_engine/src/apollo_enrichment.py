@@ -62,6 +62,8 @@ import urllib.request
 from typing import Callable, Optional
 
 from src import database as db
+from src import domain_enricher
+from src import zoominfo_client
 from src.utils import get_logger
 
 logger = get_logger(__name__)
@@ -375,6 +377,59 @@ def _is_relevant_contact(title: str) -> bool:
     return any(kw in t for kw in _RELEVANCE_KEYWORDS)
 
 
+def apollo_person_match(api_key: str, email: str = None, first_name: str = None,
+                        last_name: str = None, company_name: str = None,
+                        domain: str = None) -> dict:
+    """
+    Match one person on Apollo (POST /people/match) and return their record.
+
+    Used by the list-import completion flow:
+      - match by email          → fills missing LinkedIn URL
+      - match by name + company → fills missing email AND LinkedIn URL
+
+    Returns {} when no match. Costs 1 Apollo credit per successful match.
+    """
+    if not api_key:
+        return {}
+    payload: dict = {"reveal_personal_emails": True}
+    if email:
+        payload["email"] = email
+    if first_name:
+        payload["first_name"] = first_name
+    if last_name:
+        payload["last_name"] = last_name
+    if company_name:
+        payload["organization_name"] = company_name
+    if domain:
+        payload["domain"] = domain
+    if len(payload) <= 1:
+        return {}  # nothing to match on
+
+    try:
+        req = urllib.request.Request(
+            APOLLO_REVEAL_URL,
+            data=json.dumps(payload).encode(),
+            headers={"Content-Type": "application/json", "X-Api-Key": api_key},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            data = json.loads(resp.read())
+    except Exception as e:
+        logger.warning(f"Apollo person match failed ({email or company_name}): {e}")
+        return {}
+
+    person = data.get("person") or {}
+    if not isinstance(person, dict):
+        return {}
+    return {
+        "email":        str(person.get("email") or "").strip().lower(),
+        "linkedin_url": str(person.get("linkedin_url") or "").strip(),
+        "title":        str(person.get("title") or "").strip(),
+        "first_name":   str(person.get("first_name") or "").strip(),
+        "last_name":    str(person.get("last_name") or "").strip(),
+    }
+
+
 def _apollo_reveal(person_id: str, api_key: str) -> str:
     """Reveal a locked Apollo email by person ID. Returns email or ''."""
     if not person_id or not api_key:
@@ -569,6 +624,30 @@ def _zb_validate_batch(emails: list, api_key: str) -> dict:
     return result
 
 
+# ── Stage 7 — scoring ────────────────────────────────────────────────────────
+
+def _score_contacts(contacts: list, target_product: str) -> list:
+    """
+    Stage 7: mark each contact ready_for_outreach and tag the Oracle product
+    this person should be pitched (JD Edwards, Oracle Fusion, ...).
+
+    Pass criteria (mirrors lead_enrichment_engine/src/scoring.py):
+      valid email                              → ready
+      catch-all email + LinkedIn URL present   → ready (LinkedIn is the backup channel)
+      anything else                            → not ready
+    """
+    for c in contacts:
+        c["target_product"] = target_product or ""
+        status = str(c.get("email_validation_status") or "").lower().strip()
+        c["ready_for_outreach"] = bool(
+            c.get("email") and (
+                status == "valid"
+                or (status in ("catch-all", "catchall") and c.get("linkedin_url"))
+            )
+        )
+    return contacts
+
+
 # ── Main pipeline ─────────────────────────────────────────────────────────────
 
 def enrich_companies(
@@ -579,25 +658,42 @@ def enrich_companies(
     log: Callable = None,
     role_filters: list = None,
     batch_size: int = None,
+    provider: str = "apollo",
+    company_ids: list = None,
 ) -> dict:
     """
     Enrich companies that have intent signals but no contacts yet.
+
+    Runs the same 7-stage flow as the standalone Lead Enrichment Engine:
+      Stage 1 — clean company name        (_clean_company_name)
+      Stage 2 — domain resolution         (domain_enricher, for companies missing one)
+      Stage 3 — contact discovery         (contacts_master → Apollo OR ZoomInfo)
+      Stage 4 — vendor email validation   (ZeroBounce)
+      Stage 5 — email prediction          (pattern engine, for missing emails)
+      Stage 6 — predicted email validation (ZeroBounce)
+      Stage 7 — scoring                   (ready_for_outreach + target_product tag)
 
     Args:
         apollo_key:       Apollo API key for contact search.
         zerobounce_key:   ZeroBounce key for email validation.
         limit:            Max total companies to process this run.
-        max_per_company:  Max contacts to fetch per company from Apollo.
+        max_per_company:  Max contacts to fetch per company.
         log:              Callable for progress messages.
-        role_filters:     List of job titles to search for in Apollo (pass-1 filter).
+        role_filters:     List of job titles to search for (pass-1 filter).
                           Defaults to ORACLE_JDE_TITLES if not supplied.
         batch_size:       Process in sub-batches of this size with a pause between
                           (useful for rate limiting / credit control). None = no batching.
+        provider:         "apollo" (default) or "zoominfo" — which paid API to use
+                          when contacts_master has no match.
+        company_ids:      Optional explicit list of company ids to enrich — used when
+                          the user hand-picks companies from the scan results.
 
     Returns final status dict.
     """
     if log is None:
         log = lambda msg: logger.info(msg)
+
+    provider = (provider or "apollo").lower().strip()
 
     # Resolve role filters — fall back to full ORACLE_JDE_TITLES list
     effective_roles = role_filters if role_filters else ORACLE_JDE_TITLES
@@ -613,11 +709,21 @@ def enrich_companies(
         "contacts_validated": 0,
     })
 
-    if not apollo_key:
+    if provider == "zoominfo":
+        if not zoominfo_client.is_configured():
+            log("ERROR: ZoomInfo selected but ZOOMINFO_USERNAME / ZOOMINFO_PASSWORD "
+                "not set in oracle_intent_engine/.env")
+            _status["status"] = "error"
+            _status["progress"] = "ZoomInfo credentials not configured"
+            return current_status()
+        log("Contact provider: ZoomInfo")
+    elif not apollo_key:
         log("ERROR: No Apollo API key configured — cannot enrich contacts.")
         _status["status"] = "error"
         _status["progress"] = "Apollo API key not configured"
         return current_status()
+    else:
+        log("Contact provider: Apollo")
 
     # Show ZeroBounce credit balance upfront
     if zerobounce_key:
@@ -637,8 +743,10 @@ def enrich_companies(
         reference_patterns = {}
         log(f"Warning: could not load email format reference ({e}) — using defaults only")
 
-    # Fetch companies needing enrichment
-    companies = db.get_companies_needing_enrichment(limit)
+    # Fetch companies needing enrichment (optionally only the user-selected ones)
+    companies = db.get_companies_needing_enrichment(limit, company_ids=company_ids)
+    if company_ids:
+        log(f"Enriching {len(companies)} hand-picked companies (of {len(company_ids)} selected)")
     _status["companies_total"] = len(companies)
 
     if not companies:
@@ -652,14 +760,28 @@ def enrich_companies(
     total_validated = 0
 
     for i, company in enumerate(companies):
-        name       = company["name"]
-        company_id = company["id"]
-        sig_count  = company.get("signal_count", "?")
+        name           = company["name"]
+        company_id     = company["id"]
+        sig_count      = company.get("signal_count", "?")
+        target_product = str(company.get("target_product") or "").strip()
 
         _status["progress"] = f"({i+1}/{len(companies)}) {name}"
-        log(f"[{i+1}/{len(companies)}] {name}  ({sig_count} signals)")
+        log(f"[{i+1}/{len(companies)}] {name}  ({sig_count} signals)"
+            + (f"  → {target_product}" if target_product else ""))
 
-        # Check contacts_master first (Salesforce export — no API cost)
+        # Stage 2 — domain resolution for companies the scan couldn't resolve.
+        # A domain is needed for Stage 5 email prediction to work.
+        if not company.get("domain"):
+            try:
+                resolved = domain_enricher.lookup_domain(name)
+                if resolved:
+                    company["domain"] = resolved
+                    db.set_company_domain(company_id, resolved)
+                    log(f"  ~ domain resolved: {resolved}")
+            except Exception as e:
+                logger.warning(f"Domain resolution failed for {name}: {e}")
+
+        # Stage 3a — check contacts_master first (Salesforce export — no API cost)
         master_rows = db.get_master_leads_by_company(name)
         if master_rows:
             to_save = []
@@ -685,6 +807,7 @@ def enrich_companies(
                     "is_target":               1,
                     "email_validation_status": c.get("email_validation_status") or None,
                 })
+            to_save = _score_contacts(to_save, target_product)
             db.save_contacts(company_id, to_save)
             # All rows returned already passed the zb_valid_email = 'Yes' filter
             valid_ct = len(to_save)
@@ -696,17 +819,28 @@ def enrich_companies(
             log(f"  + {valid_ct} contacts from contacts_master (ZB validated) — skipped Apollo")
             continue
 
-        contacts, pass_used = _apollo_search(name, apollo_key, max_per_company,
-                                             role_filters=effective_roles)
-
-        if not contacts:
-            log(f"  — no contacts found on Apollo (pass 1 + pass 2 tried)")
-            _status["companies_processed"] += 1
-            time.sleep(RATE_LIMIT_DELAY)
-            continue
-
-        pass_label = "targeted" if pass_used == 1 else "broad fallback"
-        log(f"  + {len(contacts)} contacts from Apollo ({pass_label})")
+        # Stage 3b — paid provider lookup (Apollo or ZoomInfo)
+        if provider == "zoominfo":
+            contacts = zoominfo_client.search_contacts(
+                _clean_company_name(name), max_per=max_per_company,
+                relevance_filter=_is_relevant_contact,
+            )
+            if not contacts:
+                log(f"  — no contacts found on ZoomInfo")
+                _status["companies_processed"] += 1
+                time.sleep(RATE_LIMIT_DELAY)
+                continue
+            log(f"  + {len(contacts)} contacts from ZoomInfo")
+        else:
+            contacts, pass_used = _apollo_search(name, apollo_key, max_per_company,
+                                                 role_filters=effective_roles)
+            if not contacts:
+                log(f"  — no contacts found on Apollo (pass 1 + pass 2 tried)")
+                _status["companies_processed"] += 1
+                time.sleep(RATE_LIMIT_DELAY)
+                continue
+            pass_label = "targeted" if pass_used == 1 else "broad fallback"
+            log(f"  + {len(contacts)} contacts from Apollo ({pass_label})")
 
         # Stage 4: Validate Apollo emails in batch via ZeroBounce
         emails_to_validate = [c["email"] for c in contacts if c.get("email")]
@@ -745,6 +879,8 @@ def enrich_companies(
             log(f"  ~ {no_email_count} contact(s) have no email — "
                 "add ZeroBounce key to enable prediction")
 
+        # Stage 7 — score readiness + tag the Oracle product to pitch, then save
+        contacts = _score_contacts(contacts, target_product)
         db.save_contacts(company_id, contacts)
         total_contacts += len(contacts)
         _status["contacts_found"]     = total_contacts

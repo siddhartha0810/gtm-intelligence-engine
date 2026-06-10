@@ -171,10 +171,44 @@ _SINGLE_WORD_BLOCKLIST = {
 }
 
 
+# Placeholder strings scrapers sometimes return instead of a real company
+_PLACEHOLDER_NAMES = {
+    "confidential", "unknown", "various", "n/a", "na", "none", "client",
+    "the company", "a company", "this company", "the client", "a client",
+    "our client", "leading company", "a leading company", "company name",
+    "hiring company", "employer", "recruiter", "tbc", "tbd",
+}
+
+
 def is_valid_company_name(name: str) -> bool:
     if not name or len(name) < 3 or len(name) > 80:
         return False
     name_l = name.lower().strip()
+
+    # Block placeholder values ("Confidential", "Our Client", ...)
+    if name_l in _PLACEHOLDER_NAMES:
+        return False
+
+    # Block URL / HTML fragments and markup leftovers
+    if any(tok in name_l for tok in ("http", "www.", "</", "&amp;", "&#", "{", "}")):
+        return False
+
+    # Block sentence fragments — a real company name has no inner clause verbs
+    if any(f" {verb} " in f" {name_l} " for verb in ("is", "are", "has", "have", "will", "was", "were")):
+        return False
+
+    # Block names that are mostly digits or punctuation (scraped IDs, dates, prices)
+    alpha_chars = sum(1 for ch in name if ch.isalpha())
+    if alpha_chars < max(3, len(name.replace(" ", "")) * 0.5):
+        return False
+
+    # Block headline-style separators (em dash, pipe, bullet) — article titles, not names
+    if any(sep in name for sep in ("—", "|", "•", "::")):
+        return False
+
+    # Block names that end with a colon or open quote (truncated headline)
+    if name.rstrip().endswith((":", '"', "'", "“", "‘", "(")):
+        return False
 
     # Block single generic words
     if name_l in _SINGLE_WORD_BLOCKLIST:

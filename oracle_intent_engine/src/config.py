@@ -56,6 +56,11 @@ APOLLO_API_KEY = os.getenv("APOLLO_API_KEY", "")
 # Get key at: https://app.zerobounce.net/
 ZEROBOUNCE_API_KEY = os.getenv("ZEROBOUNCE_API_KEY", "")
 
+# ZoomInfo — alternative contact-discovery provider (enterprise API)
+# Auth: POST /authenticate with username+password → JWT (60 min)
+ZOOMINFO_USERNAME = os.getenv("ZOOMINFO_USERNAME", "").strip()
+ZOOMINFO_PASSWORD = os.getenv("ZOOMINFO_PASSWORD", "").strip()
+
 # Adzuna — free job board API (250 calls/day free)
 # Register at: https://developer.adzuna.com/
 ADZUNA_APP_ID  = os.getenv("ADZUNA_APP_ID",  "")

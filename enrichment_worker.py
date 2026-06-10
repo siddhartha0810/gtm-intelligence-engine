@@ -97,6 +97,11 @@ def main() -> None:
                         help="Process in sub-batches of this size with a pause between")
     parser.add_argument("--role-filters",    type=str, default=None,
                         help="JSON array of job title strings to filter Apollo results")
+    parser.add_argument("--provider",        type=str, default="apollo",
+                        choices=["apollo", "zoominfo"],
+                        help="Contact discovery provider (contacts_master is always checked first)")
+    parser.add_argument("--company-ids",     type=str, default=None,
+                        help="JSON array of company ids — only enrich these companies")
     parser.add_argument("--status-file",     required=True)
     parser.add_argument("--log-file",        required=True)
     args = parser.parse_args()
@@ -107,6 +112,13 @@ def main() -> None:
             role_filters = json.loads(args.role_filters)
         except Exception:
             role_filters = None
+
+    company_ids = None
+    if args.company_ids:
+        try:
+            company_ids = [int(x) for x in json.loads(args.company_ids)]
+        except Exception:
+            company_ids = None
 
     status_path = Path(args.status_file)
     log_path    = Path(args.log_file)
@@ -152,6 +164,8 @@ def main() -> None:
         log=log_fn,
         role_filters=role_filters,
         batch_size=args.batch_size,
+        provider=args.provider,
+        company_ids=company_ids,
     )
 
     stop_evt.set()

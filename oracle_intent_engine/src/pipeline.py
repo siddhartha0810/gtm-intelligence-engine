@@ -416,6 +416,15 @@ def run_scan(
         new_count, known_count = _persist(companies, run_id=run_id)
         _log(f"✓ Database save complete — {new_count} NEW leads, {known_count} already known (skipped)")
 
+        # Set target_product (JD Edwards, Oracle Fusion, ...) from each company's
+        # dominant signal so enrichment can tag every contact with the product to pitch.
+        try:
+            filled = db.backfill_target_product()
+            if filled:
+                _log(f"✓ Target product set for {filled} companies from their signals")
+        except Exception as e:
+            _log(f"  [target_product] Warning: {e}")
+
         # csv contact matching (all companies, from 280k contacts database)
         if csv_contacts.is_available():
             _current_scan["progress"] = "Matching contacts from CSV database..."
@@ -504,6 +513,12 @@ def _persist(companies: list[dict], run_id: int = None) -> tuple[int, int]:
     """Persist companies and signals. Returns (new_count, known_count)."""
     new_count = known_count = 0
     for company in companies:
+        # Final gate: never write an unreliable company name to the database.
+        # Signals already validate at scrape time, but aggregation can still
+        # produce headline fragments — this is the last line of defence.
+        if not is_valid_company_name(company.get("company_name", "")):
+            _log(f"  Skipped invalid company name: '{company.get('company_name')}'")
+            continue
         try:
             company_id = db.upsert_company(
                 name=company["company_name"],
