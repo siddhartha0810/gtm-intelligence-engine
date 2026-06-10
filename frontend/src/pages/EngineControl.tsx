@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Play, Square, RotateCcw, Download, Trash2, Factory, Users, CheckCircle,
          Mail, X, ChevronRight, Zap, Clock, CreditCard, Building2, Database,
          ExternalLink, Globe, BarChart2 } from 'lucide-react'
@@ -645,9 +646,13 @@ function ScanResultsModal({ onClose, onDeleted }: { onClose: () => void; onDelet
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function EngineControl() {
+  const navigate = useNavigate()
   const [oracleState,       setOracleState]     = useState<'idle' | 'running' | 'stopping'>('idle')
   const [enrichState,       setEnrichState]     = useState<'idle' | 'running'>('idle')
   const [showScanResults,   setShowScanResults] = useState(false)
+  const [showPostScan,      setShowPostScan]    = useState(false)
+  const [postScanQuery,     setPostScanQuery]   = useState('')
+  const [enrichDone,        setEnrichDone]      = useState(false)
   const [logs,            setLogs]            = useState<LogEntry[]>([{ t: now(), level: 'INFO', msg: 'System ready. Fetching engine status...' }])
   const [enrichLogs,      setEnrichLogs]      = useState<LogEntry[]>([])
   const [selectedSources, setSelectedSources] = useState<string[]>(DEFAULT_SOURCES)
@@ -728,8 +733,23 @@ export default function EngineControl() {
     } catch { /* silent */ }
   }
 
+  // ── Post-scan results: load companies discovered by the scan ───────────────
+  const loadScanResults = async () => {
+    try {
+      const r = await fetch('/api/enrich/pending', { headers: authH() })
+      if (!r.ok) return
+      const d = await r.json()
+      const companies: PendingCompany[] = d.companies || []
+      setPendingCompanies(companies)
+      setSelectedCompanyIds(companies.map(c => c.id))  // default: all selected
+      if (companies.length > 0) setShowPostScan(true)
+    } catch { /* silent */ }
+  }
+
   // ── Fetch preflight data ────────────────────────────────────────────────────
-  const fetchPreflight = async () => {
+  // keepSelection: launched from the post-scan panel — preserve the user's
+  // company checkboxes instead of resetting to "all selected".
+  const fetchPreflight = async (keepSelection = false) => {
     setPreflightLoading(true)
     try {
       const [r, rp] = await Promise.all([
@@ -743,7 +763,13 @@ export default function EngineControl() {
           const dp = await rp.json()
           const companies: PendingCompany[] = dp.companies || []
           setPendingCompanies(companies)
-          setSelectedCompanyIds(companies.map(c => c.id))  // default: all selected
+          if (keepSelection) {
+            // keep only selections that still exist in the pending list
+            const valid = new Set(companies.map(c => c.id))
+            setSelectedCompanyIds(selectedCompanyIds.filter(id => valid.has(id)))
+          } else {
+            setSelectedCompanyIds(companies.map(c => c.id))
+          }
         }
         setShowPreflight(true)
       } else {
@@ -756,6 +782,8 @@ export default function EngineControl() {
   // ── Start enrichment (called from modal) ────────────────────────────────────
   const startEnrichment = async () => {
     setShowPreflight(false)
+    setShowPostScan(false)
+    setEnrichDone(false)
     const isSubset = selectedCompanyIds.length > 0 && selectedCompanyIds.length < pendingCompanies.length
     try {
       const res = await fetch('/api/enrich/start', {
@@ -782,6 +810,7 @@ export default function EngineControl() {
         const s = await fetch('/api/enrich/status', { headers: authH() }).then(r => r.json()).catch(() => null)
         if (s && s.status !== 'running') {
           setEnrichState('idle')
+          setEnrichDone(true)
           clearInterval(enrichPoll.current!)
           fetchEnrichStats()
           toast.success(`Enrichment done — ${s.contacts_found || 0} contacts, ${s.contacts_validated || 0} valid emails`)
@@ -828,6 +857,7 @@ export default function EngineControl() {
             setOracleState('idle')
             clearInterval(pollRef.current!)
             fetchEnrichStats()
+            await loadScanResults()
           }
         }, 3000)
         return
@@ -846,6 +876,7 @@ export default function EngineControl() {
           toast.success('Oracle Intent scan completed')
           clearInterval(pollRef.current!)
           fetchEnrichStats()
+          await loadScanResults()   // show discovered companies for selection
           // Auto-enrich: the backend chains the full enrichment pipeline
           // (stages 1-7) automatically — attach to its log/status stream.
           if (autoTrigger) {
@@ -860,6 +891,7 @@ export default function EngineControl() {
               if (es) setEnrichStatus(es)
               if (es && es.status !== 'running') {
                 setEnrichState('idle')
+                setEnrichDone(true)
                 clearInterval(enrichPoll.current!)
                 fetchEnrichStats()
                 toast.success(`Enrichment done — ${es.contacts_found || 0} contacts, ${es.contacts_validated || 0} valid emails`)
@@ -912,6 +944,7 @@ export default function EngineControl() {
                 clearInterval(pollRef.current!)
                 pollRef.current = null
                 fetchEnrichStats()
+                await loadScanResults()
               }
             }, 3000)
           }
@@ -935,6 +968,7 @@ export default function EngineControl() {
               if (s) setEnrichStatus(s)
               if (s && s.status !== 'running') {
                 setEnrichState('idle')
+                setEnrichDone(true)
                 clearInterval(enrichPoll.current!)
                 enrichPoll.current = null
                 fetchEnrichStats()
@@ -1081,7 +1115,7 @@ export default function EngineControl() {
                 )}
                 {isEnrichment && (
                   enrichState === 'idle' ? (
-                    <button onClick={fetchPreflight} disabled={preflightLoading}
+                    <button onClick={() => fetchPreflight()} disabled={preflightLoading}
                       style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', gap:8, padding:'9px 0', borderRadius:8, border:'none',
                         background: engine.color,
                         color: 'white',
@@ -1115,6 +1149,114 @@ export default function EngineControl() {
           )
         })}
       </div>
+
+      {/* Enrichment complete — point the user at the results */}
+      {enrichDone && enrichState === 'idle' && (
+        <div style={{ ...card, border:'1px solid rgba(16,185,129,0.35)', background:'rgba(16,185,129,0.04)' }}>
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:12 }}>
+            <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+              <CheckCircle size={18} color="#10b981" />
+              <div>
+                <div style={{ fontSize:14, fontWeight:600, color:'#0f172a' }}>Enrichment complete</div>
+                <div style={{ fontSize:12, color:'#64748b', marginTop:2 }}>
+                  Companies and their contacts are now saved in the database — review them on the Companies and Contacts pages.
+                </div>
+              </div>
+            </div>
+            <div style={{ display:'flex', gap:8 }}>
+              <button onClick={() => navigate('/companies')}
+                style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 16px', borderRadius:8, border:'none', background:'#3b82f6', color:'#fff', fontSize:13, fontWeight:600, cursor:'pointer' }}>
+                <Building2 size={13} /> View Companies
+              </button>
+              <button onClick={() => navigate('/contacts')}
+                style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 16px', borderRadius:8, border:'none', background:'#6366f1', color:'#fff', fontSize:13, fontWeight:600, cursor:'pointer' }}>
+                <Users size={13} /> View Contacts
+              </button>
+              <button onClick={() => setEnrichDone(false)}
+                style={{ padding:'8px 12px', borderRadius:8, border:'1px solid #e2e8f0', background:'transparent', color:'#64748b', fontSize:13, cursor:'pointer' }}>
+                Dismiss
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Post-scan results — select companies and launch enrichment */}
+      {showPostScan && pendingCompanies.length > 0 && enrichState === 'idle' && (
+        <div style={{ ...card, border:'1px solid rgba(59,130,246,0.35)' }}>
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:12, flexWrap:'wrap', gap:10 }}>
+            <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+              <BarChart2 size={16} color="#3b82f6" />
+              <div>
+                <div style={{ fontSize:14, fontWeight:600, color:'#0f172a' }}>
+                  Scan complete — {pendingCompanies.length} companies awaiting enrichment
+                </div>
+                <div style={{ fontSize:12, color:'#64748b', marginTop:2 }}>
+                  Select the companies to enrich, then launch the enrichment workflow
+                </div>
+              </div>
+            </div>
+            <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+              <span style={{ fontSize:12, padding:'3px 10px', borderRadius:999, background:'rgba(59,130,246,0.12)', color:'#2563eb', fontWeight:600 }}>
+                {selectedCompanyIds.length} selected
+              </span>
+              <button onClick={() => setSelectedCompanyIds(pendingCompanies.map(c => c.id))}
+                style={{ fontSize:12, color:'#3b82f6', background:'none', border:'none', cursor:'pointer', textDecoration:'underline' }}>All</button>
+              <button onClick={() => setSelectedCompanyIds([])}
+                style={{ fontSize:12, color:'#94a3b8', background:'none', border:'none', cursor:'pointer', textDecoration:'underline' }}>None</button>
+            </div>
+          </div>
+
+          <input value={postScanQuery} onChange={e => setPostScanQuery(e.target.value)}
+            placeholder="Search companies..."
+            style={{ width:'100%', boxSizing:'border-box', padding:'8px 12px', borderRadius:8, border:'1px solid #e2e8f0', fontSize:13, outline:'none', background:'#f8fafc', marginBottom:10 }} />
+
+          <div style={{ maxHeight:260, overflowY:'auto', border:'1px solid #e2e8f0', borderRadius:8, marginBottom:14 }}>
+            {pendingCompanies
+              .filter(c => !postScanQuery || c.name.toLowerCase().includes(postScanQuery.toLowerCase()))
+              .map(c => {
+                const on = selectedCompanyIds.includes(c.id)
+                return (
+                  <label key={c.id}
+                    style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 12px', cursor:'pointer',
+                      borderBottom:'1px solid #f1f5f9', background: on ? 'rgba(59,130,246,0.04)' : 'transparent' }}>
+                    <input type="checkbox" checked={on}
+                      onChange={() => setSelectedCompanyIds(on ? selectedCompanyIds.filter(x => x !== c.id) : [...selectedCompanyIds, c.id])}
+                      style={{ accentColor:'#3b82f6', cursor:'pointer', flexShrink:0 }} />
+                    <Building2 size={13} color="#94a3b8" style={{ flexShrink:0 }} />
+                    <span style={{ fontSize:13, fontWeight:500, color:'#0f172a', flex:1, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
+                      {c.name}
+                    </span>
+                    {c.domain && (
+                      <span style={{ fontSize:11, color:'#64748b', whiteSpace:'nowrap', flexShrink:0 }}>{c.domain}</span>
+                    )}
+                    {c.target_product && (
+                      <span style={{ fontSize:10, padding:'2px 8px', borderRadius:999, background:'rgba(16,185,129,0.1)', color:'#10b981', whiteSpace:'nowrap', flexShrink:0 }}>
+                        {c.target_product}
+                      </span>
+                    )}
+                    <span style={{ fontSize:10, padding:'2px 7px', borderRadius:999, background:'rgba(99,102,241,0.1)', color:'#818cf8', whiteSpace:'nowrap', flexShrink:0 }}>
+                      {c.signal_count} signals
+                    </span>
+                  </label>
+                )
+              })}
+          </div>
+
+          <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+            <button onClick={() => fetchPreflight(true)} disabled={selectedCompanyIds.length === 0 || preflightLoading}
+              style={{ display:'flex', alignItems:'center', gap:8, padding:'10px 22px', borderRadius:8, border:'none',
+                background: selectedCompanyIds.length > 0 ? '#6366f1' : '#cbd5e1', color:'#fff',
+                fontSize:13, fontWeight:600, cursor: selectedCompanyIds.length > 0 ? 'pointer' : 'not-allowed' }}>
+              <Zap size={14} /> Launch Enrichment ({selectedCompanyIds.length} companies)
+            </button>
+            <button onClick={() => setShowPostScan(false)}
+              style={{ padding:'10px 16px', borderRadius:8, border:'1px solid #e2e8f0', background:'transparent', color:'#64748b', fontSize:13, cursor:'pointer' }}>
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Config + Scan Log */}
       <div style={{ display:'grid', gridTemplateColumns:'360px 1fr', gap:16 }}>
@@ -1341,7 +1483,7 @@ export default function EngineControl() {
         <div style={{ display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' }}>
           {enrichState === 'idle' ? (
             <button
-              onClick={fetchPreflight}
+              onClick={() => fetchPreflight()}
               disabled={preflightLoading}
               style={{ display:'flex', alignItems:'center', gap:8, padding:'9px 20px', borderRadius:8, border:'none', background: apolloOk ? '#6366f1' : 'rgba(55,65,81,0.4)', color: apolloOk ? 'white' : '#6b7280', fontSize:13, fontWeight:500, cursor: apolloOk ? 'pointer' : 'not-allowed', opacity: preflightLoading ? 0.7 : 1 }}
               title={!apolloOk ? 'Add APOLLO_API_KEY to oracle_intent_engine/.env' : 'Open pre-flight check'}>
