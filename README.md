@@ -355,10 +355,10 @@ Salesforce fields like `FirstName`, `LinkedIn_URL__c`, `HasOptedOutOfEmail` all 
 ### Oracle Intent Engine — `oracle_intent_engine/.env`
 ```env
 # ─── Database (must be on-site or VPN to reach 10.0.0.149) ───────────────────
-DB_HOST=10.0.0.149
-DB_PORT=5432
-DB_NAME=Inoapps-Data-DB
-DB_USER=postgres
+DB_HOST=
+DB_PORT=
+DB_NAME=
+DB_USER=
 DB_PASSWORD=your_password_here
 
 # ─── Apollo.io ────────────────────────────────────────────────────────────────
@@ -379,10 +379,10 @@ FLASK_SECRET_KEY=any_long_random_string_here
 ### Lead Enrichment Engine — `lead_enrichment_engine/.env`
 ```env
 # ─── Database ─────────────────────────────────────────────────────────────────
-DB_HOST=10.0.0.149
-DB_PORT=5432
-DB_NAME=Inoapps-Data-DB
-DB_USER=postgres
+DB_HOST=
+DB_PORT=
+DB_NAME=
+DB_USER=
 DB_PASSWORD=your_password_here
 
 # ─── ZeroBounce (email validation — each email costs 1 credit) ───────────────
@@ -401,13 +401,13 @@ APOLLO_API_KEY=your_apollo_key_here
 ### Prerequisites
 - Python 3.13+
 - Node.js 18+
-- Access to `10.0.0.149:5432` (on-site or VPN)
+- Access to `10.0.0.0.0` (on-site or VPN)
 
 ### Start the full platform
 
 ```bash
 # 1. Activate the shared virtual environment
-cd "C:/Users/sidhartha/OneDrive/Desktop/DATA TOOL"
+cd "C:/Users/"
 venv\Scripts\activate
 
 # 2. Build the frontend (first time or after UI changes)
@@ -505,7 +505,7 @@ All signals pass through a staffing filter. If the company posting a job is a st
 
 ---
 
-## Contributing / KT Notes
+## Notes
 
 ### Adding a new signal source
 1. Create `oracle_intent_engine/src/signals/my_signal.py`
