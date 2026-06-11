@@ -153,11 +153,14 @@ function ContactsPanel({ company, onClose }: { company: Company; onClose: () => 
   }
 
   const confColor = (c: number) => c >= 0.8 ? '#10b981' : c >= 0.5 ? '#f59e0b' : '#ef4444'
-  const filtered  = contacts.filter(c =>
-    `${c.first_name} ${c.last_name}`.toLowerCase().includes(search.toLowerCase()) ||
-    (c.title || '').toLowerCase().includes(search.toLowerCase()) ||
-    (c.email || '').toLowerCase().includes(search.toLowerCase())
-  )
+  const filtered  = contacts
+    .filter(c => c.email || c.linkedin_url)   // only contacts with at least one contact method
+    .filter(c =>
+      `${c.first_name} ${c.last_name}`.toLowerCase().includes(search.toLowerCase()) ||
+      (c.full_name || '').toLowerCase().includes(search.toLowerCase()) ||
+      (c.title || '').toLowerCase().includes(search.toLowerCase()) ||
+      (c.email || '').toLowerCase().includes(search.toLowerCase())
+    )
 
   return (
     <>

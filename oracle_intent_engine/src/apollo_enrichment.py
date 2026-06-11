@@ -515,13 +515,26 @@ def _apollo_call(org_name: str, api_key: str, max_per: int,
 
         last  = str(p.get("last_name") or "").strip()
         title = str(p.get("title") or p.get("headline") or "").strip()
+
+        # Resolve LinkedIn URL — direct field first, then construct from uid
+        linkedin = str(p.get("linkedin_url") or "").strip()
+        if not linkedin:
+            uid = str(p.get("linkedin_uid") or "").strip()
+            if uid:
+                linkedin = f"https://www.linkedin.com/in/{uid}"
+        linkedin = linkedin or None
+
+        # Skip contacts with no email AND no LinkedIn — completely useless records
+        if not email and not linkedin:
+            continue
+
         contacts.append({
             "first_name":              first,
             "last_name":               last,
             "full_name":               f"{first} {last}".strip(),
             "title":                   title,
             "email":                   email or None,
-            "linkedin_url":            str(p.get("linkedin_url") or "").strip() or None,
+            "linkedin_url":            linkedin,
             "domain":                  domain,
             "source":                  "apollo",
             "confidence":              0.8,
