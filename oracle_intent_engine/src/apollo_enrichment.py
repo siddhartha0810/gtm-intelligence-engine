@@ -111,7 +111,7 @@ _DEFAULT_PREDICTION_ORDER = [
 
 # How many candidates to generate per unknown-domain contact.
 # Each is validated by ZeroBounce in one batch call; first valid wins.
-_TOP_N_CANDIDATES = 9
+_TOP_N_CANDIDATES = 3
 
 
 def _pname(value: str) -> str:
