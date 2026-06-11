@@ -157,7 +157,7 @@ export default function Sidebar({ collapsed, onToggle, user }: SidebarProps) {
               <NavLink
                 key={item.to}
                 to={item.to}
-                style={({ isActive }) => ({
+                style={({ isActive }: { isActive: boolean }) => ({
                   display: 'flex', alignItems: 'center',
                   gap: collapsed ? 0 : 10,
                   justifyContent: collapsed ? 'center' : 'flex-start',
@@ -170,10 +170,10 @@ export default function Sidebar({ collapsed, onToggle, user }: SidebarProps) {
                   color: isActive ? '#93c5fd' : '#94b8d9',
                   transition: 'background 0.15s',
                 })}
-                onMouseEnter={e => { const el = e.currentTarget as HTMLElement; if (!el.classList.contains('active')) el.style.background = 'rgba(255,255,255,0.06)' }}
-                onMouseLeave={e => { const el = e.currentTarget as HTMLElement; if (!el.classList.contains('active')) el.style.background = 'transparent' }}
+                onMouseEnter={(e: React.MouseEvent<HTMLAnchorElement>) => { const el = e.currentTarget as HTMLElement; if (!el.classList.contains('active')) el.style.background = 'rgba(255,255,255,0.06)' }}
+                onMouseLeave={(e: React.MouseEvent<HTMLAnchorElement>) => { const el = e.currentTarget as HTMLElement; if (!el.classList.contains('active')) el.style.background = 'transparent' }}
               >
-                {({ isActive }) => (
+                {({ isActive }: { isActive: boolean }) => (
                   <>
                     {isActive && !collapsed && (
                       <div style={{
