@@ -18,15 +18,13 @@ if exist "venv\Scripts\python.exe" (
 )
 echo Python: %PYTHON%
 
-REM --- Build React frontend if dist is missing or outdated ---
-if not exist "frontend\dist\index.html" (
-    echo Building frontend...
-    cd frontend
-    call npm install --silent
-    call npm run build
-    cd ..
-    echo Frontend built.
-)
+REM --- Build React frontend (always rebuild to pick up latest changes) ---
+echo Building frontend...
+cd frontend
+call npm install --silent
+call npm run build
+cd ..
+echo Frontend built.
 
 echo Starting server on http://localhost:8000 ...
 echo.

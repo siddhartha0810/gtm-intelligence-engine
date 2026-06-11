@@ -50,7 +50,8 @@ interface Company {
 }
 
 interface Contact {
-  id: number | string        // number from company_contacts, Salesforce ID from contacts_master
+  id: number | string
+  full_name?: string
   first_name: string
   last_name: string
   title: string
@@ -326,7 +327,7 @@ function ContactsPanel({ company, onClose }: { company: Company; onClose: () => 
           )}
 
           {!loading && filtered.map((c, i) => {
-            const name = `${c.first_name} ${c.last_name}`.trim() || 'Unknown'
+            const name = c.full_name || `${c.first_name} ${c.last_name}`.trim() || 'Unknown'
             const conf = Math.round((c.confidence ?? 0) * 100)
             const COLORS = ['#3b82f6', '#6366f1', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899']
             const avatarColor = COLORS[i % COLORS.length]

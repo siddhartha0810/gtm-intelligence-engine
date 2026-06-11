@@ -1256,6 +1256,80 @@ def test_connection() -> bool:
 # ═══════════════════ CONTACTS_MASTER — READ-ONLY SALESFORCE EXPORT ══════════════
 # contacts_master is populated by Salesforce exports and NEVER written to by this engine.
 # All functions here are read-only.  upsert_master_leads() is a no-op for API compat.
+
+_CM_COL_CACHE: dict | None = None
+
+def _cm_col(cur, want_lower: str) -> str:
+    """
+    Return the properly-quoted column expression for contacts_master.
+    Salesforce exports may use PascalCase ("FirstName") or lowercase.
+    Queries information_schema once and caches the result.
+    """
+    global _CM_COL_CACHE
+    if _CM_COL_CACHE is None:
+        try:
+            cur.execute(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_name = 'contacts_master'"
+            )
+            actual = {r[0].lower(): r[0] for r in cur.fetchall()}
+            _CM_COL_CACHE = actual
+        except Exception:
+            _CM_COL_CACHE = {}
+    actual = _CM_COL_CACHE
+    # Look up case-insensitively; return quoted actual name, or NULL if absent
+    name = actual.get(want_lower)
+    return f'"{name}"' if name else "NULL"
+
+def _build_cm_select(cur) -> str:
+    """Build the SELECT column list for contacts_master using actual column names."""
+    def col(want: str, alias: str) -> str:
+        return f"{_cm_col(cur, want)} AS {alias}"
+
+    linkedin = (
+        f"COALESCE(NULLIF({_cm_col(cur, 'linkedin_url__c')},''::text), "
+        f"NULLIF({_cm_col(cur, 'linkedin_url_enriched')},''::text))"
+    )
+    company_col = (
+        f"COALESCE(NULLIF({_cm_col(cur, 'new_company')},''::text), "
+        f"NULLIF({_cm_col(cur, 'existing_company')},''::text))"
+    )
+    email_col = (
+        f"COALESCE(NULLIF({_cm_col(cur, 'validated_email')},''::text), "
+        f"NULLIF({_cm_col(cur, 'email')},''::text))"
+    )
+    return f"""
+        ctid::text                                AS lead_id,
+        {col('firstname', 'first_name')},
+        {col('lastname', 'last_name')},
+        {col('title', 'job_title')},
+        {email_col}                               AS email,
+        {col('validated_email_status', 'email_validation_status')},
+        {linkedin}                                AS linkedin_url,
+        {col('domain', 'domain')},
+        {company_col}                             AS company,
+        {col('phone', 'phone')},
+        {col('mailingstreet', 'street')},
+        {col('mailingcity', 'city')},
+        {col('mailingstate', 'state')},
+        {col('mailingcountry', 'country')},
+        {col('mailingpostalcode', 'postal_code')}
+    """
+
+def _cm_zb_filter(cur) -> str:
+    col = _cm_col(cur, 'zb_valid_email')
+    return f"UPPER(TRIM({col})) = 'YES'" if col != "NULL" else "TRUE"
+
+def _cm_norm_expr(cur) -> str:
+    new_co = _cm_col(cur, 'new_company')
+    exist_co = _cm_col(cur, 'existing_company')
+    coalesce = f"COALESCE({new_co}, {exist_co}, ''::text)"
+    return (
+        f"LOWER(REGEXP_REPLACE({coalesce},"
+        f" '\\\\s+(llc|inc|ltd|corp|limited|plc|llp|gmbh|sa|ag|nv|bv|co)\\\\.?$',"
+        f" '', 'i'))"
+    )
+
 def _norm_company(name: str) -> str:
     """Lowercase + strip common legal suffixes for consistent company matching."""
     import re
@@ -1279,9 +1353,7 @@ def upsert_master_leads(records: list) -> int:
 def get_master_leads_by_email(emails: list) -> dict:
     """
     Look up contacts_master by email address (case-insensitive).
-    Only returns contacts where zb_valid_email = 'Yes'.
-    Email resolved from validated_email → email.
-    Returns {email_lower: record_dict}. Returns {} if table absent.
+    Returns {email_lower: record_dict}. Returns {} if table absent or columns wrong.
     """
     if not emails:
         return {}
@@ -1290,72 +1362,46 @@ def get_master_leads_by_email(emails: list) -> dict:
         return {}
     try:
         with db_cursor(commit=False) as cur:
+            sel = _build_cm_select(cur)
+            email_col = _cm_col(cur, 'email')
+            val_email_col = _cm_col(cur, 'validated_email')
+            zb = _cm_zb_filter(cur)
             cur.execute(
-                """
-                SELECT
-                    ctid::text                                                      AS lead_id,
-                    firstname                                                       AS first_name,
-                    lastname                                                        AS last_name,
-                    title                                                           AS job_title,
-                    COALESCE(NULLIF(validated_email,''), NULLIF(email,''))          AS email,
-                    validated_email_status                                          AS email_validation_status,
-                    COALESCE(NULLIF(linkedin_url__c,''), NULLIF(linkedin_url_enriched,'')) AS linkedin_url,
-                    domain,
-                    COALESCE(NULLIF(new_company,''), NULLIF(existing_company,''))   AS company,
-                    phone,
-                    mailingstreet                                                   AS street,
-                    mailingcity                                                     AS city,
-                    mailingstate                                                    AS state,
-                    mailingcountry                                                  AS country,
-                    mailingpostalcode                                               AS postal_code
+                f"""
+                SELECT {sel}
                 FROM contacts_master
-                WHERE LOWER(COALESCE(NULLIF(validated_email,''), NULLIF(email,''))) = ANY(%s)
-                  AND UPPER(TRIM(zb_valid_email)) = 'YES'
+                WHERE LOWER(COALESCE(NULLIF({val_email_col},''::text),
+                                     NULLIF({email_col},''::text))) = ANY(%s)
+                  AND {zb}
                 """,
                 (clean,),
             )
             rows = cur.fetchall()
             return {dict(r)["email"].lower(): dict(r) for r in rows if dict(r).get("email")}
     except Exception as e:
-        logger.error(f"get_master_leads_by_email failed: {e}", exc_info=True)
+        logger.debug(f"get_master_leads_by_email failed (contacts_master unavailable): {e}")
         return {}
 
 def get_master_leads_by_company(company_normalized: str) -> list:
     """
     Return contacts from contacts_master for a given company name.
-    Only returns contacts that have a ZeroBounce-validated email (zb_valid_email not empty).
-    Matches on new_company or existing_company (case-insensitive normalised).
-    Returns [] if table absent or no match.
+    Returns [] if table absent or columns mismatched.
     """
     norm = _norm_company(company_normalized)
     try:
         with db_cursor(commit=False) as cur:
+            sel = _build_cm_select(cur)
+            zb = _cm_zb_filter(cur)
+            norm_expr = _cm_norm_expr(cur)
+            val_status_col = _cm_col(cur, 'validated_email_status')
             cur.execute(
-                """
-                SELECT
-                    ctid::text                                                      AS lead_id,
-                    firstname                                                       AS first_name,
-                    lastname                                                        AS last_name,
-                    title                                                           AS job_title,
-                    COALESCE(NULLIF(validated_email,''), NULLIF(email,''))          AS email,
-                    validated_email_status                                          AS email_validation_status,
-                    COALESCE(NULLIF(linkedin_url__c,''), NULLIF(linkedin_url_enriched,'')) AS linkedin_url,
-                    domain,
-                    COALESCE(NULLIF(new_company,''), NULLIF(existing_company,''))   AS company,
-                    phone,
-                    mailingstreet                                                   AS street,
-                    mailingcity                                                     AS city,
-                    mailingstate                                                    AS state,
-                    mailingcountry                                                  AS country,
-                    mailingpostalcode                                               AS postal_code
+                f"""
+                SELECT {sel}
                 FROM contacts_master
-                WHERE LOWER(REGEXP_REPLACE(
-                          COALESCE(new_company, existing_company, ''),
-                          '\\s+(llc|inc|ltd|corp|limited|plc|llp|gmbh|sa|ag|nv|bv|co)\\.?$',
-                          '', 'i')) = %s
-                  AND UPPER(TRIM(zb_valid_email)) = 'YES'
+                WHERE {norm_expr} = %s
+                  AND {zb}
                 ORDER BY
-                    CASE validated_email_status
+                    CASE {val_status_col}
                         WHEN 'valid'     THEN 0
                         WHEN 'catch-all' THEN 1
                         ELSE 2 END
@@ -1365,7 +1411,7 @@ def get_master_leads_by_company(company_normalized: str) -> list:
             )
             return cur.fetchall()
     except Exception as e:
-        logger.error(f"get_master_leads_by_company failed for '{company_normalized}': {e}", exc_info=True)
+        logger.debug(f"get_master_leads_by_company failed (contacts_master unavailable): {e}")
         return []
 
 def master_leads_stats() -> dict:
