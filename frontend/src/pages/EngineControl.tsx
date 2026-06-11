@@ -156,7 +156,7 @@ function PreflightModal({
   const numBatches = batchSize > 0 ? Math.ceil(Math.min(enrichLimit, preflight.total) / batchSize) : 1
   const apolloNeeded = Math.min(preflight.need_apollo, enrichLimit)
   const masterNeeded = Math.min(preflight.from_contacts_master, enrichLimit)
-  const creditsNeeded = apolloNeeded * 2
+  const creditsNeeded = apolloNeeded * enrichPerCo
 
   const stat = (icon: React.ReactNode, label: string, val: string | number, color: string, sub?: string) => (
     <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '14px 16px' }}>
