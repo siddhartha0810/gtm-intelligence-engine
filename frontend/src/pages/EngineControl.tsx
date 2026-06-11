@@ -153,10 +153,15 @@ function PreflightModal({
   const selectAll  = () => setSelectedRoles(ALL_ROLES)
   const clearAll   = () => setSelectedRoles([])
 
-  const numBatches = batchSize > 0 ? Math.ceil(Math.min(enrichLimit, preflight.total) / batchSize) : 1
-  const apolloNeeded = Math.min(preflight.need_apollo, enrichLimit)
-  const masterNeeded = Math.min(preflight.from_contacts_master, enrichLimit)
+  const effectiveCount = selectedCompanyIds.length > 0 && pendingCompanies.length > 0
+    ? selectedCompanyIds.length
+    : Math.min(enrichLimit, preflight.total)
+  const apolloRatio   = preflight.total > 0 ? preflight.need_apollo / preflight.total : 1
+  const masterRatio   = preflight.total > 0 ? preflight.from_contacts_master / preflight.total : 0
+  const apolloNeeded  = Math.round(effectiveCount * apolloRatio)
+  const masterNeeded  = Math.round(effectiveCount * masterRatio)
   const creditsNeeded = apolloNeeded * enrichPerCo
+  const numBatches    = batchSize > 0 ? Math.ceil(effectiveCount / batchSize) : 1
 
   const stat = (icon: React.ReactNode, label: string, val: string | number, color: string, sub?: string) => (
     <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '14px 16px' }}>
@@ -193,7 +198,7 @@ function PreflightModal({
           <div>
             <div style={{ fontSize:12, fontWeight:600, color:'#94a3b8', letterSpacing:'0.06em', marginBottom:10 }}>ENRICHMENT ESTIMATE</div>
             <div style={{ display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:10 }}>
-              {stat(<Building2 size={14}/>, 'Companies to enrich', Math.min(enrichLimit, preflight.total), '#3b82f6', `of ${preflight.total} total pending`)}
+              {stat(<Building2 size={14}/>, 'Companies to enrich', effectiveCount, '#3b82f6', selectedCompanyIds.length > 0 ? `${selectedCompanyIds.length} selected` : `of ${preflight.total} total pending`)}
               {stat(<Database size={14}/>, 'From master DB', masterNeeded, '#10b981', 'no Apollo credits used')}
               {stat(<Zap size={14}/>, 'Need Apollo', apolloNeeded, '#6366f1', 'will use API credits')}
               {stat(<CreditCard size={14}/>, 'Est. credits', creditsNeeded, '#f59e0b', `~${Math.ceil(preflight.est_minutes * (enrichLimit / preflight.total || 1))} min`)}
@@ -390,7 +395,7 @@ function PreflightModal({
         <div style={{ padding:'16px 24px', borderTop:'1px solid #e2e8f0', display:'flex', alignItems:'center', justifyContent:'space-between', position:'sticky', bottom:0, background:'#fff' }}>
           <div style={{ display:'flex', alignItems:'center', gap:12, fontSize:12, color:'#64748b' }}>
             <Clock size={13} />
-            Est. <strong style={{ color:'#0f172a' }}>{Math.ceil(preflight.est_minutes * (enrichLimit / (preflight.total || 1)))}</strong> min &nbsp;·&nbsp;
+            Est. <strong style={{ color:'#0f172a' }}>{Math.ceil(preflight.est_minutes * (effectiveCount / (preflight.total || 1)))}</strong> min &nbsp;·&nbsp;
             <CreditCard size={13} />
             ~<strong style={{ color:'#0f172a' }}>{creditsNeeded}</strong> Apollo credits &nbsp;·&nbsp;
             {numBatches > 1 && <><ChevronRight size={12} /><strong style={{ color:'#0f172a' }}>{numBatches} batches</strong></>}
