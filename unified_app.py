@@ -947,6 +947,8 @@ def _run_company_enrich(company_id: int, provider: str, max_per_company: int) ->
         _company_jobs[company_id] = {"status": "running", "contacts_found": 0, "error": ""}
     try:
         oracle_apollo.enrich_companies(
+            apollo_key=APOLLO_API_KEY,
+            zerobounce_key=ZEROBOUNCE_API_KEY,
             limit=1,
             max_per_company=max_per_company,
             provider=provider,
