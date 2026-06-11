@@ -956,17 +956,23 @@ async def api_predict_contact_email(contact_id: int, current_user: dict = Depend
         company_id = contact.get("company_id")
         domain = (contact.get("domain") or "").strip().lower()
 
-        # Infer domain from sibling contacts if missing
+        # Fallback 1: company domain from companies table
+        if not domain and company_id:
+            company_row = oracle_db.get_company_by_id(company_id)
+            if company_row:
+                domain = (dict(company_row).get("domain") or "").strip().lower()
+
+        # Fallback 2: any sibling contact that has a domain stored
         if not domain and company_id:
             siblings = oracle_db.get_contacts_for_company(company_id)
             for s in siblings:
                 sd = dict(s)
-                if sd.get("domain") and sd.get("email_validation_status") == "valid":
+                if sd.get("domain"):
                     domain = sd["domain"].strip().lower()
                     break
 
         if not domain:
-            return {"status": "no_domain", "message": "Cannot predict — no domain available for this contact"}
+            return {"status": "no_domain", "message": "Cannot predict — company has no domain on record. Run domain enrichment first."}
 
         # Build a minimal contacts list (siblings with valid emails + this contact)
         siblings = oracle_db.get_contacts_for_company(company_id) if company_id else []
