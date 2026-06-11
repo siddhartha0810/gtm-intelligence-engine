@@ -945,18 +945,65 @@ def enrich_companies(
                     c["email_validation_status"] = "not_validated"
 
         # Stage 5+6: Email prediction for contacts Apollo couldn't supply an email for.
-        # Learns naming patterns from same-domain contacts with valid emails (e.g. the
-        # domain uses "flast" format → predict jsmith@acme.com for remaining contacts),
-        # then validates predictions with ZeroBounce before storing.
-        no_email_count = sum(1 for c in contacts if not c.get("email"))
+        # Also picks up existing DB contacts for this company that still have no email
+        # (e.g. from a previous Apollo run that returned LinkedIn-only results).
+        company_domain = (company.get("domain") or "").strip().lower()
+
+        # Merge existing no-email DB contacts into the prediction batch
+        existing_no_email: list[dict] = []
+        try:
+            db_rows = db.get_contacts_for_company(company_id)
+            current_linkedins = {c.get("linkedin_url") for c in contacts if c.get("linkedin_url")}
+            for row in db_rows:
+                rd = dict(row)
+                if rd.get("email"):
+                    continue  # already has email — only useful as a pattern reference
+                if rd.get("linkedin_url") and rd["linkedin_url"] in current_linkedins:
+                    continue  # already in current Apollo batch
+                if not rd.get("first_name") or not rd.get("last_name"):
+                    continue  # can't predict without a full name
+                rd["_db_id"] = rd["id"]
+                rd["domain"] = rd.get("domain") or company_domain
+                existing_no_email.append(rd)
+        except Exception as _e:
+            log(f"  Warning: could not load existing contacts for prediction: {_e}")
+
+        # Also add existing validated emails as pattern references (not for prediction)
+        try:
+            for row in db.get_contacts_for_company(company_id):
+                rd = dict(row)
+                if rd.get("email") and rd.get("email_validation_status") == "valid":
+                    rd["domain"] = rd.get("domain") or company_domain
+                    contacts.append(rd)
+        except Exception:
+            pass
+
+        prediction_batch = contacts + existing_no_email
+        no_email_count = sum(1 for c in prediction_batch if not c.get("email"))
+
         if no_email_count and zerobounce_key:
-            contacts, pred_count = _predict_and_fill_emails(
-                contacts, zerobounce_key, company.get("domain", ""), log,
+            prediction_batch, pred_count = _predict_and_fill_emails(
+                prediction_batch, zerobounce_key, company_domain, log,
                 reference_patterns=reference_patterns,
             )
             if pred_count:
                 log(f"  ~ {pred_count} email(s) predicted and validated via pattern engine")
                 total_validated += pred_count
+            # Persist predicted emails back to existing DB contacts
+            for c in prediction_batch:
+                if c.get("_db_id") and c.get("email") and c.get("email_validation_status") == "valid":
+                    try:
+                        db.update_contact_email(
+                            contact_id=c["_db_id"],
+                            email=c["email"],
+                            email_validation_status="valid",
+                            email_source="predicted",
+                            ready_for_outreach=True,
+                        )
+                    except Exception as _e:
+                        log(f"  Warning: could not save predicted email for contact {c.get('_db_id')}: {_e}")
+            # Remove pattern-reference rows (existing validated contacts) before saving
+            contacts = [c for c in prediction_batch if not c.get("_db_id")]
         elif no_email_count:
             log(f"  ~ {no_email_count} contact(s) have no email — "
                 "add ZeroBounce key to enable prediction")
