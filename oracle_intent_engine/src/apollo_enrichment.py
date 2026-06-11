@@ -183,10 +183,15 @@ def _predict_and_fill_emails(
     if not zerobounce_key:
         return contacts, 0
 
-    # Step 1: learn domain → [pattern, ...] from contacts with valid emails in this batch
+    # Step 1: learn domain → [pattern, ...] from contacts with known emails in this batch.
+    # Include valid AND catch-all — catch-all means ZeroBounce can't verify individual
+    # mailboxes but the email itself came from Apollo and is almost certainly real.
+    # We're only learning the naming pattern here, not marking emails as outreach-ready.
+    _USABLE_FOR_PATTERN = {"valid", "catch-all", "not_validated", ""}
     domain_patterns: dict[str, list[str]] = {}  # domain → ordered list of patterns seen
     for c in contacts:
-        if not c.get("email") or c.get("email_validation_status") != "valid":
+        email_status = (c.get("email_validation_status") or "").lower()
+        if not c.get("email") or email_status in ("invalid", "spamtrap", "abuse", "do_not_mail"):
             continue
         dom = (c.get("domain") or company_domain or "").lower().strip()
         if not dom:
@@ -980,11 +985,14 @@ def enrich_companies(
         except Exception as _e:
             log(f"  Warning: could not load existing contacts for prediction: {_e}")
 
-        # Also add existing validated emails as pattern references (not for prediction)
+        # Also add existing emails as pattern references (not for prediction).
+        # Include catch-all and not_validated — we only need the naming pattern, not outreach safety.
+        _bad_status = {"invalid", "spamtrap", "abuse", "do_not_mail"}
         try:
             for row in db.get_contacts_for_company(company_id):
                 rd = dict(row)
-                if rd.get("email") and rd.get("email_validation_status") == "valid":
+                status = (rd.get("email_validation_status") or "").lower()
+                if rd.get("email") and status not in _bad_status:
                     rd["domain"] = rd.get("domain") or company_domain
                     contacts.append(rd)
         except Exception:
