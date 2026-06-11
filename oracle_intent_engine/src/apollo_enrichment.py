@@ -990,57 +990,36 @@ def enrich_companies(
         except Exception:
             pass
 
-        # If company_domain is still empty, infer from any sibling contact that has one.
-        # e.g. Apollo returned dale.clarke@forterra.co.uk — use forterra.co.uk for Emma too.
-        if not company_domain:
-            all_contacts_so_far = contacts + existing_no_email
-            sibling_domain = next(
-                (c.get("domain", "").strip().lower() for c in all_contacts_so_far
-                 if c.get("domain", "").strip()),
-                ""
-            )
-            if sibling_domain:
-                company_domain = sibling_domain
-                log(f"  ~ domain inferred from sibling contact: {company_domain}")
-                # Persist so future runs don't need to re-infer
-                try:
-                    db.set_company_domain(company_id, company_domain)
-                except Exception:
-                    pass
-
-        # Apply company_domain to contacts that are still missing it
-        for c in contacts + existing_no_email:
-            if not c.get("domain") and company_domain:
-                c["domain"] = company_domain
-
         prediction_batch = contacts + existing_no_email
 
-        # If company_domain is still empty, infer it from any sibling contact that has one
-        # (e.g. Apollo returned rajeev.chugh@ageasfederal.com → learn ageasfederal.com for Rufus)
+        # If company_domain is still empty, infer it from sibling contacts.
+        # Apollo doesn't guarantee a domain field on every result, so we check:
+        #   1. domain field on any sibling contact (from Apollo org.primary_domain)
+        #   2. email address of any sibling contact (split on @)
         if not company_domain:
-            sibling_domain = next(
-                (c.get("domain", "").strip().lower() for c in prediction_batch
-                 if c.get("domain", "").strip()),
-                ""
-            )
-            if not sibling_domain:
-                # Fall back to extracting domain from a known valid email in the batch
+            inferred = ""
+            for c in prediction_batch:
+                if c.get("domain", "").strip():
+                    inferred = c["domain"].strip().lower()
+                    break
+            if not inferred:
                 for c in prediction_batch:
                     email = (c.get("email") or "").strip().lower()
                     if "@" in email:
-                        sibling_domain = email.split("@", 1)[1]
+                        inferred = email.split("@", 1)[1]
                         break
-            if sibling_domain:
-                company_domain = sibling_domain
+            if inferred:
+                company_domain = inferred
                 log(f"  ~ domain inferred from sibling contact: {company_domain}")
                 try:
                     db.set_company_domain(company_id, company_domain)
                 except Exception:
                     pass
-                # Backfill domain onto contacts that were missing it
-                for c in prediction_batch:
-                    if not c.get("domain"):
-                        c["domain"] = company_domain
+
+        # Backfill domain onto every contact that is missing it
+        for c in prediction_batch:
+            if not c.get("domain") and company_domain:
+                c["domain"] = company_domain
 
         no_email_count = sum(1 for c in prediction_batch if not c.get("email"))
 
