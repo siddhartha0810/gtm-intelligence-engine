@@ -880,7 +880,7 @@ export default function EngineControl() {
           const companies = s.companies_found ?? 0
           const msg = companies > 0 ? `Oracle Intent scan completed — ${companies} companies found.` : 'Oracle Intent scan completed (0 companies found — check log for details).'
           addLog(companies > 0 ? 'SUCCESS' : 'WARN', msg)
-          if (companies > 0) toast.success(`Scan completed — ${companies} companies found`) else toast.info('Scan done — 0 companies (check Engine Log)')
+          if (companies > 0) { toast.success(`Scan completed — ${companies} companies found`) } else { toast.info('Scan done — 0 companies (check Engine Log)') }
           clearInterval(pollRef.current!)
           fetchEnrichStats()
           await loadScanResults()   // show discovered companies for selection
