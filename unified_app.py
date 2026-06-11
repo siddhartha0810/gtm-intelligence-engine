@@ -104,6 +104,7 @@ from src import config as oracle_cfg
 from src import database as oracle_db
 from src import exporter as oracle_exporter
 from src import contact_finder as oracle_contact_finder
+from src import apollo_enrichment as oracle_apollo
 from src.utils import is_valid_company_name
 from src.phase_classifier import PHASE_LABELS, PHASE_COLORS
 from src import auth as oracle_auth
@@ -936,12 +937,46 @@ async def api_delete_contact(contact_id: int, current_user: dict = Depends(oracl
     _invalidate_companies_cache()
     return {"deleted": True, "contact_id": contact_id}
 
+# Per-company enrichment job state (keyed by company_id)
+_company_jobs: Dict[int, Dict] = {}
+_company_jobs_lock = threading.Lock()
+
+def _run_company_enrich(company_id: int, provider: str, max_per_company: int) -> None:
+    """Background thread: run full Apollo/ZoomInfo pipeline for one company."""
+    with _company_jobs_lock:
+        _company_jobs[company_id] = {"status": "running", "contacts_found": 0, "error": ""}
+    try:
+        oracle_apollo.enrich_companies(
+            limit=1,
+            max_per_company=max_per_company,
+            provider=provider,
+            company_ids=[company_id],
+        )
+        # Count saved contacts
+        contacts = oracle_db.get_contacts_for_company(company_id)
+        with _company_jobs_lock:
+            _company_jobs[company_id] = {"status": "done", "contacts_found": len(contacts), "error": ""}
+    except Exception as e:
+        logger.exception("Per-company enrich failed for id=%s", company_id)
+        with _company_jobs_lock:
+            _company_jobs[company_id] = {"status": "error", "contacts_found": 0, "error": str(e)}
+
 @app.post("/api/company/{company_id}/contacts/enrich")
-async def api_enrich_contacts(company_id: int, current_user: dict = Depends(oracle_auth.require_analyst)):
-    """Enrich contacts for a company.
-    Find contacts via external search and save to company_contacts.
-    Saves results into company_contacts so they persist.
-    """
+async def api_enrich_contacts(company_id: int, request: Request,
+                               current_user: dict = Depends(oracle_auth.require_analyst)):
+    """Start Apollo/ZoomInfo enrichment for a single company (background thread)."""
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+    provider        = str(data.get("provider", "apollo")).lower().strip()
+    max_per_company = int(data.get("max_per_company", 10))
+
+    if provider == "zoominfo" and not (ZOOMINFO_USERNAME and ZOOMINFO_PASSWORD):
+        return JSONResponse({"error": "ZoomInfo not configured. Add ZOOMINFO_USERNAME and ZOOMINFO_PASSWORD to oracle_intent_engine/.env"}, status_code=400)
+    if provider == "apollo" and not APOLLO_API_KEY:
+        return JSONResponse({"error": "Apollo API key not configured. Add APOLLO_API_KEY to oracle_intent_engine/.env"}, status_code=400)
+
     try:
         company = oracle_db.get_company_by_id(company_id)
     except Exception as e:
@@ -949,17 +984,24 @@ async def api_enrich_contacts(company_id: int, current_user: dict = Depends(orac
     if not company:
         return JSONResponse({"error": "Company not found"}, status_code=404)
 
-    cname  = (company.get("name") or "").strip()
-    domain = (company.get("domain") or "").strip().lower() or \
-             oracle_contact_finder.infer_domain(cname)
+    # Check if already running for this company
+    with _company_jobs_lock:
+        job = _company_jobs.get(company_id, {})
+        if job.get("status") == "running":
+            return JSONResponse({"error": "Enrichment already running for this company"}, status_code=409)
 
-    try:
-        contacts = oracle_contact_finder.find_contacts(cname, domain)
-        oracle_db.save_contacts(company_id, contacts)
-        return {"contacts": contacts, "count": len(contacts),
-                "message": f"Found {len(contacts)} contacts via external search"}
-    except Exception as e:
-        return JSONResponse({"error": str(e)}, status_code=500)
+    t = threading.Thread(target=_run_company_enrich,
+                         args=(company_id, provider, max_per_company), daemon=True)
+    t.start()
+    return {"started": True, "company_id": company_id, "provider": provider}
+
+@app.get("/api/company/{company_id}/enrich-status")
+async def api_company_enrich_status(company_id: int,
+                                     current_user: dict = Depends(oracle_auth.require_user)):
+    """Poll enrichment job status for a single company."""
+    with _company_jobs_lock:
+        job = _company_jobs.get(company_id, {"status": "idle", "contacts_found": 0, "error": ""})
+    return job
 
 # bulk enrich
 _bulk_enrich_state: Dict[str, object] = {"running": False, "done": 0, "total": 0, "errors": 0}

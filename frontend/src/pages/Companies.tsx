@@ -106,41 +106,41 @@ function ContactsPanel({ company, onClose }: { company: Company; onClose: () => 
   const launchEnrich = async () => {
     setShowPicker(false)
     setEnriching(true)
-    setEnrichProgress('Starting enrichment pipeline...')
+    setEnrichProgress(`Contacting ${provider === 'apollo' ? 'Apollo' : 'ZoomInfo'} API...`)
     try {
-      const res = await fetch('/api/enrich/start', {
+      const res = await fetch(`/api/company/${company.id}/contacts/enrich`, {
         method: 'POST',
         headers: authH(),
-        body: JSON.stringify({
-          limit: 1,
-          max_per_company: maxPer,
-          provider,
-          company_ids: [company.id],
-        }),
+        body: JSON.stringify({ provider, max_per_company: maxPer }),
       })
+      const d = await res.json()
       if (!res.ok) {
-        const d = await res.json()
         toast.error(d.error || 'Failed to start enrichment')
         setEnriching(false)
         setEnrichProgress('')
         return
       }
       toast.info(`Enriching ${company.name} via ${provider === 'apollo' ? 'Apollo' : 'ZoomInfo'}...`)
-      // Poll enrichment status until done
+      // Poll per-company status until done
       if (enrichPollRef.current) clearInterval(enrichPollRef.current)
       enrichPollRef.current = setInterval(async () => {
         try {
-          const s = await fetch('/api/enrich/status', { headers: authH() }).then(r => r.json())
-          if (s.progress) setEnrichProgress(s.progress)
-          if (s.status !== 'running') {
+          const s = await fetch(`/api/company/${company.id}/enrich-status`, { headers: authH() }).then(r => r.json())
+          if (s.status === 'running') {
+            setEnrichProgress('Running Apollo/ZoomInfo + ZeroBounce pipeline...')
+          } else {
             clearInterval(enrichPollRef.current!)
             enrichPollRef.current = null
             setEnriching(false)
             setEnrichProgress('')
-            await reloadContacts()
-            const found = s.contacts_found ?? 0
-            if (found > 0) toast.success(`Found ${found} contacts for ${company.name}`)
-            else toast.info('Enrichment done — no new contacts found')
+            if (s.status === 'error') {
+              toast.error(`Enrichment failed: ${s.error}`)
+            } else {
+              await reloadContacts()
+              const found = s.contacts_found ?? 0
+              if (found > 0) toast.success(`Found ${found} contacts for ${company.name}`)
+              else toast.info('Enrichment done — no new contacts found')
+            }
           }
         } catch { /* silent poll failure */ }
       }, 3000)
