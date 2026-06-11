@@ -1132,6 +1132,33 @@ def get_contacts_for_company(company_id: int) -> list:
         """, (company_id,))
         return cur.fetchall()
 
+def get_contact_by_id(contact_id: int):
+    with db_cursor(commit=False) as cur:
+        cur.execute(
+            "SELECT * FROM company_contacts WHERE id = %s",
+            (contact_id,)
+        )
+        return cur.fetchone()
+
+
+def update_contact_email(
+    contact_id: int,
+    email: str,
+    email_validation_status: str,
+    email_source: str,
+    ready_for_outreach: bool,
+) -> None:
+    with db_cursor() as cur:
+        cur.execute("""
+            UPDATE company_contacts
+            SET email = %s,
+                email_validation_status = %s,
+                email_source = %s,
+                ready_for_outreach = %s
+            WHERE id = %s
+        """, (email, email_validation_status, email_source, ready_for_outreach, contact_id))
+
+
 def get_contacts_for_company_names(names: list) -> list:
     if not names:
         return []

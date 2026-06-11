@@ -937,6 +937,89 @@ async def api_delete_contact(contact_id: int, current_user: dict = Depends(oracl
     _invalidate_companies_cache()
     return {"deleted": True, "contact_id": contact_id}
 
+
+@app.post("/api/contacts/{contact_id}/predict-email")
+async def api_predict_contact_email(contact_id: int, current_user: dict = Depends(oracle_auth.require_analyst)):
+    """
+    On-demand email prediction for a single contact with no email.
+    Learns the domain pattern from sibling contacts with valid emails,
+    builds a candidate, validates via ZeroBounce, and saves if valid.
+    """
+    try:
+        row = oracle_db.get_contact_by_id(contact_id)
+        if not row:
+            raise HTTPException(status_code=404, detail="Contact not found")
+        contact = dict(row)
+        if contact.get("email"):
+            return {"status": "already_has_email", "email": contact["email"]}
+
+        company_id = contact.get("company_id")
+        domain = (contact.get("domain") or "").strip().lower()
+
+        # Infer domain from sibling contacts if missing
+        if not domain and company_id:
+            siblings = oracle_db.get_contacts_for_company(company_id)
+            for s in siblings:
+                sd = dict(s)
+                if sd.get("domain") and sd.get("email_validation_status") == "valid":
+                    domain = sd["domain"].strip().lower()
+                    break
+
+        if not domain:
+            return {"status": "no_domain", "message": "Cannot predict — no domain available for this contact"}
+
+        # Build a minimal contacts list (siblings with valid emails + this contact)
+        siblings = oracle_db.get_contacts_for_company(company_id) if company_id else []
+        batch = []
+        for s in siblings:
+            sd = dict(s)
+            if sd.get("email_validation_status") == "valid" and sd.get("email"):
+                batch.append({
+                    "first_name": sd.get("first_name", ""),
+                    "last_name":  sd.get("last_name", ""),
+                    "email":      sd["email"],
+                    "email_validation_status": "valid",
+                    "domain":     sd.get("domain", domain),
+                })
+        # Append the target contact (no email)
+        target_idx = len(batch)
+        batch.append({
+            "first_name": contact.get("first_name", ""),
+            "last_name":  contact.get("last_name", ""),
+            "email":      None,
+            "email_validation_status": None,
+            "domain":     domain,
+            "_contact_id": contact_id,
+        })
+
+        updated, n_predicted = oracle_apollo._predict_and_fill_emails(
+            batch, ZEROBOUNCE_API_KEY, domain, log=logger.info
+        )
+
+        target = updated[target_idx]
+        if target.get("email") and target.get("email_validation_status") == "valid":
+            oracle_db.update_contact_email(
+                contact_id=contact_id,
+                email=target["email"],
+                email_validation_status="valid",
+                email_source="predicted",
+                ready_for_outreach=True,
+            )
+            _invalidate_companies_cache()
+            return {
+                "status": "predicted",
+                "email": target["email"],
+                "pattern": target.get("email_prediction_pattern"),
+            }
+        return {"status": "no_valid_prediction", "message": "ZeroBounce did not return a valid email for any candidate"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"predict-email for contact_id={contact_id}: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
 # Per-company enrichment job state (keyed by company_id)
 _company_jobs: Dict[int, Dict] = {}
 _company_jobs_lock = threading.Lock()

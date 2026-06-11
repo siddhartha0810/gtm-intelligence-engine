@@ -75,6 +75,8 @@ function ContactsPanel({ company, onClose, onEnriched }: { company: Company; onC
   const [maxPer, setMaxPer]             = useState(10)
   const [enrichResult, setEnrichResult] = useState<{ found: number } | null>(null)
   const enrichPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const [deleting, setDeleting]         = useState<Record<string, boolean>>({})
+  const [predicting, setPredicting]     = useState<Record<string, boolean>>({})
 
   useEffect(() => {
     setLoading(true)
@@ -103,6 +105,40 @@ function ContactsPanel({ company, onClose, onEnriched }: { company: Company; onC
       d.ok ? toast.success(`${c.first_name} ${c.last_name} — pushed`) : toast.error(d.message || 'Push failed')
     } catch { toast.error('Network error') }
     finally { setPushing(p => ({ ...p, [c.id]: false })) }
+  }
+
+  const deleteContact = async (c: Contact) => {
+    if (!window.confirm(`Delete ${c.first_name} ${c.last_name}? This cannot be undone.`)) return
+    setDeleting(d => ({ ...d, [c.id]: true }))
+    try {
+      const r = await fetch(`/api/contacts/${c.id}`, { method: 'DELETE', headers: authH() })
+      if (r.ok) {
+        setContacts(prev => prev.filter(x => x.id !== c.id))
+        toast.success(`${c.first_name} ${c.last_name} deleted`)
+        onEnriched?.()
+      } else {
+        toast.error('Delete failed')
+      }
+    } catch { toast.error('Network error') }
+    finally { setDeleting(d => ({ ...d, [c.id]: false })) }
+  }
+
+  const predictEmail = async (c: Contact) => {
+    setPredicting(p => ({ ...p, [c.id]: true }))
+    try {
+      const r = await fetch(`/api/contacts/${c.id}/predict-email`, { method: 'POST', headers: authH() })
+      const d = await r.json()
+      if (!r.ok) { toast.error(d.detail || 'Prediction failed'); return }
+      if (d.status === 'predicted') {
+        toast.success(`Email predicted: ${d.email}`)
+        await reloadContacts()
+      } else if (d.status === 'already_has_email') {
+        toast.info('Contact already has an email')
+      } else {
+        toast.error(d.message || 'No valid prediction found')
+      }
+    } catch { toast.error('Network error') }
+    finally { setPredicting(p => ({ ...p, [c.id]: false })) }
   }
 
   const launchEnrich = async () => {
@@ -379,11 +415,24 @@ function ContactsPanel({ company, onClose, onEnriched }: { company: Company; onC
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: 6, flexShrink: 0, alignItems: 'center' }}>
+                    {!c.email && (
+                      <button onClick={() => predictEmail(c)} disabled={predicting[c.id]}
+                        title="Predict email from domain pattern + ZeroBounce"
+                        style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 6, border: '1px solid rgba(99,102,241,0.3)', background: 'rgba(99,102,241,0.07)', color: '#6366f1', fontSize: 11, fontWeight: 600, cursor: predicting[c.id] ? 'not-allowed' : 'pointer', opacity: predicting[c.id] ? 0.6 : 1 }}>
+                        {predicting[c.id] ? <Loader2 size={10} style={{ animation: 'spin 1s linear infinite' }} /> : <Mail size={10} />}
+                        Predict
+                      </button>
+                    )}
                     <button onClick={() => pushToHubSpot(c)} disabled={pushing[c.id]}
                       title="Push to HubSpot"
                       style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 6, border: '1px solid rgba(16,185,129,0.3)', background: 'rgba(16,185,129,0.07)', color: '#10b981', fontSize: 11, fontWeight: 600, cursor: pushing[c.id] ? 'not-allowed' : 'pointer', opacity: pushing[c.id] ? 0.6 : 1 }}>
                       {pushing[c.id] ? <Loader2 size={10} style={{ animation: 'spin 1s linear infinite' }} /> : <Send size={10} />}
                       Push
+                    </button>
+                    <button onClick={() => deleteContact(c)} disabled={deleting[c.id]}
+                      title="Delete contact"
+                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28, borderRadius: 6, border: '1px solid rgba(239,68,68,0.25)', background: 'rgba(239,68,68,0.06)', color: '#ef4444', cursor: deleting[c.id] ? 'not-allowed' : 'pointer', opacity: deleting[c.id] ? 0.6 : 1 }}>
+                      {deleting[c.id] ? <Loader2 size={10} style={{ animation: 'spin 1s linear infinite' }} /> : <Trash2 size={11} />}
                     </button>
                   </div>
                 </div>
