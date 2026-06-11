@@ -430,14 +430,18 @@ def apollo_person_match(api_key: str, email: str = None, first_name: str = None,
     }
 
 
-def _apollo_reveal(person_id: str, api_key: str) -> str:
-    """Reveal a locked Apollo email by person ID. Returns email or ''."""
+def _apollo_person_match(person_id: str, api_key: str, reveal_email: bool = False) -> dict:
+    """
+    Call Apollo /people/match for a person by their Apollo ID.
+    Returns the full person dict (includes linkedin_url, email, etc.) or {}.
+    Uses credits — call only when necessary.
+    """
     if not person_id or not api_key:
-        return ""
+        return {}
     try:
         payload = json.dumps({
             "id": person_id,
-            "reveal_personal_emails": True,
+            "reveal_personal_emails": reveal_email,
         }).encode()
         req = urllib.request.Request(
             APOLLO_REVEAL_URL, data=payload,
@@ -446,9 +450,15 @@ def _apollo_reveal(person_id: str, api_key: str) -> str:
         )
         with urllib.request.urlopen(req, timeout=15) as resp:
             data = json.loads(resp.read())
-        return str(data.get("person", {}).get("email") or "").strip().lower()
+        return data.get("person") or {}
     except Exception:
-        return ""
+        return {}
+
+
+def _apollo_reveal(person_id: str, api_key: str) -> str:
+    """Reveal a locked Apollo email by person ID. Returns email or ''."""
+    person = _apollo_person_match(person_id, api_key, reveal_email=True)
+    return str(person.get("email") or "").strip().lower()
 
 
 def _apollo_call(org_name: str, api_key: str, max_per: int,
@@ -516,15 +526,36 @@ def _apollo_call(org_name: str, api_key: str, max_per: int,
         last  = str(p.get("last_name") or "").strip()
         title = str(p.get("title") or p.get("headline") or "").strip()
 
-        # Resolve LinkedIn URL — direct field first, then construct from uid
+        # Resolve LinkedIn URL — direct field first, then from uid
         linkedin = str(p.get("linkedin_url") or "").strip()
         if not linkedin:
             uid = str(p.get("linkedin_uid") or "").strip()
-            if uid:
+            if uid and not uid.startswith("http"):
                 linkedin = f"https://www.linkedin.com/in/{uid}"
+            elif uid:
+                linkedin = uid
+
+        # If still no LinkedIn, use credits to call Person Match for full profile
+        person_id = str(p.get("id") or "").strip()
+        if not linkedin and person_id:
+            full = _apollo_person_match(person_id, api_key, reveal_email=not email)
+            linkedin = str(full.get("linkedin_url") or "").strip()
+            if not email:
+                email = str(full.get("email") or "").strip().lower()
+                email_status = str(full.get("email_status") or "").lower()
+                if email_status in ("unavailable", "bounced", "invalid"):
+                    email = ""
+            # Also fill last_name / title from full profile if missing
+            if not last:
+                last = str(full.get("last_name") or "").strip()
+            if not title:
+                title = str(full.get("title") or full.get("headline") or "").strip()
+            if person_id:
+                time.sleep(0.3)  # rate-limit match calls
+
         linkedin = linkedin or None
 
-        # Skip contacts with no email AND no LinkedIn — completely useless records
+        # Skip contacts with no email AND no LinkedIn — zero outreach value
         if not email and not linkedin:
             continue
 
