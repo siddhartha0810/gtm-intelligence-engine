@@ -96,12 +96,22 @@ _PREDICTION_PATTERNS = {
 }
 
 # Industry-standard fallback when no domain-specific pattern is known.
-# Ordered by prevalence across enterprise B2B (flast ~40%, first.last ~30%)
-_DEFAULT_PREDICTION_ORDER = ["flast", "first.last", "first_last"]
+# Ordered by prevalence across enterprise B2B.
+_DEFAULT_PREDICTION_ORDER = [
+    "flast",       # jsmith       (~40% of B2B)
+    "first.last",  # john.smith   (~30%)
+    "first_last",  # john_smith
+    "firstlast",   # johnsmith
+    "f.last",      # j.smith
+    "first.l",     # john.s
+    "last.first",  # smith.john
+    "first",       # john
+    "lastf",       # smithj
+]
 
-# How many global-fallback candidates to generate per unknown-domain contact.
-# Each is validated by ZeroBounce; the first valid hit wins.
-_TOP_N_CANDIDATES = 3
+# How many candidates to generate per unknown-domain contact.
+# Each is validated by ZeroBounce in one batch call; first valid wins.
+_TOP_N_CANDIDATES = 9
 
 
 def _pname(value: str) -> str:
