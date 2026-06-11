@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Play, Square, RotateCcw, Download, Trash2, Factory, Users, CheckCircle,
          Mail, X, ChevronRight, Zap, Clock, CreditCard, Building2, Database,
-         ExternalLink, Globe, BarChart2 } from 'lucide-react'
+         Globe, BarChart2 } from 'lucide-react'
 import { toast } from '../components/Toast'
 
 const authH = (): Record<string, string> => ({
@@ -419,11 +419,24 @@ function PreflightModal({
 // ── Scan Results Modal ────────────────────────────────────────────────────────
 
 interface ScanCompany {
-  name:         string
-  domain:       string | null
-  industry:     string | null
-  signal_count: number
-  first_seen:   string | null
+  id:            number
+  name:          string
+  domain:        string | null
+  industry:      string | null
+  signal_count:  number
+  target_product: string | null
+  first_seen:    string | null
+  // enrichment plan fields (loaded separately)
+  status?:       'has_contacts' | 'from_contacts_master' | 'needs_apollo'
+  contact_count?: number
+}
+
+interface EnrichPlanSummary {
+  total: number
+  has_contacts: number
+  from_contacts_master: number
+  needs_apollo: number
+  est_credits: number
 }
 
 interface ScanRun {
@@ -435,82 +448,175 @@ interface ScanRun {
   status:           string
 }
 
-function ScanResultsModal({ onClose, onDeleted }: { onClose: () => void; onDeleted: () => void }) {
+const STATUS_META = {
+  has_contacts:         { label: 'Has Contacts',  bg: 'rgba(16,185,129,0.1)',  color: '#059669', title: 'Already enriched — skipped' },
+  from_contacts_master: { label: 'From CRM',      bg: 'rgba(99,102,241,0.1)', color: '#4f46e5', title: 'In Salesforce CRM — free import' },
+  needs_apollo:         { label: 'Needs Apollo',  bg: 'rgba(245,158,11,0.1)', color: '#d97706', title: 'Not found locally — will use Apollo credits' },
+}
+
+function ScanResultsModal({ onClose, onDeleted, onEnrichStarted }: {
+  onClose: () => void
+  onDeleted: () => void
+  onEnrichStarted?: () => void
+}) {
   const [companies,     setCompanies]     = useState<ScanCompany[]>([])
+  const [planSummary,   setPlanSummary]   = useState<EnrichPlanSummary | null>(null)
   const [scanRuns,      setScanRuns]      = useState<ScanRun[]>([])
-  const [selectedId,    setSelectedId]    = useState<number | null>(null)
+  const [selectedRunId, setSelectedRunId] = useState<number | null>(null)
   const [loading,       setLoading]       = useState(true)
+  const [planLoading,   setPlanLoading]   = useState(false)
   const [deleting,      setDeleting]      = useState(false)
   const [search,        setSearch]        = useState('')
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [checkedIds,    setCheckedIds]    = useState<Set<number>>(new Set())
+  const [showConfirm,   setShowConfirm]   = useState(false)
+  const [maxPer,        setMaxPer]        = useState(5)
+  const [enrichProvider, setEnrichProvider] = useState<'apollo' | 'zoominfo'>('apollo')
+  const [launching,     setLaunching]     = useState(false)
 
   const loadRun = async (runId: number | null) => {
     setLoading(true)
+    setPlanSummary(null)
+    setCheckedIds(new Set())
     try {
       const qs  = runId !== null ? `?run_id=${runId}` : ''
       const res = await fetch(`/scan/companies${qs}`, { headers: authH() })
       if (!res.ok) { toast.error('Failed to load scan results'); return }
       const d   = await res.json()
-      setCompanies(d.companies || [])
+      const cos: ScanCompany[] = (d.companies || []).map((c: Record<string, unknown>) => ({
+        id:             Number(c.id),
+        name:           String(c.name || ''),
+        domain:         c.domain as string | null,
+        industry:       c.industry as string | null,
+        signal_count:   Number(c.signal_count || 0),
+        target_product: c.target_product as string | null,
+        first_seen:     c.first_seen as string | null,
+      }))
+      setCompanies(cos)
       if (d.scan_runs?.length && scanRuns.length === 0) setScanRuns(d.scan_runs)
-      setSelectedId(d.run_id ?? null)
+      const resolvedRunId = d.run_id ?? null
+      setSelectedRunId(resolvedRunId)
+
+      // Load enrichment plan if we have a valid run_id
+      if (resolvedRunId && resolvedRunId > 0) {
+        loadEnrichmentPlan(resolvedRunId, cos, maxPer)
+      }
     } catch { toast.error('Network error') }
     finally   { setLoading(false) }
   }
 
+  const loadEnrichmentPlan = async (runId: number, existingCompanies: ScanCompany[], perCo: number) => {
+    setPlanLoading(true)
+    try {
+      const res = await fetch(`/api/scan/${runId}/enrichment-plan?max_per=${perCo}`, { headers: authH() })
+      if (!res.ok) return
+      const d = await res.json()
+      const planMap = new Map<number, { status: ScanCompany['status']; contact_count: number }>(
+        (d.companies || []).map((p: Record<string, unknown>) => [
+          Number(p.id),
+          { status: p.status as ScanCompany['status'], contact_count: Number(p.contact_count || 0) }
+        ])
+      )
+      setCompanies(existingCompanies.map(c => ({
+        ...c,
+        ...planMap.get(c.id),
+      })))
+      setPlanSummary(d.summary)
+      // Default: check all companies that need enrichment (not already have contacts)
+      const toCheck = new Set<number>(
+        (d.companies || [])
+          .filter((p: Record<string, unknown>) => p.status !== 'has_contacts')
+          .map((p: Record<string, unknown>) => Number(p.id))
+      )
+      setCheckedIds(toCheck)
+    } catch { /* silent */ }
+    finally { setPlanLoading(false) }
+  }
+
   const removeFromDB = async () => {
-    if (!selectedId || selectedId <= 0) {
+    if (!selectedRunId || selectedRunId <= 0) {
       toast.error('Select a specific scan run first (not "All time")')
       return
     }
     setConfirmDelete(true)
-    return
   }
 
   const confirmAndDelete = async () => {
     setConfirmDelete(false)
     setDeleting(true)
     try {
-      const res = await fetch(`/scan/companies?run_id=${selectedId}`, {
-        method: 'DELETE',
-        headers: authH(),
+      const res = await fetch(`/scan/companies?run_id=${selectedRunId}`, {
+        method: 'DELETE', headers: authH(),
       })
       const d = await res.json()
       if (!res.ok) { toast.error(d.detail || 'Delete failed'); return }
       toast.success(`Removed ${d.deleted} companies from the database`)
       setCompanies([])
-      setScanRuns(prev => prev.filter(r => r.id !== selectedId))
-      setSelectedId(null)
-      onDeleted()   // refresh enrichment stats on the parent page
+      setScanRuns(prev => prev.filter(r => r.id !== selectedRunId))
+      setSelectedRunId(null)
+      onDeleted()
     } catch { toast.error('Network error') }
     finally { setDeleting(false) }
   }
 
+  const launchEnrichment = async () => {
+    const ids = Array.from(checkedIds)
+    if (!ids.length) { toast.error('No companies selected'); return }
+    setLaunching(true)
+    try {
+      const res = await fetch('/api/enrich/start', {
+        method: 'POST', headers: authH(),
+        body: JSON.stringify({ company_ids: ids, max_per_company: maxPer, provider: enrichProvider }),
+      })
+      const d = await res.json()
+      if (!res.ok) { toast.error(d.error || 'Failed to start enrichment'); return }
+      toast.success(`Enrichment started for ${ids.length} companies`)
+      setShowConfirm(false)
+      onEnrichStarted?.()
+      onClose()
+    } catch { toast.error('Network error') }
+    finally { setLaunching(false) }
+  }
+
   useEffect(() => { loadRun(null) }, [])
+
+  const fmtDate = (s: string | null) => s ? new Date(s).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'
 
   const filtered = companies.filter(c =>
     !search || c.name.toLowerCase().includes(search.toLowerCase()) ||
     (c.domain || '').toLowerCase().includes(search.toLowerCase())
   )
 
-  const fmtDate = (s: string | null) => s ? new Date(s).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'
+  const checkedFiltered = filtered.filter(c => c.status !== 'has_contacts')
+  const allFilteredChecked = checkedFiltered.length > 0 && checkedFiltered.every(c => checkedIds.has(c.id))
+
+  // Compute credit cost for the confirmation modal
+  const selectedNeedsApollo = Array.from(checkedIds).filter(id => {
+    const c = companies.find(co => co.id === id)
+    return c?.status === 'needs_apollo'
+  }).length
+  const selectedFromCRM = Array.from(checkedIds).filter(id => {
+    const c = companies.find(co => co.id === id)
+    return c?.status === 'from_contacts_master'
+  }).length
+  const estCredits = selectedNeedsApollo * maxPer
 
   return (
     <>
       <div onClick={onClose} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', zIndex:1000 }} />
       <div style={{ position:'fixed', top:'50%', left:'50%', transform:'translate(-50%,-50%)',
-                    width:'min(900px, 95vw)', maxHeight:'85vh', background:'#fff',
+                    width:'min(980px, 96vw)', maxHeight:'88vh', background:'#fff',
                     borderRadius:14, zIndex:1001, display:'flex', flexDirection:'column',
                     boxShadow:'0 20px 60px rgba(0,0,0,0.25)', overflow:'hidden' }}>
 
         {/* Header */}
         <div style={{ padding:'18px 24px', borderBottom:'1px solid #e2e8f0', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0 }}>
           <div>
-            <div style={{ fontSize:16, fontWeight:600, color:'#0f172a', display:'flex', alignItems:'center', gap:8 }}>
-              <BarChart2 size={16} color="#3b82f6" /> Scan Results
+            <div style={{ fontSize:16, fontWeight:700, color:'#0f172a', display:'flex', alignItems:'center', gap:8 }}>
+              <BarChart2 size={16} color="#3b82f6" /> Scan Results &amp; Enrichment
             </div>
             <div style={{ fontSize:12, color:'#64748b', marginTop:3 }}>
-              Companies discovered by the Oracle Intent scan
+              Select companies to enrich — system shows which already have contacts, which are in your CRM, and which need Apollo
             </div>
           </div>
           <button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer', color:'#94a3b8', padding:4 }}>
@@ -520,33 +626,60 @@ function ScanResultsModal({ onClose, onDeleted }: { onClose: () => void; onDelet
 
         {/* Scan run selector */}
         {scanRuns.length > 0 && (
-          <div style={{ padding:'12px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', gap:10, flexShrink:0, overflowX:'auto' }}>
+          <div style={{ padding:'10px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', gap:10, flexShrink:0, overflowX:'auto' }}>
             <span style={{ fontSize:12, color:'#64748b', flexShrink:0 }}>Scan run:</span>
             {scanRuns.map(r => (
               <button key={r.id} onClick={() => loadRun(r.id)}
                 style={{ flexShrink:0, padding:'4px 12px', borderRadius:999, fontSize:12, fontWeight:500, cursor:'pointer', border:'none',
-                         background: selectedId === r.id ? '#3b82f6' : '#f1f5f9',
-                         color:      selectedId === r.id ? 'white'   : '#475569' }}>
+                         background: selectedRunId === r.id ? '#3b82f6' : '#f1f5f9',
+                         color:      selectedRunId === r.id ? 'white'   : '#475569' }}>
                 #{r.id} — {fmtDate(r.started_at)}
-                {r.total_companies ? <span style={{ opacity:0.8 }}> ({r.total_companies} cos)</span> : null}
+                {r.total_companies ? <span style={{ opacity:0.8 }}> ({r.total_companies})</span> : null}
               </button>
             ))}
             <button onClick={() => loadRun(0)}
               style={{ flexShrink:0, padding:'4px 12px', borderRadius:999, fontSize:12, fontWeight:500, cursor:'pointer', border:'none',
-                       background: selectedId === 0 ? '#3b82f6' : '#f1f5f9',
-                       color:      selectedId === 0 ? 'white'   : '#475569' }}>
+                       background: selectedRunId === 0 ? '#3b82f6' : '#f1f5f9',
+                       color:      selectedRunId === 0 ? 'white'   : '#475569' }}>
               All time
             </button>
           </div>
         )}
 
-        {/* Search + summary bar */}
+        {/* Enrichment plan summary strip */}
+        {planSummary && (
+          <div style={{ padding:'10px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', gap:20, alignItems:'center', background:'#f8fafc', flexShrink:0, flexWrap:'wrap' }}>
+            <span style={{ fontSize:11, fontWeight:700, color:'#475569', textTransform:'uppercase', letterSpacing:'0.05em' }}>Enrichment status:</span>
+            {[
+              { label: `${planSummary.has_contacts} already enriched`, bg:'rgba(16,185,129,0.1)', color:'#059669' },
+              { label: `${planSummary.from_contacts_master} from CRM (free)`, bg:'rgba(99,102,241,0.1)', color:'#4f46e5' },
+              { label: `${planSummary.needs_apollo} need Apollo`, bg:'rgba(245,158,11,0.1)', color:'#d97706' },
+            ].map(s => (
+              <span key={s.label} style={{ fontSize:12, fontWeight:600, padding:'3px 10px', borderRadius:999, background:s.bg, color:s.color }}>{s.label}</span>
+            ))}
+            {planLoading && <span style={{ fontSize:11, color:'#94a3b8' }}>Checking CRM…</span>}
+          </div>
+        )}
+
+        {/* Search + select all */}
         <div style={{ padding:'10px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', gap:12, flexShrink:0 }}>
+          <input type="checkbox"
+            checked={allFilteredChecked}
+            onChange={() => {
+              if (allFilteredChecked) {
+                setCheckedIds(prev => { const n = new Set(prev); checkedFiltered.forEach(c => n.delete(c.id)); return n })
+              } else {
+                setCheckedIds(prev => { const n = new Set(prev); checkedFiltered.forEach(c => n.add(c.id)); return n })
+              }
+            }}
+            style={{ accentColor:'#3b82f6', width:15, height:15 }}
+            title="Select / deselect all enrichable companies"
+          />
           <input value={search} onChange={e => setSearch(e.target.value)}
             placeholder="Search companies..."
             style={{ flex:1, padding:'7px 12px', borderRadius:8, border:'1px solid #e2e8f0', fontSize:13, outline:'none', background:'#f8fafc' }} />
           <span style={{ fontSize:12, color:'#64748b', flexShrink:0 }}>
-            {loading ? 'Loading…' : `${filtered.length} companies`}
+            {loading ? 'Loading…' : `${filtered.length} companies · ${checkedIds.size} selected`}
           </span>
         </div>
 
@@ -560,62 +693,174 @@ function ScanResultsModal({ onClose, onDeleted }: { onClose: () => void; onDelet
             <table style={{ width:'100%', borderCollapse:'collapse' }}>
               <thead>
                 <tr style={{ background:'#f8fafc' }}>
-                  {['Company', 'Domain', 'Industry', 'Signals', 'First seen'].map(h => (
-                    <th key={h} style={{ padding:'10px 16px', textAlign:'left', fontSize:11, fontWeight:600, color:'#64748b', letterSpacing:'0.05em', borderBottom:'1px solid #e2e8f0' }}>{h}</th>
+                  <th style={{ padding:'10px 14px', width:36, borderBottom:'1px solid #e2e8f0' }} />
+                  {['Company', 'Domain', 'Signals', 'Target Product', 'Status', 'First Seen'].map(h => (
+                    <th key={h} style={{ padding:'10px 14px', textAlign:'left', fontSize:11, fontWeight:600, color:'#64748b', letterSpacing:'0.05em', borderBottom:'1px solid #e2e8f0' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((c, i) => (
-                  <tr key={i} style={{ borderBottom:'1px solid #f1f5f9' }}
-                    onMouseEnter={e => (e.currentTarget.style.background = '#f8fafc')}
-                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                    <td style={{ padding:'10px 16px', fontSize:13, fontWeight:500, color:'#0f172a' }}>
-                      <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                        <Building2 size={13} color="#94a3b8" />
-                        {c.name}
-                      </div>
-                    </td>
-                    <td style={{ padding:'10px 16px', fontSize:12, color:'#64748b' }}>
-                      {c.domain ? (
-                        <a href={`https://${c.domain}`} target="_blank" rel="noreferrer"
-                          style={{ display:'flex', alignItems:'center', gap:4, color:'#3b82f6', textDecoration:'none' }}>
-                          <Globe size={11} /> {c.domain} <ExternalLink size={10} />
-                        </a>
-                      ) : '—'}
-                    </td>
-                    <td style={{ padding:'10px 16px', fontSize:12, color:'#64748b' }}>{c.industry || '—'}</td>
-                    <td style={{ padding:'10px 16px', fontSize:12 }}>
-                      <span style={{ padding:'2px 8px', borderRadius:999, fontSize:11, fontWeight:600,
-                                     background: (c.signal_count || 0) > 0 ? 'rgba(59,130,246,0.12)' : '#f1f5f9',
-                                     color:      (c.signal_count || 0) > 0 ? '#2563eb' : '#94a3b8' }}>
-                        {c.signal_count || 0}
-                      </span>
-                    </td>
-                    <td style={{ padding:'10px 16px', fontSize:12, color:'#94a3b8' }}>{fmtDate(c.first_seen)}</td>
-                  </tr>
-                ))}
+                {filtered.map((c) => {
+                  const meta  = c.status ? STATUS_META[c.status] : null
+                  const isChecked = checkedIds.has(c.id)
+                  const canCheck  = c.status !== 'has_contacts'
+                  return (
+                    <tr key={c.id}
+                      style={{ borderBottom:'1px solid #f1f5f9', opacity: c.status === 'has_contacts' ? 0.55 : 1,
+                               background: isChecked ? 'rgba(59,130,246,0.03)' : 'transparent' }}
+                      onMouseEnter={e => { if (!isChecked) e.currentTarget.style.background = '#fafbff' }}
+                      onMouseLeave={e => { e.currentTarget.style.background = isChecked ? 'rgba(59,130,246,0.03)' : 'transparent' }}>
+                      <td style={{ padding:'10px 14px', textAlign:'center' }}>
+                        {canCheck && (
+                          <input type="checkbox" checked={isChecked}
+                            onChange={() => setCheckedIds(prev => {
+                              const n = new Set(prev)
+                              isChecked ? n.delete(c.id) : n.add(c.id)
+                              return n
+                            })}
+                            style={{ accentColor:'#3b82f6', width:14, height:14 }} />
+                        )}
+                      </td>
+                      <td style={{ padding:'10px 14px', fontSize:13, fontWeight:500, color:'#0f172a' }}>
+                        <div style={{ display:'flex', alignItems:'center', gap:7 }}>
+                          <Building2 size={12} color="#94a3b8" />
+                          {c.name}
+                        </div>
+                        {c.industry && <div style={{ fontSize:11, color:'#94a3b8', marginTop:2 }}>{c.industry}</div>}
+                      </td>
+                      <td style={{ padding:'10px 14px', fontSize:12, color:'#64748b' }}>
+                        {c.domain ? (
+                          <a href={`https://${c.domain}`} target="_blank" rel="noreferrer"
+                            style={{ display:'flex', alignItems:'center', gap:4, color:'#3b82f6', textDecoration:'none' }}>
+                            <Globe size={11} /> {c.domain}
+                          </a>
+                        ) : '—'}
+                      </td>
+                      <td style={{ padding:'10px 14px', fontSize:12, textAlign:'center' }}>
+                        <span style={{ padding:'2px 8px', borderRadius:999, fontSize:11, fontWeight:600,
+                                       background: c.signal_count > 0 ? 'rgba(59,130,246,0.12)' : '#f1f5f9',
+                                       color:      c.signal_count > 0 ? '#2563eb' : '#94a3b8' }}>
+                          {c.signal_count}
+                        </span>
+                      </td>
+                      <td style={{ padding:'10px 14px', fontSize:11, color:'#64748b' }}>
+                        {c.target_product || '—'}
+                      </td>
+                      <td style={{ padding:'10px 14px' }}>
+                        {meta ? (
+                          <span title={meta.title} style={{ fontSize:11, fontWeight:600, padding:'3px 9px', borderRadius:999, background:meta.bg, color:meta.color, whiteSpace:'nowrap' }}>
+                            {c.status === 'has_contacts' ? `✓ ${c.contact_count} contacts` :
+                             c.status === 'from_contacts_master' ? `📋 ${c.contact_count} in CRM` :
+                             '⚡ Needs Apollo'}
+                          </span>
+                        ) : planLoading ? (
+                          <span style={{ fontSize:11, color:'#94a3b8' }}>checking…</span>
+                        ) : '—'}
+                      </td>
+                      <td style={{ padding:'10px 14px', fontSize:12, color:'#94a3b8', whiteSpace:'nowrap' }}>{fmtDate(c.first_seen)}</td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           )}
         </div>
 
-        {/* Inline confirm overlay — replaces window.confirm */}
+        {/* Inline delete confirm overlay */}
         {confirmDelete && (
           <div style={{ position:'absolute', inset:0, background:'rgba(15,23,42,0.55)', borderRadius:14, zIndex:10, display:'flex', alignItems:'center', justifyContent:'center' }}>
             <div style={{ background:'#fff', borderRadius:12, padding:'24px 28px', width:380, boxShadow:'0 8px 32px rgba(0,0,0,0.2)' }}>
               <div style={{ fontSize:15, fontWeight:700, color:'#0f172a', marginBottom:8 }}>Remove companies from DB?</div>
               <div style={{ fontSize:13, color:'#64748b', lineHeight:1.6, marginBottom:20 }}>
-                This will permanently delete <strong style={{ color:'#dc2626' }}>{companies.length} companies</strong> from scan run #{selectedId}, along with their signals and contacts. This cannot be undone.
+                This will permanently delete <strong style={{ color:'#dc2626' }}>{companies.length} companies</strong> from scan run #{selectedRunId}, along with their signals and contacts.
               </div>
               <div style={{ display:'flex', gap:10, justifyContent:'flex-end' }}>
                 <button onClick={() => setConfirmDelete(false)}
-                  style={{ padding:'8px 18px', borderRadius:8, border:'1px solid #e2e8f0', background:'transparent', fontSize:13, color:'#64748b', cursor:'pointer' }}>
-                  Cancel
-                </button>
+                  style={{ padding:'8px 18px', borderRadius:8, border:'1px solid #e2e8f0', background:'transparent', fontSize:13, color:'#64748b', cursor:'pointer' }}>Cancel</button>
                 <button onClick={confirmAndDelete}
                   style={{ padding:'8px 18px', borderRadius:8, border:'none', background:'#dc2626', color:'#fff', fontSize:13, fontWeight:600, cursor:'pointer', display:'flex', alignItems:'center', gap:6 }}>
-                  <Trash2 size={13} /> Yes, remove {companies.length} companies
+                  <Trash2 size={13} /> Yes, remove {companies.length}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Enrichment confirmation overlay */}
+        {showConfirm && (
+          <div style={{ position:'absolute', inset:0, background:'rgba(15,23,42,0.6)', borderRadius:14, zIndex:10, display:'flex', alignItems:'center', justifyContent:'center' }}>
+            <div style={{ background:'#fff', borderRadius:14, padding:'28px 28px 24px', width:420, boxShadow:'0 16px 48px rgba(0,0,0,0.25)' }}>
+              <div style={{ fontSize:16, fontWeight:700, color:'#0f172a', marginBottom:4 }}>Confirm Enrichment</div>
+              <div style={{ fontSize:12, color:'#64748b', marginBottom:20 }}>{checkedIds.size} companies selected</div>
+
+              {/* Cost breakdown */}
+              <div style={{ background:'#f8fafc', borderRadius:10, padding:'14px 16px', marginBottom:20, display:'flex', flexDirection:'column', gap:8 }}>
+                {selectedFromCRM > 0 && (
+                  <div style={{ display:'flex', justifyContent:'space-between', fontSize:13 }}>
+                    <span style={{ color:'#4f46e5', fontWeight:500 }}>📋 {selectedFromCRM} companies from CRM</span>
+                    <span style={{ color:'#10b981', fontWeight:700 }}>Free</span>
+                  </div>
+                )}
+                {selectedNeedsApollo > 0 && (
+                  <div style={{ display:'flex', justifyContent:'space-between', fontSize:13 }}>
+                    <span style={{ color:'#d97706', fontWeight:500 }}>⚡ {selectedNeedsApollo} companies via Apollo</span>
+                    <span style={{ color:'#d97706', fontWeight:700 }}>~{estCredits} credits</span>
+                  </div>
+                )}
+                <div style={{ borderTop:'1px solid #e2e8f0', paddingTop:8, display:'flex', justifyContent:'space-between', fontSize:13, fontWeight:700 }}>
+                  <span style={{ color:'#0f172a' }}>Estimated Apollo credits</span>
+                  <span style={{ color: estCredits > 0 ? '#f59e0b' : '#10b981' }}>{estCredits > 0 ? `~${estCredits}` : 'Free'}</span>
+                </div>
+              </div>
+
+              {/* Contacts per company */}
+              <div style={{ fontSize:11, fontWeight:700, color:'#374151', marginBottom:8, textTransform:'uppercase', letterSpacing:'0.05em' }}>Contacts per company</div>
+              <div style={{ display:'flex', gap:8, marginBottom:20 }}>
+                {[2, 5, 10, 15, 20].map(n => (
+                  <button key={n} onClick={() => setMaxPer(n)}
+                    style={{ flex:1, padding:'8px 0', borderRadius:8,
+                             border:`2px solid ${maxPer === n ? '#3b82f6' : '#e2e8f0'}`,
+                             background: maxPer === n ? 'rgba(59,130,246,0.07)' : '#f8fafc',
+                             fontSize:14, fontWeight:700,
+                             color: maxPer === n ? '#3b82f6' : '#374151',
+                             cursor:'pointer' }}>
+                    {n}
+                  </button>
+                ))}
+              </div>
+              {selectedNeedsApollo > 0 && (
+                <div style={{ fontSize:11, color:'#94a3b8', marginBottom:16, textAlign:'center' }}>
+                  Credit estimate updates: {selectedNeedsApollo} companies × {maxPer} contacts = <strong style={{ color:'#f59e0b' }}>{selectedNeedsApollo * maxPer} credits</strong>
+                </div>
+              )}
+
+              {/* Provider selector */}
+              <div style={{ fontSize:11, fontWeight:700, color:'#374151', marginBottom:8, textTransform:'uppercase', letterSpacing:'0.05em' }}>Data Provider</div>
+              <div style={{ display:'flex', gap:10, marginBottom:22 }}>
+                {(['apollo', 'zoominfo'] as const).map(p => (
+                  <button key={p} onClick={() => setEnrichProvider(p)}
+                    style={{ flex:1, padding:'9px 0', borderRadius:8,
+                             border:`2px solid ${enrichProvider === p ? '#3b82f6' : '#e2e8f0'}`,
+                             background: enrichProvider === p ? 'rgba(59,130,246,0.07)' : '#f8fafc',
+                             fontSize:13, fontWeight:600,
+                             color: enrichProvider === p ? '#3b82f6' : '#374151', cursor:'pointer' }}>
+                    {p === 'apollo' ? 'Apollo' : 'ZoomInfo'}
+                  </button>
+                ))}
+              </div>
+
+              <div style={{ display:'flex', gap:10 }}>
+                <button onClick={() => setShowConfirm(false)}
+                  style={{ flex:1, padding:'10px 0', borderRadius:8, border:'1px solid #e2e8f0', background:'transparent', fontSize:13, color:'#64748b', cursor:'pointer' }}>
+                  Cancel
+                </button>
+                <button onClick={launchEnrichment} disabled={launching}
+                  style={{ flex:2, padding:'10px 0', borderRadius:8, border:'none',
+                           background: launching ? '#93c5fd' : '#3b82f6',
+                           color:'white', fontSize:13, fontWeight:700,
+                           cursor: launching ? 'not-allowed' : 'pointer',
+                           display:'flex', alignItems:'center', justifyContent:'center', gap:7 }}>
+                  <Zap size={14} /> {launching ? 'Starting…' : `Start Enrichment`}
                 </button>
               </div>
             </div>
@@ -623,19 +868,30 @@ function ScanResultsModal({ onClose, onDeleted }: { onClose: () => void; onDelet
         )}
 
         {/* Footer */}
-        <div style={{ padding:'12px 24px', borderTop:'1px solid #e2e8f0', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0 }}>
-          {selectedId && selectedId > 0 && companies.length > 0 ? (
-            <button onClick={removeFromDB} disabled={deleting}
-              style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 16px', borderRadius:8,
-                       border:'1px solid rgba(239,68,68,0.35)', background:'rgba(239,68,68,0.06)',
-                       color:'#dc2626', fontSize:13, fontWeight:500, cursor:'pointer', opacity: deleting ? 0.6 : 1 }}>
-              <Trash2 size={13} />
-              {deleting ? 'Removing…' : `Remove ${companies.length} companies from DB`}
+        <div style={{ padding:'12px 24px', borderTop:'1px solid #e2e8f0', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0, gap:12 }}>
+          <div style={{ display:'flex', gap:10, alignItems:'center' }}>
+            {selectedRunId && selectedRunId > 0 && companies.length > 0 && (
+              <button onClick={removeFromDB} disabled={deleting}
+                style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 14px', borderRadius:8,
+                         border:'1px solid rgba(239,68,68,0.35)', background:'rgba(239,68,68,0.06)',
+                         color:'#dc2626', fontSize:13, fontWeight:500, cursor:'pointer', opacity: deleting ? 0.6 : 1 }}>
+                <Trash2 size={13} /> {deleting ? 'Removing…' : `Remove run`}
+              </button>
+            )}
+            <button onClick={onClose}
+              style={{ padding:'8px 18px', borderRadius:8, border:'1px solid #e2e8f0', background:'transparent', fontSize:13, color:'#64748b', cursor:'pointer' }}>
+              Close
             </button>
-          ) : <span />}
-          <button onClick={onClose}
-            style={{ padding:'8px 20px', borderRadius:8, border:'1px solid #e2e8f0', background:'transparent', fontSize:13, color:'#64748b', cursor:'pointer' }}>
-            Close
+          </div>
+          <button
+            onClick={() => checkedIds.size > 0 ? setShowConfirm(true) : toast.error('Select at least one company')}
+            disabled={checkedIds.size === 0 || planLoading}
+            style={{ display:'flex', alignItems:'center', gap:8, padding:'9px 22px', borderRadius:9, border:'none',
+                     background: checkedIds.size > 0 ? '#3b82f6' : '#e2e8f0',
+                     color: checkedIds.size > 0 ? 'white' : '#94a3b8',
+                     fontSize:14, fontWeight:700, cursor: checkedIds.size > 0 ? 'pointer' : 'not-allowed' }}>
+            <Zap size={14} />
+            Enrich {checkedIds.size > 0 ? `${checkedIds.size} Selected` : 'Selected'}
           </button>
         </div>
       </div>
@@ -1032,6 +1288,7 @@ export default function EngineControl() {
         <ScanResultsModal
           onClose={() => setShowScanResults(false)}
           onDeleted={() => { fetchEnrichStats(); fetchEnrichStatus() }}
+          onEnrichStarted={() => { fetchEnrichStats(); fetchEnrichStatus(); setShowScanResults(false) }}
         />
       )}
 

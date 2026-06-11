@@ -63,7 +63,7 @@ interface Contact {
   email_validation_status?: string
 }
 
-function ContactsPanel({ company, onClose }: { company: Company; onClose: () => void }) {
+function ContactsPanel({ company, onClose, onEnriched }: { company: Company; onClose: () => void; onEnriched?: () => void }) {
   const [contacts, setContacts]         = useState<Contact[]>([])
   const [loading, setLoading]           = useState(true)
   const [pushing, setPushing]           = useState<Record<string, boolean>>({})
@@ -141,6 +141,7 @@ function ContactsPanel({ company, onClose }: { company: Company; onClose: () => 
               await reloadContacts()
               const found = s.contacts_found ?? 0
               setEnrichResult({ found })
+              onEnriched?.()
             }
           }
         } catch { /* silent poll failure */ }
@@ -796,7 +797,7 @@ export default function Companies() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20, width: '100%' }}>
       {contactsPanel && (
-        <ContactsPanel company={contactsPanel} onClose={() => setContactsPanel(null)} />
+        <ContactsPanel company={contactsPanel} onClose={() => setContactsPanel(null)} onEnriched={fetchCompanies} />
       )}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div>

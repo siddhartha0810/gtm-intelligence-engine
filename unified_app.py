@@ -83,7 +83,7 @@ import pandas as pd
 import psycopg2
 import psycopg2.extras
 
-from fastapi import FastAPI, File, Form, Request, UploadFile, Depends
+from fastapi import FastAPI, File, Form, Request, UploadFile, Depends, HTTPException
 from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.gzip import GZipMiddleware
@@ -945,6 +945,7 @@ def _run_company_enrich(company_id: int, provider: str, max_per_company: int) ->
     """Background thread: run full Apollo/ZoomInfo pipeline for one company."""
     with _company_jobs_lock:
         _company_jobs[company_id] = {"status": "running", "contacts_found": 0, "error": ""}
+    error_msg = ""
     try:
         oracle_apollo.enrich_companies(
             apollo_key=APOLLO_API_KEY,
@@ -954,14 +955,20 @@ def _run_company_enrich(company_id: int, provider: str, max_per_company: int) ->
             provider=provider,
             company_ids=[company_id],
         )
-        # Count saved contacts
-        contacts = oracle_db.get_contacts_for_company(company_id)
-        with _company_jobs_lock:
-            _company_jobs[company_id] = {"status": "done", "contacts_found": len(contacts), "error": ""}
     except Exception as e:
         logger.exception("Per-company enrich failed for id=%s", company_id)
+        error_msg = str(e)
+    finally:
+        # Always count from DB — contacts may have been saved before any exception
+        try:
+            rows = oracle_db.get_contacts_for_company(company_id)
+            # Count only contacts with at least one contact method (email or linkedin)
+            saved = sum(1 for r in rows if dict(r).get("email") or dict(r).get("linkedin_url"))
+        except Exception:
+            saved = 0
+        status = "error" if error_msg else "done"
         with _company_jobs_lock:
-            _company_jobs[company_id] = {"status": "error", "contacts_found": 0, "error": str(e)}
+            _company_jobs[company_id] = {"status": status, "contacts_found": saved, "error": error_msg}
 
 @app.post("/api/company/{company_id}/contacts/enrich")
 async def api_enrich_contacts(company_id: int, request: Request,
@@ -1009,25 +1016,24 @@ async def api_company_enrich_status(company_id: int,
 _bulk_enrich_state: Dict[str, object] = {"running": False, "done": 0, "total": 0, "errors": 0}
 _bulk_enrich_lock  = threading.Lock()
 
-def _bulk_enrich_worker(company_ids: list):
-    # State is pre-set under _bulk_enrich_lock by the caller before this thread starts
+def _bulk_enrich_worker(company_ids: list, provider: str = "apollo", max_per_company: int = 10):
+    """
+    Bulk enrichment via the full 7-stage pipeline (contacts_master → Apollo/ZoomInfo
+    → ZeroBounce → prediction → scoring).  Replaces the old contact_finder path which
+    bypassed ZeroBounce, scoring, and contacts_master lookup entirely.
+    """
     for cid in company_ids:
         try:
-            company = oracle_db.get_company_by_id(cid)
-            if not company:
-                continue
-            cname  = (company.get("name") or "").strip()
-            domain = (company.get("domain") or "").strip().lower() or \
-                     oracle_contact_finder.infer_domain(cname)
-            try:
-                contacts = oracle_contact_finder.find_contacts(cname, domain)
-                if contacts:
-                    oracle_db.save_contacts(cid, contacts)
-            except Exception:
-                logger.warning("Apollo contact search failed for company_id=%s (%s)", cid, cname, exc_info=True)
-                _bulk_enrich_state["errors"] = _bulk_enrich_state["errors"] + 1
+            oracle_apollo.enrich_companies(
+                apollo_key=APOLLO_API_KEY,
+                zerobounce_key=ZEROBOUNCE_API_KEY,
+                limit=1,
+                max_per_company=max_per_company,
+                provider=provider,
+                company_ids=[cid],
+            )
         except Exception:
-            logger.exception("Unexpected error enriching company_id=%s", cid)
+            logger.exception("Bulk enrich failed for company_id=%s", cid)
             _bulk_enrich_state["errors"] = _bulk_enrich_state["errors"] + 1
         _bulk_enrich_state["done"] = _bulk_enrich_state["done"] + 1
     _bulk_enrich_state["running"] = False
@@ -1036,13 +1042,15 @@ def _bulk_enrich_worker(company_ids: list):
 async def api_bulk_enrich(request: Request, current_user: dict = Depends(oracle_auth.require_analyst)):
     body = await request.json()
     company_ids = body.get("company_ids", [])
+    provider = str(body.get("provider", "apollo"))
+    max_per_company = int(body.get("max_per_company", 10))
     if not company_ids:
         return JSONResponse({"error": "No company IDs provided"}, status_code=400)
     with _bulk_enrich_lock:
         if _bulk_enrich_state.get("running"):
             return JSONResponse({"error": "Enrichment already running", "progress": _bulk_enrich_state}, status_code=409)
         _bulk_enrich_state.update({"running": True, "done": 0, "total": len(company_ids), "errors": 0})
-    t = threading.Thread(target=_bulk_enrich_worker, args=(company_ids,), daemon=True)
+    t = threading.Thread(target=_bulk_enrich_worker, args=(company_ids, provider, max_per_company), daemon=True)
     t.start()
     return {"message": f"Bulk enrichment started for {len(company_ids)} companies", "total": len(company_ids)}
 
@@ -1932,6 +1940,78 @@ async def api_reporting(current_user: dict = Depends(oracle_auth.require_user)):
         "contact_by_source":     contact_by_source,
     }
 
+@app.get("/api/scan/{run_id}/enrichment-plan")
+async def scan_enrichment_plan(
+    run_id: int,
+    max_per: int = 10,
+    current_user: dict = Depends(oracle_auth.require_analyst),
+):
+    """
+    For each company in a scan run, classify enrichment status:
+      has_contacts        — already has contacts with email/linkedin in DB
+      from_contacts_master — found in Salesforce CRM export (free, no API cost)
+      needs_apollo         — not found anywhere; must use Apollo/ZoomInfo credits
+    Also returns a summary with estimated Apollo credit cost.
+    """
+    try:
+        companies = list(oracle_db.get_all_companies_with_signals(run_id=run_id))
+        result = []
+        has_ct = from_cm = needs_api = 0
+
+        for c in companies:
+            cid  = int(c["id"])
+            name = str(c["name"])
+
+            # contact_count is already joined into the company record by the SQL query —
+            # no extra DB round-trip needed.  It counts email-bearing contacts only, which
+            # is the right gate: if a company was enriched before (even in a prior run)
+            # this will be > 0 and we skip Apollo for it.
+            existing_ct = int(c.get("contact_count") or 0)
+
+            if existing_ct > 0:
+                status        = "has_contacts"
+                contact_count = existing_ct
+                has_ct       += 1
+            else:
+                # Check contacts_master (Salesforce CRM — no API cost)
+                cm_rows = oracle_db.get_master_leads_by_company(name)
+                if cm_rows:
+                    status        = "from_contacts_master"
+                    contact_count = len(cm_rows)
+                    from_cm      += 1
+                else:
+                    status        = "needs_apollo"
+                    contact_count = 0
+                    needs_api    += 1
+
+            result.append({
+                "id":             cid,
+                "name":           name,
+                "domain":         c.get("domain"),
+                "industry":       c.get("industry"),
+                "signal_count":   int(c.get("signal_count") or 0),
+                "target_product": c.get("target_product"),
+                "status":         status,
+                "contact_count":  contact_count,
+                "first_seen":     str(c["first_seen"]) if c.get("first_seen") else None,
+            })
+
+        return {
+            "run_id":    run_id,
+            "companies": result,
+            "summary": {
+                "total":                len(result),
+                "has_contacts":         has_ct,
+                "from_contacts_master": from_cm,
+                "needs_apollo":         needs_api,
+                "est_credits":          needs_api * max_per,
+            },
+        }
+    except Exception as e:
+        logger.exception("scan enrichment-plan failed for run_id=%s", run_id)
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
 # enrichment endpoints
 @app.get("/api/enrich/pending")
 async def enrich_pending(limit: int = 500, current_user: dict = Depends(oracle_auth.require_analyst)):
@@ -2468,7 +2548,7 @@ async def api_company_status(
 ):
     data       = await request.json()
     new_status = data.get("status", "")
-    valid      = {"staged", "pending_review", "approved", "pushed_to_hubspot", "rejected"}
+    valid      = {"staged", "pending_review", "approved", "pushed_to_hubspot", "rejected", "excluded"}
     if new_status not in valid:
         return JSONResponse({"error": f"Invalid status. Must be one of: {valid}"}, status_code=400)
 

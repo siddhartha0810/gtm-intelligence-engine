@@ -526,6 +526,15 @@ def _apollo_call(org_name: str, api_key: str, max_per: int,
         last  = str(p.get("last_name") or "").strip()
         title = str(p.get("title") or p.get("headline") or "").strip()
 
+        # Industry from org object
+        industry = ""
+        if isinstance(org, dict):
+            industry = str(org.get("industry") or "").strip()
+
+        # Location from person-level city/state/country
+        location_parts = [str(p.get(k) or "").strip() for k in ("city", "state", "country") if p.get(k)]
+        location = ", ".join(location_parts)
+
         # Resolve LinkedIn URL — direct field first, then from uid
         linkedin = str(p.get("linkedin_url") or "").strip()
         if not linkedin:
@@ -545,11 +554,18 @@ def _apollo_call(org_name: str, api_key: str, max_per: int,
                 email_status = str(full.get("email_status") or "").lower()
                 if email_status in ("unavailable", "bounced", "invalid"):
                     email = ""
-            # Also fill last_name / title from full profile if missing
+            # Fill missing fields from full profile
             if not last:
                 last = str(full.get("last_name") or "").strip()
             if not title:
                 title = str(full.get("title") or full.get("headline") or "").strip()
+            if not industry:
+                full_org = full.get("organization") or {}
+                if isinstance(full_org, dict):
+                    industry = str(full_org.get("industry") or "").strip()
+            if not location:
+                loc_parts = [str(full.get(k) or "").strip() for k in ("city", "state", "country") if full.get(k)]
+                location = ", ".join(loc_parts)
             if person_id:
                 time.sleep(0.3)  # rate-limit match calls
 
@@ -567,6 +583,8 @@ def _apollo_call(org_name: str, api_key: str, max_per: int,
             "email":                   email or None,
             "linkedin_url":            linkedin,
             "domain":                  domain,
+            "industry":                industry or None,
+            "location":                location or None,
             "source":                  "apollo",
             "confidence":              0.8,
             "is_target":               1,
@@ -713,12 +731,8 @@ def _score_contacts(contacts: list, target_product: str) -> list:
     for c in contacts:
         c["target_product"] = target_product or ""
         status = str(c.get("email_validation_status") or "").lower().strip()
-        c["ready_for_outreach"] = bool(
-            c.get("email") and (
-                status == "valid"
-                or (status in ("catch-all", "catchall") and c.get("linkedin_url"))
-            )
-        )
+        # Only ZeroBounce-confirmed valid emails qualify — catch-all is not safe enough
+        c["ready_for_outreach"] = bool(c.get("email") and status == "valid")
     return contacts
 
 
@@ -895,19 +909,35 @@ def enrich_companies(
             log(f"  + {len(contacts)} contacts from Apollo ({pass_label})")
 
         # Stage 4: Validate Apollo emails in batch via ZeroBounce
+        # Only VALID emails are kept — catch-all is cleared so the prediction engine
+        # can attempt to find a confirmed-valid email for those contacts instead.
         emails_to_validate = [c["email"] for c in contacts if c.get("email")]
         if emails_to_validate and zerobounce_key:
             log(f"  ~ validating {len(emails_to_validate)} email(s)...")
-            validation    = _zb_validate_batch(emails_to_validate, zerobounce_key)
-            valid_count   = 0
+            validation  = _zb_validate_batch(emails_to_validate, zerobounce_key)
+            valid_count = 0
+            cleared     = 0
             for c in contacts:
                 raw = (c.get("email") or "").lower()
                 if raw:
-                    zb = validation.get(raw, {})
-                    c["email_validation_status"] = zb.get("status", "not_validated")
-                    if c["email_validation_status"] == "valid":
+                    zb     = validation.get(raw, {})
+                    status = zb.get("status", "not_validated")
+                    if status == "valid":
+                        c["email_validation_status"] = "valid"
                         valid_count += 1
-            log(f"  ~ {valid_count}/{len(emails_to_validate)} valid")
+                    elif status in ("catch-all", "catchall"):
+                        # Clear catch-all email — let prediction engine attempt valid alternative
+                        c["email"] = None
+                        c["email_validation_status"] = None
+                        cleared += 1
+                    else:
+                        # invalid / bounced / spamtrap / do_not_mail — discard
+                        c["email"] = None
+                        c["email_validation_status"] = status
+            msg = f"  ~ {valid_count}/{len(emails_to_validate)} valid"
+            if cleared:
+                msg += f", {cleared} catch-all cleared (will attempt prediction)"
+            log(msg)
             total_validated += valid_count
         elif emails_to_validate:
             for c in contacts:
