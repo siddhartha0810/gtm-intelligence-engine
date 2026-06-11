@@ -72,6 +72,7 @@ function ContactsPanel({ company, onClose }: { company: Company; onClose: () => 
   const [showPicker, setShowPicker]     = useState(false)
   const [provider, setProvider]         = useState<'apollo' | 'zoominfo'>('apollo')
   const [maxPer, setMaxPer]             = useState(10)
+  const [enrichResult, setEnrichResult] = useState<{ found: number } | null>(null)
   const enrichPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => {
@@ -138,8 +139,7 @@ function ContactsPanel({ company, onClose }: { company: Company; onClose: () => 
             } else {
               await reloadContacts()
               const found = s.contacts_found ?? 0
-              if (found > 0) toast.success(`Found ${found} contacts for ${company.name}`)
-              else toast.info('Enrichment done — no new contacts found')
+              setEnrichResult({ found })
             }
           }
         } catch { /* silent poll failure */ }
@@ -252,7 +252,7 @@ function ContactsPanel({ company, onClose }: { company: Company; onClose: () => 
               {/* contacts per company */}
               <div style={{ fontSize: 11, fontWeight: 600, color: '#374151', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Contacts to Find</div>
               <div style={{ display: 'flex', gap: 8, marginBottom: 24 }}>
-                {[5, 10, 15, 20].map(n => (
+                {[2, 5, 10, 15, 20].map(n => (
                   <button key={n} onClick={() => setMaxPer(n)}
                     style={{ flex: 1, padding: '7px 0', borderRadius: 7, border: `2px solid ${maxPer === n ? '#3b82f6' : '#e2e8f0'}`, background: maxPer === n ? 'rgba(59,130,246,0.07)' : '#f8fafc', cursor: 'pointer', fontSize: 13, fontWeight: 600, color: maxPer === n ? '#3b82f6' : '#374151' }}>
                     {n}
@@ -270,6 +270,32 @@ function ContactsPanel({ company, onClose }: { company: Company; onClose: () => 
                   <Zap size={13} /> Find Contacts via {provider === 'apollo' ? 'Apollo' : 'ZoomInfo'}
                 </button>
               </div>
+            </div>
+          </>
+        )}
+
+        {/* enrichment result popup */}
+        {enrichResult && (
+          <>
+            <div onClick={() => setEnrichResult(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 800 }} />
+            <div style={{
+              position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
+              width: 340, background: '#fff', borderRadius: 16, zIndex: 900,
+              boxShadow: '0 24px 64px rgba(0,0,0,0.2)', padding: '32px 28px', textAlign: 'center',
+            }}>
+              <div style={{ fontSize: 40, marginBottom: 12 }}>{enrichResult.found > 0 ? '✅' : 'ℹ️'}</div>
+              <div style={{ fontSize: 17, fontWeight: 700, color: '#0f172a', marginBottom: 8 }}>
+                {enrichResult.found > 0 ? `Found ${enrichResult.found} contact${enrichResult.found !== 1 ? 's' : ''}` : 'No new contacts'}
+              </div>
+              <div style={{ fontSize: 13, color: '#64748b', marginBottom: 24 }}>
+                {enrichResult.found > 0
+                  ? `Enriched ${enrichResult.found} contact${enrichResult.found !== 1 ? 's' : ''} for ${company.name}`
+                  : `No new contacts were found for ${company.name}`}
+              </div>
+              <button onClick={() => setEnrichResult(null)}
+                style={{ width: '100%', padding: '10px 0', borderRadius: 9, border: 'none', background: '#3b82f6', color: 'white', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
+                Done
+              </button>
             </div>
           </>
         )}

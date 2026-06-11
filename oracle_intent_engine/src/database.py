@@ -1293,7 +1293,7 @@ def get_master_leads_by_email(emails: list) -> dict:
             cur.execute(
                 """
                 SELECT
-                    id                                                              AS lead_id,
+                    ctid::text                                                      AS lead_id,
                     firstname                                                       AS first_name,
                     lastname                                                        AS last_name,
                     title                                                           AS job_title,
@@ -1333,7 +1333,7 @@ def get_master_leads_by_company(company_normalized: str) -> list:
             cur.execute(
                 """
                 SELECT
-                    id                                                              AS lead_id,
+                    ctid::text                                                      AS lead_id,
                     firstname                                                       AS first_name,
                     lastname                                                        AS last_name,
                     title                                                           AS job_title,

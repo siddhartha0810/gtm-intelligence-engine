@@ -132,7 +132,7 @@ def _norm_company(name: str) -> str:
 # ── SELECT template (all callers use same column shape) ──────────────────────
 
 _SELECT_COLS = """
-    id::TEXT                                                              AS lead_id,
+    ctid::TEXT                                                            AS lead_id,
     firstname                                                             AS first_name,
     lastname                                                              AS last_name,
     title                                                                 AS job_title,
