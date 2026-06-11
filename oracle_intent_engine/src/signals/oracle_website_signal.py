@@ -298,6 +298,7 @@ class OracleWebsiteSignal(BaseSignal):
 
             except Exception as e:
                 logger.error(f"Bing customer RSS error for '{query}': {e}")
+                random_delay(1, 2)  # rate-limit even on failure
 
         return results
 
@@ -344,6 +345,7 @@ class OracleWebsiteSignal(BaseSignal):
 
             except Exception as e:
                 logger.error(f"Bing news RSS error for '{query}': {e}")
+                random_delay(1, 2)  # rate-limit even on failure
 
         return results
 

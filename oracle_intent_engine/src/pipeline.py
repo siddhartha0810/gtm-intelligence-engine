@@ -177,7 +177,10 @@ def run_scan(
                         r["_product_hint"] = r.pop("oracle_product_hint")
                 raw_signals.extend(results)
                 _current_scan["raw_signals"] = len(raw_signals)
-                _log(f"✓ ORACLE.COM done — {len(results)} customer stories/press releases")
+                if len(results) == 0:
+                    _log("⚠ ORACLE.COM done — 0 signals. oracle.com WAF likely blocked direct scraping; Bing RSS may be blocked by network/proxy on this machine.")
+                else:
+                    _log(f"✓ ORACLE.COM done — {len(results)} customer stories/press releases")
             except Exception as e:
                 _log(f"  [oracle_website] ERROR: {e}")
 

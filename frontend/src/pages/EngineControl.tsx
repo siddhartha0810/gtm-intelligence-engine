@@ -676,10 +676,12 @@ export default function EngineControl() {
   const [logScrollLocked,      setLogScrollLocked]      = useState(false)
   const [enrichScrollLocked,   setEnrichScrollLocked]   = useState(false)
 
-  const logRef       = useRef<HTMLDivElement>(null)
-  const enrichLogRef = useRef<HTMLDivElement>(null)
-  const pollRef      = useRef<ReturnType<typeof setInterval> | null>(null)
-  const enrichPoll   = useRef<ReturnType<typeof setInterval> | null>(null)
+  const logRef         = useRef<HTMLDivElement>(null)
+  const enrichLogRef   = useRef<HTMLDivElement>(null)
+  const pollRef        = useRef<ReturnType<typeof setInterval> | null>(null)
+  const enrichPoll     = useRef<ReturnType<typeof setInterval> | null>(null)
+  const scanStartedAt  = useRef<number>(0)   // timestamp when scan was launched
+  const STOP_BTN_MIN_MS = 12000              // keep Stop button visible ≥12 s
 
   const addLog = (level: string, msg: string) =>
     setLogs(l => [...l.slice(-500), { t: now(), level, msg }])
@@ -846,6 +848,7 @@ export default function EngineControl() {
         // A scan is already running (e.g. started before a page refresh or
         // left over from a crashed session). Sync the UI so the Stop button
         // appears instead of leaving the user stuck on Start.
+        scanStartedAt.current = Date.now() - STOP_BTN_MIN_MS  // already running → no min wait
         setOracleState('running')
         toast.info('A scan is already running — Stop button enabled')
         addLog('WARN', 'Scan already running on the server. Use Stop to cancel it.')
@@ -863,6 +866,7 @@ export default function EngineControl() {
         return
       }
       if (!res.ok) { toast.error((await res.json()).error || 'Failed to start scan'); return }
+      scanStartedAt.current = Date.now()
       setOracleState('running')
       addLog('INFO', `Oracle Intent Engine starting... sources: ${selectedSources.join(', ')}${jdeMfg ? ' [JDE Mfg Focus]' : ''}`)
       toast.success('Oracle Intent scan started')
@@ -870,10 +874,13 @@ export default function EngineControl() {
       pollRef.current = setInterval(async () => {
         await fetchLog()
         const s = await fetch('/scan/status', { headers: authH() }).then(r => r.json()).catch(() => null)
-        if (s && s.status !== 'running') {
+        const elapsed = Date.now() - scanStartedAt.current
+        if (s && s.status !== 'running' && elapsed >= STOP_BTN_MIN_MS) {
           setOracleState('idle')
-          addLog('SUCCESS', 'Oracle Intent scan completed.')
-          toast.success('Oracle Intent scan completed')
+          const companies = s.companies_found ?? 0
+          const msg = companies > 0 ? `Oracle Intent scan completed — ${companies} companies found.` : 'Oracle Intent scan completed (0 companies found — check log for details).'
+          addLog(companies > 0 ? 'SUCCESS' : 'WARN', msg)
+          if (companies > 0) toast.success(`Scan completed — ${companies} companies found`) else toast.info('Scan done — 0 companies (check Engine Log)')
           clearInterval(pollRef.current!)
           fetchEnrichStats()
           await loadScanResults()   // show discovered companies for selection
@@ -931,6 +938,7 @@ export default function EngineControl() {
         if (r.ok) {
           const d = await r.json()
           if (d.status === 'running') {
+            scanStartedAt.current = Date.now() - STOP_BTN_MIN_MS  // already running → no min wait
             setOracleState('running')
             addLog('INFO', 'Scan already running — resuming live log...')
             if (pollRef.current) clearInterval(pollRef.current)
