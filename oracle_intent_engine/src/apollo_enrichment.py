@@ -1014,6 +1014,34 @@ def enrich_companies(
                 c["domain"] = company_domain
 
         prediction_batch = contacts + existing_no_email
+
+        # If company_domain is still empty, infer it from any sibling contact that has one
+        # (e.g. Apollo returned rajeev.chugh@ageasfederal.com → learn ageasfederal.com for Rufus)
+        if not company_domain:
+            sibling_domain = next(
+                (c.get("domain", "").strip().lower() for c in prediction_batch
+                 if c.get("domain", "").strip()),
+                ""
+            )
+            if not sibling_domain:
+                # Fall back to extracting domain from a known valid email in the batch
+                for c in prediction_batch:
+                    email = (c.get("email") or "").strip().lower()
+                    if "@" in email:
+                        sibling_domain = email.split("@", 1)[1]
+                        break
+            if sibling_domain:
+                company_domain = sibling_domain
+                log(f"  ~ domain inferred from sibling contact: {company_domain}")
+                try:
+                    db.set_company_domain(company_id, company_domain)
+                except Exception:
+                    pass
+                # Backfill domain onto contacts that were missing it
+                for c in prediction_batch:
+                    if not c.get("domain"):
+                        c["domain"] = company_domain
+
         no_email_count = sum(1 for c in prediction_batch if not c.get("email"))
 
         if no_email_count and zerobounce_key:
