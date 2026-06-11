@@ -63,11 +63,16 @@ interface Contact {
 }
 
 function ContactsPanel({ company, onClose }: { company: Company; onClose: () => void }) {
-  const [contacts, setContacts]   = useState<Contact[]>([])
-  const [loading, setLoading]     = useState(true)
-  const [pushing, setPushing]     = useState<Record<string, boolean>>({})
-  const [enriching, setEnriching] = useState(false)
-  const [search, setSearch]       = useState('')
+  const [contacts, setContacts]         = useState<Contact[]>([])
+  const [loading, setLoading]           = useState(true)
+  const [pushing, setPushing]           = useState<Record<string, boolean>>({})
+  const [enriching, setEnriching]       = useState(false)
+  const [enrichProgress, setEnrichProgress] = useState('')
+  const [search, setSearch]             = useState('')
+  const [showPicker, setShowPicker]     = useState(false)
+  const [provider, setProvider]         = useState<'apollo' | 'zoominfo'>('apollo')
+  const [maxPer, setMaxPer]             = useState(10)
+  const enrichPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => {
     setLoading(true)
@@ -77,6 +82,14 @@ function ContactsPanel({ company, onClose }: { company: Company; onClose: () => 
       .catch(() => setContacts([]))
       .finally(() => setLoading(false))
   }, [company.id])
+
+  // clean up poll on unmount
+  useEffect(() => () => { if (enrichPollRef.current) clearInterval(enrichPollRef.current) }, [])
+
+  const reloadContacts = async () => {
+    const r = await fetch(`/api/company/${company.id}/contacts`, { headers: authH() })
+    if (r.ok) setContacts(await r.json())
+  }
 
   const pushToHubSpot = async (c: Contact) => {
     setPushing(p => ({ ...p, [c.id]: true }))
@@ -90,21 +103,52 @@ function ContactsPanel({ company, onClose }: { company: Company; onClose: () => 
     finally { setPushing(p => ({ ...p, [c.id]: false })) }
   }
 
-  const enrich = async () => {
+  const launchEnrich = async () => {
+    setShowPicker(false)
     setEnriching(true)
+    setEnrichProgress('Starting enrichment pipeline...')
     try {
-      const r = await fetch(`/api/company/${company.id}/contacts/enrich`, { method: 'POST', headers: authH() })
-      const d = await r.json()
-      if (r.ok) {
-        toast.success(`Found ${d.count ?? 0} contacts for ${company.name}`)
-        // Reload contacts
-        const r2 = await fetch(`/api/company/${company.id}/contacts`, { headers: authH() })
-        if (r2.ok) setContacts(await r2.json())
-      } else {
-        toast.error('Enrichment failed')
+      const res = await fetch('/api/enrich/start', {
+        method: 'POST',
+        headers: authH(),
+        body: JSON.stringify({
+          limit: 1,
+          max_per_company: maxPer,
+          provider,
+          company_ids: [company.id],
+        }),
+      })
+      if (!res.ok) {
+        const d = await res.json()
+        toast.error(d.error || 'Failed to start enrichment')
+        setEnriching(false)
+        setEnrichProgress('')
+        return
       }
-    } catch { toast.error('Network error') }
-    finally { setEnriching(false) }
+      toast.info(`Enriching ${company.name} via ${provider === 'apollo' ? 'Apollo' : 'ZoomInfo'}...`)
+      // Poll enrichment status until done
+      if (enrichPollRef.current) clearInterval(enrichPollRef.current)
+      enrichPollRef.current = setInterval(async () => {
+        try {
+          const s = await fetch('/api/enrich/status', { headers: authH() }).then(r => r.json())
+          if (s.progress) setEnrichProgress(s.progress)
+          if (s.status !== 'running') {
+            clearInterval(enrichPollRef.current!)
+            enrichPollRef.current = null
+            setEnriching(false)
+            setEnrichProgress('')
+            await reloadContacts()
+            const found = s.contacts_found ?? 0
+            if (found > 0) toast.success(`Found ${found} contacts for ${company.name}`)
+            else toast.info('Enrichment done — no new contacts found')
+          }
+        } catch { /* silent poll failure */ }
+      }, 3000)
+    } catch {
+      toast.error('Network error')
+      setEnriching(false)
+      setEnrichProgress('')
+    }
   }
 
   const confColor = (c: number) => c >= 0.8 ? '#10b981' : c >= 0.5 ? '#f59e0b' : '#ef4444'
@@ -162,12 +206,74 @@ function ContactsPanel({ company, onClose }: { company: Company; onClose: () => 
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search contacts…"
               style={{ width: '100%', paddingLeft: 28, paddingRight: 10, paddingTop: 7, paddingBottom: 7, borderRadius: 7, border: '1px solid #d1d5db', fontSize: 12, color: '#0f172a', outline: 'none', boxSizing: 'border-box' }} />
           </div>
-          <button onClick={enrich} disabled={enriching}
+          <button onClick={() => !enriching && setShowPicker(true)} disabled={enriching}
             style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 7, border: 'none', background: enriching ? '#93c5fd' : '#3b82f6', color: 'white', fontSize: 12, fontWeight: 600, cursor: enriching ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}>
             {enriching ? <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} /> : <Zap size={12} />}
             {enriching ? 'Enriching…' : 'Enrich'}
           </button>
         </div>
+
+        {/* enrichment progress bar */}
+        {enriching && enrichProgress && (
+          <div style={{ padding: '8px 24px', background: 'rgba(59,130,246,0.06)', borderBottom: '1px solid #dbeafe', fontSize: 11, color: '#3b82f6', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Loader2 size={11} style={{ animation: 'spin 1s linear infinite', flexShrink: 0 }} />
+            {enrichProgress}
+          </div>
+        )}
+
+        {/* provider picker modal */}
+        {showPicker && (
+          <>
+            <div onClick={() => setShowPicker(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', zIndex: 600 }} />
+            <div style={{
+              position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
+              width: 380, background: '#fff', borderRadius: 14, zIndex: 700,
+              boxShadow: '0 20px 60px rgba(0,0,0,0.18)', padding: 24,
+            }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>Find Contacts</div>
+              <div style={{ fontSize: 12, color: '#64748b', marginBottom: 18 }}>{company.name}</div>
+
+              {/* provider selection */}
+              <div style={{ fontSize: 11, fontWeight: 600, color: '#374151', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Data Provider</div>
+              <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
+                {(['apollo', 'zoominfo'] as const).map(p => (
+                  <button key={p} onClick={() => setProvider(p)}
+                    style={{ flex: 1, padding: '10px 0', borderRadius: 8, border: `2px solid ${provider === p ? '#3b82f6' : '#e2e8f0'}`, background: provider === p ? 'rgba(59,130,246,0.07)' : '#f8fafc', cursor: 'pointer', textAlign: 'center' }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: provider === p ? '#3b82f6' : '#374151' }}>
+                      {p === 'apollo' ? 'Apollo' : 'ZoomInfo'}
+                    </div>
+                    <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2 }}>
+                      {p === 'apollo' ? 'People API' : 'Contact DB'}
+                    </div>
+                  </button>
+                ))}
+              </div>
+
+              {/* contacts per company */}
+              <div style={{ fontSize: 11, fontWeight: 600, color: '#374151', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Contacts to Find</div>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 24 }}>
+                {[5, 10, 15, 20].map(n => (
+                  <button key={n} onClick={() => setMaxPer(n)}
+                    style={{ flex: 1, padding: '7px 0', borderRadius: 7, border: `2px solid ${maxPer === n ? '#3b82f6' : '#e2e8f0'}`, background: maxPer === n ? 'rgba(59,130,246,0.07)' : '#f8fafc', cursor: 'pointer', fontSize: 13, fontWeight: 600, color: maxPer === n ? '#3b82f6' : '#374151' }}>
+                    {n}
+                  </button>
+                ))}
+              </div>
+
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button onClick={() => setShowPicker(false)}
+                  style={{ flex: 1, padding: '9px 0', borderRadius: 8, border: '1px solid #e2e8f0', background: '#f8fafc', fontSize: 13, fontWeight: 500, color: '#64748b', cursor: 'pointer' }}>
+                  Cancel
+                </button>
+                <button onClick={launchEnrich}
+                  style={{ flex: 2, padding: '9px 0', borderRadius: 8, border: 'none', background: '#3b82f6', fontSize: 13, fontWeight: 600, color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                  <Zap size={13} /> Find Contacts via {provider === 'apollo' ? 'Apollo' : 'ZoomInfo'}
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+
         <div style={{ flex: 1, overflowY: 'auto' }}>
           {loading && (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 200, gap: 8, color: '#94a3b8', fontSize: 13 }}>
@@ -185,7 +291,7 @@ function ContactsPanel({ company, onClose }: { company: Company; onClose: () => 
                   : 'No contacts match your search'}
               </div>
               {contacts.length === 0 && (
-                <button onClick={enrich} disabled={enriching}
+                <button onClick={() => setShowPicker(true)} disabled={enriching}
                   style={{ padding: '9px 20px', borderRadius: 8, border: 'none', background: '#3b82f6', color: 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
                   Find Contacts Now
                 </button>
