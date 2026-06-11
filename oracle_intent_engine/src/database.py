@@ -925,13 +925,23 @@ def save_contacts(company_id: int, contacts: list):
         """, (company_id, company_id))
 
 def get_companies_needing_enrichment(limit: int = 50, company_ids: list = None) -> list:
-    """Return companies without contacts yet — signal-backed first, then CSV imports.
+    """Return companies needing enrichment — signal-backed first, then CSV imports.
 
-    company_ids: optional explicit selection — only these companies are returned
-                 (used when the user hand-picks scan results for enrichment).
+    company_ids: optional explicit selection — only these companies are returned.
+                 When provided, skips the "no contacts" filter so already-enriched
+                 companies can be re-enriched (e.g. to predict missing emails).
     """
-    id_filter = "AND c.id = ANY(%s)" if company_ids else ""
-    params: tuple = (company_ids, limit) if company_ids else (limit,)
+    if company_ids:
+        # Explicit selection: always process, regardless of existing contacts
+        where_clause = "WHERE c.id = ANY(%s)"
+        params: tuple = (company_ids, limit)
+    else:
+        # Auto selection: only pick companies that have no contacts yet
+        where_clause = """WHERE NOT EXISTS (
+                SELECT 1 FROM company_contacts cc WHERE cc.company_id = c.id
+            )"""
+        params = (limit,)
+
     with db_cursor(commit=False) as cur:
         cur.execute(f"""
             SELECT c.id, c.name, c.domain,
@@ -945,10 +955,7 @@ def get_companies_needing_enrichment(limit: int = 50, company_ids: list = None) 
                 FROM oracle_signals
                 GROUP BY company_id
             ) sig ON sig.company_id = c.id
-            WHERE NOT EXISTS (
-                SELECT 1 FROM company_contacts cc WHERE cc.company_id = c.id
-            )
-            {id_filter}
+            {where_clause}
             ORDER BY signal_count DESC, c.last_updated DESC
             LIMIT %s
         """, params)

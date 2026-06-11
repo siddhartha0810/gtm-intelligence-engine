@@ -975,6 +975,8 @@ def enrich_companies(
                 rd["_db_id"] = rd["id"]
                 rd["domain"] = rd.get("domain") or company_domain
                 existing_no_email.append(rd)
+            if existing_no_email:
+                log(f"  ~ loaded {len(existing_no_email)} existing no-email contact(s) for prediction")
         except Exception as _e:
             log(f"  Warning: could not load existing contacts for prediction: {_e}")
 
@@ -992,6 +994,10 @@ def enrich_companies(
         no_email_count = sum(1 for c in prediction_batch if not c.get("email"))
 
         if no_email_count and zerobounce_key:
+            if company_domain:
+                log(f"  ~ predicting emails using domain: {company_domain}")
+            else:
+                log(f"  ~ WARNING: no domain for {name} — email prediction will be skipped")
             prediction_batch, pred_count = _predict_and_fill_emails(
                 prediction_batch, zerobounce_key, company_domain, log,
                 reference_patterns=reference_patterns,
@@ -999,6 +1005,8 @@ def enrich_companies(
             if pred_count:
                 log(f"  ~ {pred_count} email(s) predicted and validated via pattern engine")
                 total_validated += pred_count
+            else:
+                log(f"  ~ email prediction: 0 valid (ZeroBounce rejected all candidates or no domain)")
             # Persist predicted emails back to existing DB contacts
             for c in prediction_batch:
                 if c.get("_db_id") and c.get("email") and c.get("email_validation_status") == "valid":
