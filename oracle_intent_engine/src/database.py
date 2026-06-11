@@ -482,6 +482,9 @@ _DDL = [
     "ALTER TABLE company_contacts ADD COLUMN IF NOT EXISTS hubspot_synced_at    TIMESTAMPTZ",
     "ALTER TABLE company_contacts ADD COLUMN IF NOT EXISTS street               TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE company_contacts ADD COLUMN IF NOT EXISTS postal_code          TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE company_contacts ADD COLUMN IF NOT EXISTS domain               TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE company_contacts ADD COLUMN IF NOT EXISTS industry             TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE company_contacts ADD COLUMN IF NOT EXISTS location             TEXT NOT NULL DEFAULT ''",
 
     # scan_runs: link to technology profile
     "ALTER TABLE scan_runs ADD COLUMN IF NOT EXISTS technology_profile_id BIGINT REFERENCES technology_profiles(id) ON DELETE SET NULL",
@@ -827,6 +830,19 @@ def purge_scan_companies(run_id: int) -> int:
 # contact operations
 def save_contacts(company_id: int, contacts: list):
     with db_cursor() as cur:
+        # Backfill company domain from Apollo contact data if missing
+        if contacts:
+            apollo_domain = next(
+                (c.get("domain", "").strip().lower() for c in contacts
+                 if c.get("domain", "").strip() and c.get("source") == "apollo"),
+                ""
+            )
+            if apollo_domain:
+                cur.execute("""
+                    UPDATE companies SET domain = %s
+                    WHERE id = %s AND (domain IS NULL OR domain = '')
+                """, (apollo_domain, company_id))
+
         for c in contacts:
             cur.execute("""
                 INSERT INTO company_contacts
@@ -834,8 +850,9 @@ def save_contacts(company_id: int, contacts: list):
                      email, linkedin_url, seniority, confidence, is_target, source,
                      email_validation_status, email_source, email_prediction_pattern,
                      phone, street, city, state, country, postal_code,
-                     unique_key, target_product, ready_for_outreach)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                     unique_key, target_product, ready_for_outreach,
+                     domain, industry, location)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 ON CONFLICT (company_id, email) WHERE email IS NOT NULL AND email != '' DO UPDATE SET
                     target_product = CASE WHEN EXCLUDED.target_product <> '' THEN EXCLUDED.target_product
                                           ELSE company_contacts.target_product END,
@@ -862,7 +879,13 @@ def save_contacts(company_id: int, contacts: list):
                     country    = CASE WHEN EXCLUDED.country <> '' THEN EXCLUDED.country
                                       ELSE company_contacts.country END,
                     postal_code = CASE WHEN EXCLUDED.postal_code <> '' THEN EXCLUDED.postal_code
-                                       ELSE company_contacts.postal_code END
+                                       ELSE company_contacts.postal_code END,
+                    domain     = CASE WHEN EXCLUDED.domain <> '' THEN EXCLUDED.domain
+                                      ELSE company_contacts.domain END,
+                    industry   = CASE WHEN EXCLUDED.industry <> '' THEN EXCLUDED.industry
+                                      ELSE company_contacts.industry END,
+                    location   = CASE WHEN EXCLUDED.location <> '' THEN EXCLUDED.location
+                                      ELSE company_contacts.location END
             """, (
                 company_id,
                 c.get("full_name", ""),
@@ -887,6 +910,9 @@ def save_contacts(company_id: int, contacts: list):
                 _gen_unique_key(),
                 c.get("target_product", "") or "",
                 bool(c.get("ready_for_outreach", False)),
+                c.get("domain", "") or "",
+                c.get("industry", "") or "",
+                c.get("location", "") or "",
             ))
         # Keep denormalized contact_count in sync after batch insert
         cur.execute("""
