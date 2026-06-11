@@ -848,8 +848,8 @@ def save_contacts(company_id: int, contacts: list):
                     confidence = GREATEST(EXCLUDED.confidence, company_contacts.confidence),
                     source     = CASE WHEN EXCLUDED.source IN ('apollo','apollo.io')
                                       THEN EXCLUDED.source ELSE company_contacts.source END,
-                    email_validation_status = COALESCE(EXCLUDED.email_validation_status,
-                                                       company_contacts.email_validation_status),
+                    email_validation_status = COALESCE(NULLIF(EXCLUDED.email_validation_status,''),
+                                                       company_contacts.email_validation_status, ''),
                     is_target  = GREATEST(EXCLUDED.is_target, company_contacts.is_target),
                     phone      = CASE WHEN EXCLUDED.phone <> '' THEN EXCLUDED.phone
                                       ELSE company_contacts.phone END,
@@ -875,7 +875,7 @@ def save_contacts(company_id: int, contacts: list):
                 float(c.get("confidence", 0)),
                 int(bool(c.get("is_target", False))),
                 c.get("source", "apollo"),
-                c.get("email_validation_status") or None,
+                c.get("email_validation_status") or "",
                 c.get("email_source", "") or "",
                 c.get("email_prediction_pattern", "") or "",
                 c.get("phone", "") or "",
