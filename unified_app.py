@@ -2506,6 +2506,7 @@ async def api_create_taxonomy(profile_id: int, request: Request,
         category          = data.get("category", ""),
         confidence_weight = float(data.get("confidence_weight", 1.0)),
     )
+    reload_products_cache()
     log_audit(current_user, "create", "product_taxonomy", str(row["id"]), new_value=data)
     return row
 
@@ -2514,6 +2515,7 @@ async def api_update_taxonomy(taxonomy_id: int, request: Request,
                                current_user: dict = Depends(oracle_auth.require_analyst)):
     data    = await request.json()
     updated = tp_mod.update_taxonomy(taxonomy_id, data)
+    reload_products_cache()
     log_audit(current_user, "update", "product_taxonomy", str(taxonomy_id), new_value=data)
     return updated
 
@@ -2521,6 +2523,7 @@ async def api_update_taxonomy(taxonomy_id: int, request: Request,
 async def api_delete_taxonomy(taxonomy_id: int,
                                current_user: dict = Depends(oracle_auth.require_admin)):
     tp_mod.delete_taxonomy(taxonomy_id)
+    reload_products_cache()
     log_audit(current_user, "delete", "product_taxonomy", str(taxonomy_id))
     return {"ok": True}
 
