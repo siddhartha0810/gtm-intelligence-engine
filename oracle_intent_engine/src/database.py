@@ -1137,6 +1137,63 @@ def delete_company(company_id: int) -> bool:
         cur.execute("DELETE FROM companies WHERE id = %s", (company_id,))
         return cur.rowcount > 0
 
+def merge_companies(keep_id: int, drop_id: int) -> dict:
+    """
+    Merge drop_id into keep_id:
+      - Reassign all signals from drop_id → keep_id (skip exact-URL dupes)
+      - Reassign contacts from drop_id → keep_id (skip duplicate linkedin_url)
+      - Backfill any missing fields on the kept company from the dropped one
+      - Delete the dropped company
+    Returns {"signals_moved": N, "contacts_moved": N}.
+    """
+    with db_cursor() as cur:
+        # Move signals (ignore exact duplicates by source_url)
+        cur.execute("""
+            UPDATE oracle_signals SET company_id = %s
+            WHERE company_id = %s
+              AND url NOT IN (
+                  SELECT url FROM oracle_signals WHERE company_id = %s AND url IS NOT NULL
+              )
+        """, (keep_id, drop_id, keep_id))
+        signals_moved = cur.rowcount
+
+        # Move contacts (skip duplicates by linkedin_url when present)
+        cur.execute("""
+            UPDATE company_contacts SET company_id = %s
+            WHERE company_id = %s
+              AND (linkedin_url IS NULL OR linkedin_url = ''
+                   OR linkedin_url NOT IN (
+                       SELECT linkedin_url FROM company_contacts
+                       WHERE company_id = %s AND linkedin_url IS NOT NULL AND linkedin_url != ''
+                   ))
+        """, (keep_id, drop_id, keep_id))
+        contacts_moved = cur.rowcount
+
+        # Backfill missing fields on the kept company from the dropped one
+        cur.execute("""
+            UPDATE companies k
+            SET
+                domain   = COALESCE(NULLIF(k.domain, ''),   d.domain),
+                industry = COALESCE(NULLIF(k.industry, ''), d.industry),
+                location = COALESCE(NULLIF(k.location, ''), d.location),
+                website  = COALESCE(NULLIF(k.website, ''),  d.website)
+            FROM companies d
+            WHERE k.id = %s AND d.id = %s
+        """, (keep_id, drop_id))
+
+        # Sync contact_count on the kept company
+        cur.execute("""
+            UPDATE companies SET contact_count = (
+                SELECT COUNT(*) FROM company_contacts
+                WHERE company_id = %s AND email IS NOT NULL AND email != ''
+            ) WHERE id = %s
+        """, (keep_id, keep_id))
+
+        # Delete the duplicate (remaining orphan signals/contacts cascade)
+        cur.execute("DELETE FROM companies WHERE id = %s", (drop_id,))
+
+    return {"signals_moved": signals_moved, "contacts_moved": contacts_moved}
+
 def delete_contact(contact_id: int) -> bool:
     """Hard-delete one contact and keep the company's contact_count in sync."""
     with db_cursor() as cur:

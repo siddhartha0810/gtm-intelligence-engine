@@ -918,6 +918,53 @@ async def api_company_contacts(company_id: int, current_user: dict = Depends(ora
     rows = jsonable_encoder([dict(c) for c in oracle_db.get_contacts_for_company(company_id)])
     return JSONResponse(rows)
 
+@app.get("/api/companies/duplicates")
+async def api_find_duplicates(threshold: int = 85, current_user: dict = Depends(oracle_auth.require_user)):
+    """Find pairs of companies with similar names using fuzzy matching."""
+    from rapidfuzz import fuzz
+    with oracle_db.db_cursor(commit=False) as cur:
+        cur.execute("""
+            SELECT id, name, domain, industry,
+                   COALESCE(signal_count, 0) AS signal_count,
+                   COALESCE(contact_count, 0) AS contact_count
+            FROM companies ORDER BY name
+        """)
+        rows = [dict(r) for r in cur.fetchall()]
+
+    pairs = []
+    for i in range(len(rows)):
+        for j in range(i + 1, len(rows)):
+            a, b = rows[i], rows[j]
+            score = fuzz.token_sort_ratio(a["name"], b["name"])
+            if score >= threshold:
+                # Suggest keeping the one with more signals; ties go to more contacts
+                keep = a if (a["signal_count"], a["contact_count"]) >= (b["signal_count"], b["contact_count"]) else b
+                drop = b if keep["id"] == a["id"] else a
+                pairs.append({
+                    "score": score,
+                    "keep": keep,
+                    "drop": drop,
+                })
+    pairs.sort(key=lambda p: -p["score"])
+    return {"pairs": pairs[:100]}  # cap at 100 pairs
+
+@app.post("/api/companies/merge")
+async def api_merge_companies(request: Request, current_user: dict = Depends(oracle_auth.require_admin)):
+    """Merge drop_id into keep_id — moves signals/contacts, deletes the duplicate."""
+    data = await request.json()
+    keep_id = int(data.get("keep_id", 0))
+    drop_id = int(data.get("drop_id", 0))
+    if not keep_id or not drop_id or keep_id == drop_id:
+        raise HTTPException(status_code=400, detail="keep_id and drop_id must be different non-zero integers")
+    try:
+        result = oracle_db.merge_companies(keep_id, drop_id)
+    except Exception:
+        logger.exception(f"merge_companies keep={keep_id} drop={drop_id} failed")
+        raise HTTPException(status_code=500, detail="Internal server error")
+    _invalidate_companies_cache()
+    _invalidate_dashboard_cache()
+    return {"merged": True, "keep_id": keep_id, "drop_id": drop_id, **result}
+
 @app.delete("/api/companies/{company_id}")
 async def api_delete_company(company_id: int, current_user: dict = Depends(oracle_auth.require_admin)):
     """Delete one company from the database. Signals and contacts cascade.

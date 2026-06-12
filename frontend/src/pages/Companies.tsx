@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { Search, Download, ArrowUpRight, MoreHorizontal, Zap, Users, Send,
          Eye, UserX, Trash2, RefreshCw, X, Mail, ExternalLink, ChevronRight,
-         Building2, Loader2, Package, ChevronDown, Filter } from 'lucide-react'
+         Building2, Loader2, Package, ChevronDown, Filter, GitMerge } from 'lucide-react'
 import { toast } from '../components/Toast'
 
 const ORACLE_PRODUCTS = [
@@ -47,6 +47,14 @@ interface Company {
   source: string
   domain?: string
   target_product: string
+}
+
+interface DupeCompany {
+  id: number; name: string; domain: string; industry: string
+  signal_count: number; contact_count: number
+}
+interface DupePair {
+  score: number; keep: DupeCompany; drop: DupeCompany
 }
 
 interface Contact {
@@ -689,8 +697,40 @@ export default function Companies() {
   const [filterOptions, setFilterOptions]   = useState<{ industries: string[]; locations: string[] }>({ industries: [], locations: [] })
   const [editingProduct, setEditingProduct] = useState<number | null>(null)
   const [exporting, setExporting] = useState(false)
+  const [showDupes, setShowDupes]   = useState(false)
+  const [dupePairs, setDupePairs]   = useState<DupePair[]>([])
+  const [dupeLoading, setDupeLoading] = useState(false)
+  const [merging, setMerging]       = useState<string | null>(null)
   const menuRefs = useRef<Map<number, HTMLButtonElement>>(new Map())
   const PAGE = 200
+
+  const findDuplicates = async () => {
+    setDupeLoading(true)
+    setShowDupes(true)
+    try {
+      const r = await fetch('/api/companies/duplicates', { headers: authH() })
+      const d = await r.json()
+      setDupePairs(d.pairs || [])
+    } catch { toast.error('Could not load duplicates') }
+    finally { setDupeLoading(false) }
+  }
+
+  const mergePair = async (keep: DupeCompany, drop: DupeCompany) => {
+    const key = `${keep.id}-${drop.id}`
+    setMerging(key)
+    try {
+      const r = await fetch('/api/companies/merge', {
+        method: 'POST',
+        headers: { ...authH(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ keep_id: keep.id, drop_id: drop.id }),
+      })
+      if (!r.ok) throw new Error('Merge failed')
+      toast.success(`Merged "${drop.name}" into "${keep.name}"`)
+      setDupePairs(prev => prev.filter(p => p.keep.id !== keep.id || p.drop.id !== drop.id))
+      fetchCompanies()
+    } catch { toast.error('Merge failed') }
+    finally { setMerging(null) }
+  }
 
   const exportCSV = async () => {
     setExporting(true)
@@ -865,6 +905,13 @@ export default function Companies() {
             onMouseEnter={e => { if (!exporting) e.currentTarget.style.borderColor = '#3b82f6' }}
             onMouseLeave={e => e.currentTarget.style.borderColor = '#e2e8f0'}>
             <Download size={13} /> {exporting ? 'Exporting…' : 'Export'}
+          </button>
+          <button onClick={findDuplicates} disabled={dupeLoading}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 8, border: '1px solid #e2e8f0', background: 'transparent', color: dupeLoading ? '#cbd5e1' : '#94a3b8', fontSize: 13, cursor: dupeLoading ? 'not-allowed' : 'pointer' }}
+            onMouseEnter={e => { if (!dupeLoading) e.currentTarget.style.borderColor = '#f59e0b' }}
+            onMouseLeave={e => e.currentTarget.style.borderColor = '#e2e8f0'}
+            title="Find and merge duplicate companies">
+            <GitMerge size={13} /> Duplicates
           </button>
         </div>
       </div>
@@ -1118,6 +1165,76 @@ export default function Companies() {
           </div>
         </div>
       </div>
+
+      {/* Duplicate review modal */}
+      {showDupes && (
+        <>
+          <div onClick={() => setShowDupes(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', zIndex: 500, backdropFilter: 'blur(2px)' }} />
+          <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: '#fff', borderRadius: 16, padding: 28, width: 680, maxWidth: '96vw', maxHeight: '80vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', zIndex: 501, boxShadow: '0 20px 60px rgba(0,0,0,0.18)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
+              <div>
+                <h2 style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', margin: 0 }}>Duplicate Companies</h2>
+                <p style={{ color: '#64748b', fontSize: 13, margin: '4px 0 0' }}>
+                  {dupeLoading ? 'Scanning…' : `${dupePairs.length} potential duplicate${dupePairs.length !== 1 ? 's' : ''} found`}
+                </p>
+              </div>
+              <button onClick={() => setShowDupes(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: 4 }}><X size={20} /></button>
+            </div>
+
+            <div style={{ overflowY: 'auto', flex: 1 }}>
+              {dupeLoading && (
+                <div style={{ textAlign: 'center', padding: 40, color: '#64748b' }}>
+                  <Loader2 size={24} style={{ animation: 'spin 1s linear infinite', marginBottom: 8 }} />
+                  <div>Scanning for duplicates…</div>
+                </div>
+              )}
+              {!dupeLoading && dupePairs.length === 0 && (
+                <div style={{ textAlign: 'center', padding: 40, color: '#64748b' }}>No duplicates found</div>
+              )}
+              {!dupeLoading && dupePairs.map((pair, i) => {
+                const key = `${pair.keep.id}-${pair.drop.id}`
+                const busy = merging === key
+                return (
+                  <div key={i} style={{ border: '1px solid #e2e8f0', borderRadius: 10, padding: 16, marginBottom: 12, background: '#f8fafc' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                          <span style={{ fontSize: 11, fontWeight: 600, background: '#dbeafe', color: '#1d4ed8', borderRadius: 4, padding: '2px 7px' }}>{pair.score}% match</span>
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: 8, alignItems: 'center' }}>
+                          {/* Keep */}
+                          <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '10px 12px' }}>
+                            <div style={{ fontSize: 11, fontWeight: 600, color: '#15803d', marginBottom: 3 }}>KEEP</div>
+                            <div style={{ fontWeight: 600, color: '#0f172a', fontSize: 13 }}>{pair.keep.name}</div>
+                            <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{pair.keep.signal_count} signals · {pair.keep.contact_count} contacts</div>
+                          </div>
+                          <GitMerge size={16} style={{ color: '#94a3b8', flexShrink: 0 }} />
+                          {/* Drop */}
+                          <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 8, padding: '10px 12px' }}>
+                            <div style={{ fontSize: 11, fontWeight: 600, color: '#c2410c', marginBottom: 3 }}>REMOVE</div>
+                            <div style={{ fontWeight: 600, color: '#0f172a', fontSize: 13 }}>{pair.drop.name}</div>
+                            <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{pair.drop.signal_count} signals · {pair.drop.contact_count} contacts</div>
+                          </div>
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flexShrink: 0 }}>
+                        <button onClick={() => mergePair(pair.keep, pair.drop)} disabled={!!merging}
+                          style={{ padding: '7px 14px', borderRadius: 8, border: 'none', background: busy ? '#94a3b8' : '#3b82f6', color: '#fff', fontSize: 13, fontWeight: 600, cursor: merging ? 'not-allowed' : 'pointer' }}>
+                          {busy ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : 'Merge'}
+                        </button>
+                        <button onClick={() => setDupePairs(prev => prev.filter((_, idx) => idx !== i))} disabled={!!merging}
+                          style={{ padding: '7px 14px', borderRadius: 8, border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', fontSize: 13, cursor: merging ? 'not-allowed' : 'pointer' }}>
+                          Skip
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   )
 }
