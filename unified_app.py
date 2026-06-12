@@ -726,15 +726,26 @@ def _invalidate_companies_cache() -> None:
 @app.get("/api/companies/filter-options")
 async def api_companies_filter_options(current_user: dict = Depends(oracle_auth.require_user)):
     """Returns distinct industries and locations for column filter dropdowns."""
+    from oracle_intent_engine.src.industry_normalizer import normalize as _norm_industry
     try:
         with oracle_db.db_cursor(commit=False) as cur:
             cur.execute("""
-                SELECT DISTINCT LOWER(industry) AS industry
+                SELECT DISTINCT industry
                 FROM companies
                 WHERE industry IS NOT NULL AND industry <> ''
-                ORDER BY 1 LIMIT 300
+                ORDER BY 1 LIMIT 500
             """)
-            industries = [r["industry"] for r in cur.fetchall()]
+            raw_industries = [r["industry"] for r in cur.fetchall()]
+            # Normalize and deduplicate
+            seen: set[str] = set()
+            industries: list[str] = []
+            for raw in raw_industries:
+                canon = _norm_industry(raw)
+                if canon and canon not in seen:
+                    seen.add(canon)
+                    industries.append(canon)
+            industries.sort()
+
             cur.execute("""
                 SELECT DISTINCT location
                 FROM companies
@@ -785,11 +796,18 @@ async def api_companies(
                 params.append(product)
 
             if industry:
-                vals = [v.strip().lower() for v in industry.split(',') if v.strip()]
-                if vals:
-                    placeholders = ','.join(['%s'] * len(vals))
+                from oracle_intent_engine.src.industry_normalizer import normalize as _norm_i, _CANONICAL
+                selected_canonical = {v.strip() for v in industry.split(',') if v.strip()}
+                # Expand each canonical name back to all raw variants (for DB match)
+                raw_variants: list[str] = []
+                for canon in selected_canonical:
+                    raw_variants.extend(v.lower() for v in _CANONICAL.get(canon, [canon]))
+                    raw_variants.append(canon.lower())  # also match the canonical itself
+                raw_variants = list(set(raw_variants))
+                if raw_variants:
+                    placeholders = ','.join(['%s'] * len(raw_variants))
                     conditions.append(f"LOWER(COALESCE(c.industry,'')) IN ({placeholders})")
-                    params.extend(vals)
+                    params.extend(raw_variants)
 
             if location:
                 vals = [v.strip().lower() for v in location.split(',') if v.strip()]
@@ -1205,6 +1223,22 @@ async def api_bulk_enrich_progress(current_user: dict = Depends(oracle_auth.requ
     return dict(_bulk_enrich_state)
 
 # ═══ ORACLE INTENT — admin ════════════════════════════════════════════════════
+@app.post("/admin/normalize-industries")
+async def normalize_industries(current_user: dict = Depends(oracle_auth.require_admin)):
+    """Normalize all raw industry strings in the companies table to canonical English names."""
+    from oracle_intent_engine.src.industry_normalizer import normalize as _norm
+    updated = 0
+    with oracle_db.db_cursor() as cur:
+        cur.execute("SELECT id, industry FROM companies WHERE industry IS NOT NULL AND industry <> ''")
+        rows = cur.fetchall()
+        for row in rows:
+            canon = _norm(row["industry"])
+            if canon and canon != row["industry"]:
+                cur.execute("UPDATE companies SET industry = %s WHERE id = %s", (canon, row["id"]))
+                updated += 1
+    _invalidate_companies_cache()
+    return {"updated": updated, "message": f"Normalized {updated} industry values."}
+
 @app.post("/admin/purge-invalid")
 async def purge_invalid(current_user: dict = Depends(oracle_auth.require_admin)):
     count = oracle_db.purge_invalid_companies(is_valid_company_name)

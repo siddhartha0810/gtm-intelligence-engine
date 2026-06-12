@@ -541,10 +541,13 @@ def _apollo_call(org_name: str, api_key: str, max_per: int,
         last  = str(p.get("last_name") or "").strip()
         title = str(p.get("title") or p.get("headline") or "").strip()
 
-        # Industry from org object
+        # Industry from org object — normalize to canonical English name
         industry = ""
         if isinstance(org, dict):
-            industry = str(org.get("industry") or "").strip()
+            raw_industry = str(org.get("industry") or "").strip()
+            if raw_industry:
+                from src.industry_normalizer import normalize as _norm_ind
+                industry = _norm_ind(raw_industry)
 
         # Location from person-level city/state/country
         location_parts = [str(p.get(k) or "").strip() for k in ("city", "state", "country") if p.get(k)]
