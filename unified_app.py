@@ -1245,6 +1245,17 @@ async def purge_invalid(current_user: dict = Depends(oracle_auth.require_admin))
     log_audit(current_user, "purge_invalid", "system", "", new_value={"deleted": count})
     return {"deleted": count, "message": f"Purged {count} invalid company names."}
 
+@app.post("/admin/reset-taxonomy")
+async def reset_taxonomy(current_user: dict = Depends(oracle_auth.require_admin)):
+    """Replace the product taxonomy with the full curated 8-product set."""
+    result = tp_mod.reset_taxonomy()
+    log_audit(current_user, "reset_taxonomy", "system", "", new_value=result)
+    return {
+        "updated": result["updated"],
+        "deleted": result["deleted"],
+        "message": f"Taxonomy reset: {result['updated']} products updated, {result['deleted']} obsolete entries removed.",
+    }
+
 @app.post("/admin/reset-all")
 async def reset_all(current_user: dict = Depends(oracle_auth.require_admin)):
     oracle_db.reset_all_data()

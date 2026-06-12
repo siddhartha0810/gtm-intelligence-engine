@@ -175,6 +175,19 @@ export default function Settings() {
     }
   }
 
+  const [resettingTaxonomy, setResettingTaxonomy] = useState(false)
+  const resetTaxonomy = async () => {
+    setResettingTaxonomy(true)
+    try {
+      const r = await fetch('/admin/reset-taxonomy', { method: 'POST', headers: { Authorization: `Bearer ${localStorage.getItem('token') || ''}` } }).then(r => r.json())
+      toast.success(r.message)
+    } catch {
+      toast.error('Taxonomy reset failed')
+    } finally {
+      setResettingTaxonomy(false)
+    }
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20, width: '100%', maxWidth: 720 }}>
       <style>{`@keyframes spin { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }`}</style>
@@ -212,6 +225,20 @@ export default function Settings() {
               : 'Normalize Industry Names'}
           </button>
           <span style={{ fontSize: 12, color: '#94a3b8' }}>Cleans raw Apollo industry strings to proper English names in the database</span>
+        </div>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginTop: 12 }}>
+          <button
+            onClick={resetTaxonomy}
+            disabled={resettingTaxonomy}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 8, border: '1px solid #e2e8f0', background: '#fff', color: resettingTaxonomy ? '#94a3b8' : '#0f172a', fontSize: 13, cursor: resettingTaxonomy ? 'not-allowed' : 'pointer', fontWeight: 500 }}
+            onMouseEnter={e => { if (!resettingTaxonomy) e.currentTarget.style.borderColor = '#3b82f6' }}
+            onMouseLeave={e => e.currentTarget.style.borderColor = '#e2e8f0'}
+          >
+            {resettingTaxonomy
+              ? <><Loader size={13} style={{ animation: 'spin 1s linear infinite' }} /> Resetting…</>
+              : 'Reset Product Taxonomy'}
+          </button>
+          <span style={{ fontSize: 12, color: '#94a3b8' }}>Replaces the product taxonomy with the full 8-product curated set</span>
         </div>
       </div>
 

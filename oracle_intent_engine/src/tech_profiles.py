@@ -21,52 +21,313 @@ so the existing scrapers keep working without manual configuration.
 from typing import Optional
 import oracle_intent_engine.src.database as db
 
-# ── Default seed profile — mirrors current hardcoded Oracle/JDE config ────────
+# ── Default seed profile ─────────────────────────────────────────────────────
 _ORACLE_SEED = {
     "name": "Oracle / JDE",
     "description": "Oracle ERP, JD Edwards, Oracle Cloud, Oracle HCM, Oracle SCM",
     "keywords": [
-        "JD Edwards", "JDE", "JDE EnterpriseOne", "Oracle ERP", "Oracle Cloud",
-        "Oracle Fusion", "Oracle EBS", "Oracle HCM", "Oracle SCM", "Oracle EPM",
-        "Oracle NetSuite", "Oracle E-Business Suite", "Oracle Financials",
-        "ERP implementation", "ERP upgrade", "ERP consultant",
+        # JD Edwards
+        "JD Edwards consultant", "JDE EnterpriseOne implementation", "JD Edwards ERP upgrade",
+        "JDE technical developer", "JD Edwards functional consultant", "JDE CNC administrator",
+        "JD Edwards migration Oracle Cloud", "JDE system administrator",
+        "JD Edwards 9.2 upgrade", "JDE upgrade project manager",
+        # JDE World
+        "JDE World administrator", "JD Edwards World developer", "JDE World upgrade",
+        # Oracle Cloud ERP / Fusion
+        "Oracle Cloud ERP consultant", "Oracle Fusion ERP implementation",
+        "Oracle Financials Cloud", "Oracle ERP Cloud migration",
+        "Oracle Fusion Cloud implementation manager",
+        # Oracle EBS
+        "Oracle E-Business Suite consultant", "Oracle EBS implementation",
+        "Oracle EBS R12 upgrade", "Oracle EBS functional consultant",
+        "Oracle Apps DBA", "Oracle EBS migration cloud",
+        # PeopleSoft
+        "Oracle PeopleSoft consultant", "PeopleSoft HCM implementation",
+        "PeopleSoft Financials consultant", "PeopleSoft upgrade consultant",
+        "PeopleSoft to Oracle Cloud migration",
+        # NetSuite
+        "NetSuite implementation consultant", "Oracle NetSuite ERP",
+        "NetSuite administrator", "NetSuite project manager",
+        # Oracle HCM Cloud
+        "Oracle HCM Cloud consultant", "Oracle Fusion HCM implementation",
+        "Oracle Global HR Cloud", "Oracle HCM Cloud project manager",
+        "Oracle Payroll Cloud consultant",
+        # Oracle SCM Cloud
+        "Oracle SCM Cloud consultant", "Oracle Supply Chain Cloud implementation",
+        "Oracle Procurement Cloud consultant", "Oracle Manufacturing Cloud consultant",
     ],
     "target_websites": [
         "oracle.com", "community.oracle.com", "linkedin.com",
         "indeed.com", "glassdoor.com",
     ],
-    "competitor_domains": ["sap.com", "workday.com", "netsuite.com"],
+    "competitor_domains": ["sap.com", "workday.com"],
     "partner_domains":    ["inoapps.com"],
     "manufacturer_domain": "oracle.com",
     "oracle_products": [
-        "Oracle ERP", "JD Edwards", "Oracle Cloud", "Oracle HCM",
-        "Oracle SCM", "Oracle EPM", "Oracle EBS", "Oracle NetSuite",
-        "Oracle Fusion", "Oracle E-Business Suite",
+        "JD Edwards EnterpriseOne", "JD Edwards World",
+        "Oracle Cloud ERP", "Oracle E-Business Suite", "Oracle PeopleSoft",
+        "Oracle NetSuite", "Oracle HCM Cloud", "Oracle SCM Cloud",
     ],
 }
 
-_ORACLE_TAXONOMY = [
-    {"canonical_name": "JD Edwards EnterpriseOne", "aliases": ["JDE", "JDE E1", "EnterpriseOne", "JD Edwards"],           "category": "ERP",     "confidence_weight": 1.0},
-    {"canonical_name": "Oracle Cloud ERP",          "aliases": ["Oracle Cloud", "Oracle Fusion ERP", "Fusion ERP"],         "category": "ERP",     "confidence_weight": 1.0},
-    {"canonical_name": "Oracle E-Business Suite",   "aliases": ["Oracle EBS", "EBS", "Oracle Financials"],                  "category": "ERP",     "confidence_weight": 0.9},
-    {"canonical_name": "Oracle HCM Cloud",          "aliases": ["Oracle HCM", "HCM Cloud", "Oracle HR"],                    "category": "HCM",     "confidence_weight": 0.9},
-    {"canonical_name": "Oracle SCM Cloud",          "aliases": ["Oracle SCM", "SCM Cloud", "Oracle Supply Chain"],           "category": "SCM",     "confidence_weight": 0.85},
-    {"canonical_name": "Oracle EPM Cloud",          "aliases": ["Oracle EPM", "EPM Cloud", "Oracle Planning"],               "category": "EPM",     "confidence_weight": 0.85},
-    {"canonical_name": "Oracle NetSuite",           "aliases": ["NetSuite", "Oracle Netsuite", "Netsuite ERP"],              "category": "ERP",     "confidence_weight": 0.8},
-    {"canonical_name": "Oracle Database",           "aliases": ["Oracle DB", "Oracle RDBMS", "Oracle 19c", "Oracle 21c"],   "category": "DB",      "confidence_weight": 0.7},
+# ── Full product taxonomy — 8 products ───────────────────────────────────────
+# Three alias tiers per product drive confidence scoring in phase_classifier:
+#   Tier 1 (role-specific)  — titles only an end-user company posts.
+#                              1 match already = strong signal.
+#   Tier 2 (module / version) — module names and version strings confirm
+#                              active usage. Good corroboration.
+#   Tier 3 (product name)   — broad product name variants. Useful for
+#                              initial detection; needs corroboration.
+#
+# confidence_weight is a per-product multiplier applied on top of the
+# keyword-match score in phase_classifier. Higher = classifier trusts
+# this product's signal more.
+
+_ORACLE_TAXONOMY_FULL = [
+
+    # ── 1. JD Edwards EnterpriseOne ──────────────────────────────────────────
+    {
+        "canonical_name": "JD Edwards EnterpriseOne",
+        "category": "ERP",
+        "confidence_weight": 1.0,
+        "aliases": [
+            # Tier 1 — role-specific (only end-users post these)
+            "jde cnc administrator", "jde cnc admin", "enterpriseone cnc",
+            "jde basis administrator", "e1 tools administrator",
+            "jde orchestrator developer", "jde system administrator",
+            "jde security administrator", "jde technical developer",
+            "jde functional consultant", "jde finance consultant",
+            "jde manufacturing consultant", "jde distribution consultant",
+            "jde hr consultant", "jde payroll consultant",
+            "jde support analyst", "jde report developer",
+            "jde data migration", "jde business analyst",
+            "jde solution architect", "jde project manager",
+            "e1 developer", "e1 consultant", "jde architect",
+            "jde integration developer", "jde analytics developer",
+            # Tier 2 — version strings (definitive end-user signals)
+            "jde 9.2", "e1 9.2", "jde 9.1", "jde e900", "jde e812",
+            "tools release 9.2", "jde 9.2 upgrade", "enterpriseone 9.2",
+            # Tier 2 — module names
+            "jde distribution", "jde manufacturing", "jde finance",
+            "jde payroll", "jde procurement", "jde sales order management",
+            "jde service management", "jde shop floor", "jde work orders",
+            "jde bill of materials", "jde mrp", "jde demand planning",
+            "jde land development", "jde job costing", "jde project costing",
+            "jde orchestrator",
+            # Tier 3 — product name variants
+            "jd edwards enterpriseone", "jde enterpriseone", "jde e1",
+            "jd edwards oneworld", "jde oneworld", "jdedwards",
+            "jd edwards erp", "jd edwards",
+        ],
+    },
+
+    # ── 2. JD Edwards World ───────────────────────────────────────────────────
+    {
+        "canonical_name": "JD Edwards World",
+        "category": "ERP",
+        "confidence_weight": 1.0,
+        "aliases": [
+            # Tier 1 — role-specific
+            "jde world administrator", "jde world developer",
+            "jde world dba", "jde world cnc",
+            "jd edwards world developer", "jde world systems analyst",
+            # Tier 2 — platform and migration
+            "jde as400", "jd edwards as400", "jd edwards as/400", "jde as/400",
+            "jde world upgrade", "world to enterpriseone", "jde world to e1",
+            "world software jde",
+            # Tier 3
+            "jde world", "jd edwards world",
+        ],
+    },
+
+    # ── 3. Oracle Cloud ERP (Fusion) ─────────────────────────────────────────
+    {
+        "canonical_name": "Oracle Cloud ERP",
+        "category": "ERP",
+        "confidence_weight": 1.0,
+        "aliases": [
+            # Tier 1 — role-specific
+            "oracle fusion financials consultant", "oracle cloud erp project manager",
+            "oracle fusion erp implementation lead", "oracle cloud erp consultant",
+            "oracle fusion cloud implementation manager",
+            # Tier 2 — module names
+            "oracle financials cloud", "oracle general ledger cloud",
+            "oracle accounts payable cloud", "oracle accounts receivable cloud",
+            "oracle procurement cloud", "oracle fixed assets cloud",
+            "oracle project costing cloud", "oracle revenue management cloud",
+            "oracle fusion general ledger", "oracle fusion financials",
+            "oracle fusion procurement",
+            # Tier 3 — product name variants
+            "oracle cloud erp", "oracle fusion erp", "oracle erp cloud",
+            "fusion erp", "oracle fusion cloud",
+        ],
+    },
+
+    # ── 4. Oracle E-Business Suite ────────────────────────────────────────────
+    {
+        "canonical_name": "Oracle E-Business Suite",
+        "category": "ERP",
+        "confidence_weight": 0.9,
+        "aliases": [
+            # Tier 1 — role-specific
+            "oracle apps dba", "oracle applications dba",
+            "oracle ebs system administrator", "oracle ebs technical developer",
+            "oracle apps technical developer", "oracle hrms functional consultant",
+            "oracle ebs functional consultant", "oracle apps functional consultant",
+            # Tier 2 — version strings
+            "ebs r12", "oracle apps r12", "oracle ebs r12",
+            "oracle 11i", "oracle 11.5.10", "oracle ebs 12.2", "oracle apps 12.2",
+            # Tier 2 — module names
+            "oracle receivables", "oracle payables",
+            "oracle iproc", "oracle iprocurement",
+            "oracle ascp", "oracle hrms",
+            "oracle advanced supply chain planning",
+            "oracle order management ebs", "oracle inventory ebs",
+            # Tier 3
+            "oracle e-business suite", "oracle ebs", "oracle apps",
+            "oracle applications",
+        ],
+    },
+
+    # ── 5. Oracle PeopleSoft ──────────────────────────────────────────────────
+    {
+        "canonical_name": "Oracle PeopleSoft",
+        "category": "ERP",
+        "confidence_weight": 0.9,
+        "aliases": [
+            # Tier 1 — role-specific
+            "peoplesoft dba", "peoplesoft application developer",
+            "peoplesoft hrms administrator", "peoplesoft campus solutions administrator",
+            "peopletools developer", "peoplesoft technical developer",
+            "peoplesoft functional consultant", "peoplesoft systems analyst",
+            "peoplesoft security administrator",
+            # Tier 2 — module names
+            "peoplesoft hcm", "peoplesoft fscm",
+            "peoplesoft campus solutions", "peoplesoft financials",
+            "peoplesoft payroll", "peoplesoft student records",
+            "peoplesoft time and labor", "peoplesoft benefits",
+            "peoplesoft absence management",
+            # Tier 2 — version / migration
+            "peoplesoft 9.2 upgrade", "peoplesoft upgrade",
+            "peoplesoft to oracle cloud",
+            # Tier 3
+            "peoplesoft", "oracle peoplesoft", "ps hcm", "ps fscm",
+            "peopletools",
+        ],
+    },
+
+    # ── 6. Oracle NetSuite ────────────────────────────────────────────────────
+    {
+        "canonical_name": "Oracle NetSuite",
+        "category": "ERP",
+        "confidence_weight": 0.8,
+        "aliases": [
+            # Tier 1 — role-specific
+            "netsuite administrator", "netsuite developer",
+            "netsuite suitescript developer", "netsuite implementation consultant",
+            "netsuite project manager", "netsuite systems administrator",
+            "netsuite functional consultant", "netsuite erp consultant",
+            # Tier 2 — module names
+            "netsuite erp", "netsuite suitecommerce", "netsuite openair",
+            "netsuite oneworld", "netsuite advanced revenue management",
+            "netsuite arm", "netsuite wms",
+            # Tier 3
+            "netsuite", "oracle netsuite",
+        ],
+    },
+
+    # ── 7. Oracle HCM Cloud ───────────────────────────────────────────────────
+    {
+        "canonical_name": "Oracle HCM Cloud",
+        "category": "HCM",
+        "confidence_weight": 0.9,
+        "aliases": [
+            # Tier 1 — role-specific
+            "oracle hcm cloud consultant", "oracle fusion hcm implementation",
+            "oracle core hr administrator", "oracle hcm cloud project manager",
+            "oracle hcm functional consultant",
+            # Tier 2 — module names
+            "oracle global hr", "oracle payroll cloud",
+            "oracle talent management", "oracle workforce compensation",
+            "oracle recruiting cloud", "oracle orc",
+            "oracle learning cloud", "oracle absence management cloud",
+            "oracle benefits cloud", "oracle performance management cloud",
+            "oracle succession planning cloud", "oracle time and labor cloud",
+            # Tier 3
+            "oracle hcm", "oracle hcm cloud", "oracle fusion hcm",
+            "oracle human capital management", "fusion hcm",
+        ],
+    },
+
+    # ── 8. Oracle SCM Cloud ───────────────────────────────────────────────────
+    {
+        "canonical_name": "Oracle SCM Cloud",
+        "category": "SCM",
+        "confidence_weight": 0.85,
+        "aliases": [
+            # Tier 1 — role-specific
+            "oracle scm cloud consultant", "oracle supply chain implementation",
+            "oracle fusion scm consultant", "oracle scm cloud project manager",
+            "oracle supply chain cloud project manager",
+            # Tier 2 — module names
+            "oracle inventory cloud", "oracle order management cloud",
+            "oracle manufacturing cloud", "oracle warehouse management cloud",
+            "oracle logistics cloud", "oracle planning cloud scm",
+            "oracle transportation management", "oracle otm",
+            "oracle quality management cloud",
+            # Tier 3
+            "oracle scm", "oracle scm cloud", "oracle supply chain cloud",
+            "oracle fusion scm", "oracle supply chain management",
+        ],
+    },
 ]
 
 
 def seed_default_profile() -> None:
-    """Insert the Oracle/JDE profile if no profiles exist yet."""
+    """Insert the Oracle/JDE profile and full taxonomy if no profiles exist yet."""
     with db.db_cursor(commit=False) as cur:
         cur.execute("SELECT COUNT(*) AS n FROM technology_profiles")
         if cur.fetchone()["n"] > 0:
             return
 
     profile = create_profile(**_ORACLE_SEED)
-    for t in _ORACLE_TAXONOMY:
+    for t in _ORACLE_TAXONOMY_FULL:
         create_taxonomy(profile["id"], **t)
+
+
+def reset_taxonomy(profile_id: int = None) -> dict:
+    """
+    Replace the taxonomy for the given profile (or the first active profile
+    if none specified) with the full _ORACLE_TAXONOMY_FULL set.
+
+    Deletes rows whose canonical_name is no longer in the full set, then
+    upserts all current rows.  Returns {updated, deleted, profile_id}.
+    """
+    with db.db_cursor(commit=False) as cur:
+        if profile_id:
+            cur.execute("SELECT id FROM technology_profiles WHERE id = %s", (profile_id,))
+        else:
+            cur.execute("SELECT id FROM technology_profiles WHERE is_active = TRUE ORDER BY id LIMIT 1")
+        row = cur.fetchone()
+    if not row:
+        raise ValueError("No active technology profile found")
+    pid = row["id"]
+
+    keep_names = {t["canonical_name"] for t in _ORACLE_TAXONOMY_FULL}
+
+    with db.db_cursor() as cur:
+        cur.execute(
+            "DELETE FROM product_taxonomy WHERE technology_profile_id = %s AND canonical_name <> ALL(%s)",
+            (pid, list(keep_names)),
+        )
+        deleted = cur.rowcount
+
+    updated = 0
+    for t in _ORACLE_TAXONOMY_FULL:
+        create_taxonomy(pid, **t)
+        updated += 1
+
+    return {"updated": updated, "deleted": deleted, "profile_id": pid}
 
 
 # ── Technology Profile CRUD ───────────────────────────────────────────────────
