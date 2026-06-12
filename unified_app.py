@@ -1254,12 +1254,14 @@ async def normalize_industries(current_user: dict = Depends(oracle_auth.require_
 async def normalize_products(current_user: dict = Depends(oracle_auth.require_admin)):
     """Migrate legacy target_product values in companies to the canonical taxonomy names."""
     _PRODUCT_MAP = {
-        "JD Edwards":        "JD Edwards EnterpriseOne",
+        # Rename: EnterpriseOne suffix dropped — companies don't specify which JDE flavour
+        "JD Edwards EnterpriseOne": "JD Edwards",
+        # Legacy short names → canonical
         "Oracle EBS":        "Oracle E-Business Suite",
         "Oracle HCM":        "Oracle HCM Cloud",
         "Oracle SCM":        "Oracle SCM Cloud",
         "NetSuite":          "Oracle NetSuite",
-        # Out-of-scope products — clear them
+        # Out-of-scope / unclassified — clear them
         "Oracle EPM":        "",
         "Oracle CX":         "",
         "Oracle Database":   "",

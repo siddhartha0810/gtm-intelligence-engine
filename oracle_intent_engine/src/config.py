@@ -148,8 +148,8 @@ def generate_queries_for_product(canonical_name: str, aliases: list[str]) -> lis
 # When a new product is added to the taxonomy AND is not listed here,
 # generate_queries_for_product() is called automatically.
 QUERIES_BY_PRODUCT: dict[str, list[str]] = {
-    # ── JD Edwards EnterpriseOne ──────────────────────────────────────
-    "JD Edwards EnterpriseOne": [
+    # ── JD Edwards ────────────────────────────────────────────────────
+    "JD Edwards": [
         "JD Edwards consultant",
         "JDE EnterpriseOne implementation",
         "JD Edwards ERP upgrade",

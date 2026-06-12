@@ -59,7 +59,7 @@ logger = logging.getLogger(__name__)
 # Fallback used when the DB is unavailable at startup.
 # Mirrors the 8-product taxonomy so signals are never silently lost.
 _FALLBACK_PRODUCTS: dict[str, list[str]] = {
-    "JD Edwards EnterpriseOne": [
+    "JD Edwards": [
         "jd edwards enterpriseone", "jd edwards", "jde", "jde enterpriseone",
         "jde e1", "jde oneworld", "jd edwards oneworld", "jdedwards",
         "jde cnc", "jde cnc administrator", "jde basis administrator",
@@ -101,7 +101,7 @@ _FALLBACK_PRODUCTS: dict[str, list[str]] = {
 }
 
 _FALLBACK_WEIGHTS: dict[str, float] = {
-    "JD Edwards EnterpriseOne": 1.0,
+    "JD Edwards":               1.0,
     "JD Edwards World":         1.0,
     "Oracle Cloud ERP":         1.0,
     "Oracle E-Business Suite":  0.9,
@@ -256,11 +256,11 @@ PHASE_COLORS = {
 }
 
 
-def detect_oracle_product(title: str, description: str) -> tuple[str, float]:
+def detect_oracle_product(title: str, description: str) -> tuple[str | None, float]:
     combined = f"{title} {description}".lower()
     products, weights = _get_products()
 
-    best_product = "Oracle (General)"
+    best_product: str | None = None
     best_score = 0
 
     for product, keywords in products.items():
@@ -269,8 +269,8 @@ def detect_oracle_product(title: str, description: str) -> tuple[str, float]:
             best_score = score
             best_product = product
 
-    if best_score == 0:
-        return "Oracle (General)", 0.3
+    if best_score == 0 or best_product is None:
+        return None, 0.0
 
     base_conf = min(best_score / 3.0, 1.0)
     weight = weights.get(best_product, 0.8)
@@ -309,10 +309,11 @@ def classify(title: str, description: str, source: str = "") -> dict:
     product, prod_conf = detect_oracle_product(title, description)
     phase, phase_conf = detect_phase(title, description)
 
+    # prod_conf is 0.0 when product is None (unclassified) — combined stays low
     combined_confidence = round((prod_conf + phase_conf) / 2, 2)
 
     return {
-        "oracle_product": product,
+        "oracle_product": product,  # None means no specific product detected
         "phase": phase,
         "phase_label": PHASE_LABELS.get(phase, phase),
         "confidence": combined_confidence,

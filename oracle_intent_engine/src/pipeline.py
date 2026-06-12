@@ -361,7 +361,14 @@ def run_scan(
             sig.update(result)
             classified.append(sig)
 
-        _log(f"✓ Classification done")
+        # Discard signals where no specific Oracle product could be identified.
+        # These add noise and inflate Oracle (General) counts in the UI.
+        before_filter = len(classified)
+        classified = [s for s in classified if s.get("oracle_product")]
+        dropped = before_filter - len(classified)
+        if dropped:
+            _log(f"  Dropped {dropped} unclassified signals (no specific Oracle product detected)")
+        _log(f"✓ Classification done — {len(classified)} signals with identified products")
 
         # aggregate
         _current_scan["progress"] = "Aggregating by company..."
@@ -557,7 +564,14 @@ def run_scan_async(
 
 def _persist(companies: list[dict], run_id: int = None) -> tuple[int, int]:
     """Persist companies and signals. Returns (new_count, known_count)."""
+    from rapidfuzz import fuzz as _fuzz
+
     new_count = known_count = 0
+
+    # Load existing company names once for fuzzy dedup.
+    # Prevents name variants (e.g. "Ford Motor Company" vs "Ford") creating duplicates.
+    existing_names: list[str] = db.get_all_company_names()
+
     for company in companies:
         # Final gate: never write an unreliable company name to the database.
         # Signals already validate at scrape time, but aggregation can still
@@ -566,6 +580,15 @@ def _persist(companies: list[dict], run_id: int = None) -> tuple[int, int]:
             _log(f"  Skipped invalid company name: '{company.get('company_name')}'")
             continue
         try:
+            # Fuzzy-match scraped name against existing DB names (85% threshold).
+            # Catches variants like "Ford Motor Company" → "Ford", so we don't
+            # create a second DB entry and bypass the known-company check.
+            # Update in-place so the contacts_master loop below uses canonical name.
+            for existing in existing_names:
+                if _fuzz.token_sort_ratio(company["company_name"], existing) >= 85:
+                    company["company_name"] = existing
+                    break
+
             company_id = db.upsert_company(
                 name=company["company_name"],
                 domain=company.get("domain"),
@@ -584,9 +607,12 @@ def _persist(companies: list[dict], run_id: int = None) -> tuple[int, int]:
                 continue  # Skip — already a known lead from a previous run
             new_count += 1
             for sig in company.get("signals", []):
+                oracle_product = sig.get("oracle_product")
+                if not oracle_product or oracle_product == "Oracle (General)":
+                    continue  # skip unclassified signals
                 db.insert_signal(
                     company_id=company_id,
-                    oracle_product=sig.get("oracle_product", "Oracle (General)"),
+                    oracle_product=oracle_product,
                     phase=sig.get("phase", "hiring"),
                     source=sig.get("source", ""),
                     signal_type=sig.get("signal_type", "job_posting"),

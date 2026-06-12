@@ -64,7 +64,7 @@ _ORACLE_SEED = {
     "partner_domains":    ["inoapps.com"],
     "manufacturer_domain": "oracle.com",
     "oracle_products": [
-        "JD Edwards EnterpriseOne", "JD Edwards World",
+        "JD Edwards", "JD Edwards World",
         "Oracle Cloud ERP", "Oracle E-Business Suite", "Oracle PeopleSoft",
         "Oracle NetSuite", "Oracle HCM Cloud", "Oracle SCM Cloud",
     ],
@@ -85,9 +85,9 @@ _ORACLE_SEED = {
 
 _ORACLE_TAXONOMY_FULL = [
 
-    # ── 1. JD Edwards EnterpriseOne ──────────────────────────────────────────
+    # ── 1. JD Edwards ────────────────────────────────────────────────────────
     {
-        "canonical_name": "JD Edwards EnterpriseOne",
+        "canonical_name": "JD Edwards",
         "category": "ERP",
         "confidence_weight": 1.0,
         "aliases": [
