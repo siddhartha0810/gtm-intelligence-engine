@@ -162,6 +162,19 @@ export default function Settings() {
     }
   }
 
+  const [normalizingIndustries, setNormalizingIndustries] = useState(false)
+  const normalizeIndustries = async () => {
+    setNormalizingIndustries(true)
+    try {
+      const r = await fetch('/admin/normalize-industries', { method: 'POST', headers: { Authorization: `Bearer ${localStorage.getItem('token') || ''}` } }).then(r => r.json())
+      toast.success(`Normalized ${r.updated} industry names`)
+    } catch {
+      toast.error('Normalization failed')
+    } finally {
+      setNormalizingIndustries(false)
+    }
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20, width: '100%', maxWidth: 720 }}>
       <style>{`@keyframes spin { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }`}</style>
@@ -180,6 +193,26 @@ export default function Settings() {
             onTest={(key) => handleTest(svc.id, key)}
           />
         ))}
+      </div>
+
+      {/* Maintenance */}
+      <div style={{ border: '1px solid #e2e8f0', borderRadius: 12, padding: 20, background: '#f8fafc', marginTop: 8 }}>
+        <div style={{ fontSize: 14, fontWeight: 600, color: '#0f172a', marginBottom: 4 }}>Maintenance</div>
+        <div style={{ fontSize: 12, color: '#64748b', marginBottom: 16 }}>Data cleanup and normalization tasks.</div>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+          <button
+            onClick={normalizeIndustries}
+            disabled={normalizingIndustries}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 8, border: '1px solid #e2e8f0', background: '#fff', color: normalizingIndustries ? '#94a3b8' : '#0f172a', fontSize: 13, cursor: normalizingIndustries ? 'not-allowed' : 'pointer', fontWeight: 500 }}
+            onMouseEnter={e => { if (!normalizingIndustries) e.currentTarget.style.borderColor = '#3b82f6' }}
+            onMouseLeave={e => e.currentTarget.style.borderColor = '#e2e8f0'}
+          >
+            {normalizingIndustries
+              ? <><Loader size={13} style={{ animation: 'spin 1s linear infinite' }} /> Normalizing…</>
+              : 'Normalize Industry Names'}
+          </button>
+          <span style={{ fontSize: 12, color: '#94a3b8' }}>Cleans raw Apollo industry strings to proper English names in the database</span>
+        </div>
       </div>
 
       {/* Danger zone */}
