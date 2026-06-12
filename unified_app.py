@@ -888,8 +888,16 @@ async def api_stats(show_all: int = 0, current_user: dict = Depends(oracle_auth.
         total_signals += int(c.get("signal_count") or 0)
     scan_runs = oracle_db.get_recent_scan_runs(5)
     current_run_id = oracle_db.get_latest_completed_run_id()
+    # total_companies = actual DB count (all companies, not just current-run signal-backed)
+    try:
+        with oracle_db.db_cursor(commit=False) as _cur:
+            _cur.execute("SELECT COUNT(*) AS n FROM companies")
+            db_total = int(_cur.fetchone()["n"] or 0)
+    except Exception:
+        db_total = len(companies)
+
     return {
-        "total_companies": len(companies),
+        "total_companies": db_total,
         "total_signals":   total_signals,
         "phases":          dict(phase_counter.most_common()),
         "products":        dict(product_counter.most_common(10)),
@@ -1727,11 +1735,8 @@ def _fetch_dashboard_stats() -> dict:
         with oracle_db.db_cursor(commit=False) as cur:
             cur.execute("""
                 SELECT
-                    (SELECT COUNT(*) FROM companies
-                     WHERE target_product = 'JD Edwards')                                      AS companies_tracked,
-                    (SELECT COUNT(*) FROM company_contacts
-                     WHERE company_id IN
-                       (SELECT id FROM companies WHERE target_product = 'JD Edwards'))         AS contacts_enriched,
+                    (SELECT COUNT(*) FROM companies)                                            AS companies_tracked,
+                    (SELECT COUNT(*) FROM company_contacts)                                     AS contacts_enriched,
                     (SELECT COUNT(*) FROM oracle_signals)                                       AS total_signals,
                     (SELECT COUNT(DISTINCT CASE WHEN phase='implementing' THEN company_id END)
                      FROM oracle_signals)                                                       AS implementing,
@@ -1740,9 +1745,7 @@ def _fetch_dashboard_stats() -> dict:
                     (SELECT COUNT(DISTINCT CASE WHEN phase='researching'  THEN company_id END)
                      FROM oracle_signals)                                                       AS researching,
                     (SELECT COUNT(*) FROM company_contacts
-                     WHERE status = 'pushed_to_hubspot'
-                       AND company_id IN
-                         (SELECT id FROM companies WHERE target_product = 'JD Edwards'))        AS pushed_to_hubspot
+                     WHERE status = 'pushed_to_hubspot')                                        AS pushed_to_hubspot
             """)
             row = cur.fetchone()
             if row:

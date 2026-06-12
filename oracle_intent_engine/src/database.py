@@ -972,26 +972,27 @@ def get_company_ids_by_names(names: list) -> list:
 def get_enrichment_stats() -> dict:
     """Return counts for the enrichment dashboard."""
     with db_cursor(commit=False) as cur:
-        cur.execute("SELECT COUNT(*) AS total FROM companies")
-        total_companies = cur.fetchone()["total"]
         cur.execute("""
-            SELECT COUNT(DISTINCT company_id) AS enriched
-            FROM company_contacts
-        """)
-        enriched = cur.fetchone()["enriched"]
-        cur.execute("""
-            SELECT COUNT(*) AS total,
-                   COUNT(CASE WHEN email IS NOT NULL AND email != '' THEN 1 END) AS with_email,
-                   COUNT(CASE WHEN email_validation_status = 'valid' THEN 1 END) AS valid_email
-            FROM company_contacts
+            SELECT
+                (SELECT COUNT(*) FROM companies)                                       AS total_companies,
+                (SELECT COUNT(DISTINCT company_id) FROM company_contacts)              AS enriched_companies,
+                (SELECT COUNT(*) FROM companies c
+                 WHERE NOT EXISTS (
+                     SELECT 1 FROM company_contacts cc WHERE cc.company_id = c.id
+                 ))                                                                    AS pending_companies,
+                (SELECT COUNT(*) FROM company_contacts)                                AS total_contacts,
+                (SELECT COUNT(*) FROM company_contacts
+                 WHERE email IS NOT NULL AND email != '')                              AS with_email,
+                (SELECT COUNT(*) FROM company_contacts
+                 WHERE email_validation_status = 'valid')                              AS valid_email
         """)
         row = cur.fetchone()
         return {
-            "total_companies": total_companies,
-            "enriched_companies": enriched,
-            "pending_companies": max(0, total_companies - enriched),
-            "total_contacts": row["total"],
-            "contacts_with_email": row["with_email"],
+            "total_companies":      row["total_companies"],
+            "enriched_companies":   row["enriched_companies"],
+            "pending_companies":    row["pending_companies"],
+            "total_contacts":       row["total_contacts"],
+            "contacts_with_email":  row["with_email"],
             "contacts_valid_email": row["valid_email"],
         }
 
