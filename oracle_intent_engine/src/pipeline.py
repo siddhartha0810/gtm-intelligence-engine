@@ -440,6 +440,11 @@ def run_scan(
         # Matches get their contacts saved immediately, so those companies are
         # already satisfied and never appear in the paid-enrichment queue.
         # Companies that already have contacts in the DB are skipped entirely.
+        # contacts_master pre-check (FREE — runs before any paid enrichment):
+        # every scanned company is checked against the Salesforce export first.
+        # Matches get their contacts saved immediately, so those companies are
+        # already satisfied and never appear in the paid-enrichment queue.
+        # Companies that already have contacts in the DB are skipped entirely.
         _current_scan["progress"] = "Checking contacts_master for known contacts..."
         _log("▶ Checking scanned companies against contacts_master (no credits used)...")
         master_companies = master_contacts = 0
