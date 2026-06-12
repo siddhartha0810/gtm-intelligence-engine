@@ -4,25 +4,16 @@ import { Search, Download, ArrowUpRight, MoreHorizontal, Zap, Users, Send,
          Building2, Loader2, Package, ChevronDown, Filter, GitMerge } from 'lucide-react'
 import { toast } from '../components/Toast'
 
-const ORACLE_PRODUCTS = [
-  'JD Edwards', 'Oracle Cloud ERP', 'Oracle EBS', 'Oracle HCM',
-  'Oracle SCM', 'Oracle EPM', 'Oracle CX', 'Oracle Database',
-  'Oracle OCI', 'Oracle Integration', 'NetSuite', 'Oracle (General)',
-]
-
+// Product colors keyed by canonical taxonomy name
 const PRODUCT_COLORS: Record<string, { bg: string; color: string }> = {
-  'JD Edwards':         { bg: 'rgba(239,68,68,0.1)',   color: '#ef4444' },
-  'Oracle Cloud ERP':   { bg: 'rgba(59,130,246,0.12)', color: '#3b82f6' },
-  'Oracle EBS':         { bg: 'rgba(99,102,241,0.12)', color: '#6366f1' },
-  'Oracle HCM':         { bg: 'rgba(16,185,129,0.12)', color: '#10b981' },
-  'Oracle SCM':         { bg: 'rgba(245,158,11,0.12)', color: '#f59e0b' },
-  'Oracle EPM':         { bg: 'rgba(139,92,246,0.12)', color: '#8b5cf6' },
-  'Oracle CX':          { bg: 'rgba(236,72,153,0.12)', color: '#ec4899' },
-  'Oracle Database':    { bg: 'rgba(20,184,166,0.12)', color: '#14b8a6' },
-  'Oracle OCI':         { bg: 'rgba(249,115,22,0.12)', color: '#f97316' },
-  'Oracle Integration': { bg: 'rgba(34,197,94,0.12)',  color: '#22c55e' },
-  'NetSuite':           { bg: 'rgba(168,85,247,0.12)', color: '#a855f7' },
-  'Oracle (General)':   { bg: 'rgba(107,114,128,0.1)', color: '#6b7280' },
+  'JD Edwards EnterpriseOne': { bg: 'rgba(239,68,68,0.1)',   color: '#ef4444' },
+  'JD Edwards World':         { bg: 'rgba(249,115,22,0.12)', color: '#f97316' },
+  'Oracle Cloud ERP':         { bg: 'rgba(59,130,246,0.12)', color: '#3b82f6' },
+  'Oracle E-Business Suite':  { bg: 'rgba(99,102,241,0.12)', color: '#6366f1' },
+  'Oracle PeopleSoft':        { bg: 'rgba(139,92,246,0.12)', color: '#8b5cf6' },
+  'Oracle NetSuite':          { bg: 'rgba(168,85,247,0.12)', color: '#a855f7' },
+  'Oracle HCM Cloud':         { bg: 'rgba(16,185,129,0.12)', color: '#10b981' },
+  'Oracle SCM Cloud':         { bg: 'rgba(245,158,11,0.12)', color: '#f59e0b' },
 }
 
 function productStyle(p: string) {
@@ -694,7 +685,7 @@ export default function Companies() {
   const [industryFilter, setIndustryFilter] = useState<string[]>([])
   const [locationFilter, setLocationFilter] = useState<string[]>([])
   const [contactsFilter, setContactsFilter] = useState<string[]>([])
-  const [filterOptions, setFilterOptions]   = useState<{ industries: string[]; locations: string[] }>({ industries: [], locations: [] })
+  const [filterOptions, setFilterOptions]   = useState<{ industries: string[]; locations: string[]; products: string[] }>({ industries: [], locations: [], products: [] })
   const [editingProduct, setEditingProduct] = useState<number | null>(null)
   const [exporting, setExporting] = useState(false)
   const [showDupes, setShowDupes]   = useState(false)
@@ -754,7 +745,7 @@ export default function Companies() {
 
   useEffect(() => {
     fetch('/api/companies/filter-options', { headers: authH() })
-      .then(r => r.ok ? r.json() : { industries: [], locations: [] })
+      .then(r => r.ok ? r.json() : { industries: [], locations: [], products: [] })
       .then(d => setFilterOptions(d))
       .catch(() => {})
   }, [])
@@ -936,7 +927,7 @@ export default function Companies() {
           onChange={e => setProductFilter(e.target.value)}
           style={{ padding: '7px 12px', borderRadius: 8, border: '1px solid #e2e8f0', background: 'white', color: productFilter !== 'All' ? '#3b82f6' : '#64748b', fontSize: 13, cursor: 'pointer', fontWeight: productFilter !== 'All' ? 600 : 400 }}>
           <option value="All">All Products</option>
-          {ORACLE_PRODUCTS.map(p => <option key={p} value={p}>{p}</option>)}
+          {filterOptions.products.map(p => <option key={p} value={p}>{p}</option>)}
         </select>
       </div>
       {/* Active filter chips */}
@@ -1066,7 +1057,7 @@ export default function Companies() {
                       onChange={e => setTargetProduct(c.id, e.target.value)}
                       style={{ fontSize: 12, padding: '3px 8px', borderRadius: 6, border: '1px solid #3b82f6', background: 'white', color: '#0f172a', cursor: 'pointer' }}>
                       <option value="">— unset —</option>
-                      {ORACLE_PRODUCTS.map(p => <option key={p} value={p}>{p}</option>)}
+                      {filterOptions.products.map(p => <option key={p} value={p}>{p}</option>)}
                     </select>
                   ) : (
                     <span

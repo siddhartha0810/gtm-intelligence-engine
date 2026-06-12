@@ -753,9 +753,20 @@ async def api_companies_filter_options(current_user: dict = Depends(oracle_auth.
                 ORDER BY 1 LIMIT 300
             """)
             locations = [r["location"] for r in cur.fetchall()]
-        return JSONResponse({"industries": industries, "locations": locations})
+
+            # Products — canonical names from active taxonomy
+            cur.execute("""
+                SELECT pt.canonical_name
+                FROM product_taxonomy pt
+                JOIN technology_profiles tp ON tp.id = pt.technology_profile_id
+                WHERE pt.is_active = TRUE AND tp.is_active = TRUE
+                ORDER BY pt.canonical_name
+            """)
+            products = [r["canonical_name"] for r in cur.fetchall()]
+
+        return JSONResponse({"industries": industries, "locations": locations, "products": products})
     except Exception as e:
-        return JSONResponse({"industries": [], "locations": []})
+        return JSONResponse({"industries": [], "locations": [], "products": []})
 
 @app.get("/api/companies")
 async def api_companies(
