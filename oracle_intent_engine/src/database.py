@@ -977,24 +977,25 @@ def get_all_company_names() -> list[str]:
         return [row["name"] for row in cur.fetchall()]
 
 
-def get_crm_contact(
+def find_existing_contact(
     email: str = "",
     linkedin_url: str = "",
     first_name: str = "",
     last_name: str = "",
-    company: str = "",
 ) -> Optional[dict]:
     """
-    Check manufacturer_contacts (Salesforce CRM export) for a matching contact.
-    Tries email match, then linkedin_url match, then first+last+company match.
-    Returns the first match found, or None if the table is absent or empty.
-    READ-ONLY — never writes to manufacturer_contacts.
+    Check company_contacts for an existing record matching by email,
+    linkedin_url, or first+last name.  Returns the first match, or None.
+    Used as a pre-check before spending Apollo/ZeroBounce credits on import.
     """
     try:
         with db_cursor(commit=False) as cur:
             if email:
                 cur.execute(
-                    "SELECT * FROM manufacturer_contacts WHERE LOWER(email) = LOWER(%s) LIMIT 1",
+                    "SELECT first_name, last_name, title, email, linkedin_url,"
+                    "       email_validation_status AS validation_status, email_source"
+                    " FROM company_contacts"
+                    " WHERE LOWER(email) = LOWER(%s) LIMIT 1",
                     (email.strip(),),
                 )
                 row = cur.fetchone()
@@ -1002,28 +1003,92 @@ def get_crm_contact(
                     return dict(row)
             if linkedin_url:
                 cur.execute(
-                    "SELECT * FROM manufacturer_contacts WHERE linkedin_url = %s LIMIT 1",
+                    "SELECT first_name, last_name, title, email, linkedin_url,"
+                    "       email_validation_status AS validation_status, email_source"
+                    " FROM company_contacts"
+                    " WHERE linkedin_url = %s LIMIT 1",
                     (linkedin_url.strip(),),
                 )
                 row = cur.fetchone()
                 if row:
                     return dict(row)
             if first_name and last_name:
-                params: list = [first_name.lower().strip(), last_name.lower().strip()]
-                query = (
-                    "SELECT * FROM manufacturer_contacts "
-                    "WHERE LOWER(first_name) = %s AND LOWER(last_name) = %s"
+                cur.execute(
+                    "SELECT first_name, last_name, title, email, linkedin_url,"
+                    "       email_validation_status AS validation_status, email_source"
+                    " FROM company_contacts"
+                    " WHERE LOWER(first_name) = LOWER(%s) AND LOWER(last_name) = LOWER(%s)"
+                    " LIMIT 1",
+                    (first_name.strip(), last_name.strip()),
                 )
-                if company:
-                    query += " AND LOWER(company) = %s"
-                    params.append(company.lower().strip())
-                query += " LIMIT 1"
-                cur.execute(query, params)
                 row = cur.fetchone()
                 if row:
                     return dict(row)
     except Exception as e:
-        logger.debug(f"get_crm_contact failed (manufacturer_contacts unavailable): {e}")
+        logger.debug(f"find_existing_contact failed: {e}")
+    return None
+
+
+def get_contacts_master_match(
+    email: str = "",
+    linkedin_url: str = "",
+    first_name: str = "",
+    last_name: str = "",
+) -> Optional[dict]:
+    """
+    Check contacts_master (Salesforce CRM export) for a matching contact.
+    Tries email, then linkedin_url, then first+last name.
+    Returns a normalised dict with keys: email, linkedin_url, job_title, validation_status.
+    Returns None if no match or table is absent.
+    READ-ONLY — never writes to contacts_master.
+    """
+    try:
+        with db_cursor(commit=False) as cur:
+            sel = _build_cm_select(cur)
+            email_col = _cm_col(cur, 'email')
+            val_email_col = _cm_col(cur, 'validated_email')
+            fn_col = _cm_col(cur, 'firstname')
+            ln_col = _cm_col(cur, 'lastname')
+            li_col = (
+                f"COALESCE(NULLIF({_cm_col(cur, 'linkedin_url__c')},''::text),"
+                f"NULLIF({_cm_col(cur, 'linkedin_url_enriched')},''::text))"
+            )
+
+            def _first(query: str, params: tuple) -> Optional[dict]:
+                cur.execute(query, params)
+                row = cur.fetchone()
+                return dict(row) if row else None
+
+            if email:
+                hit = _first(
+                    f"SELECT {sel} FROM contacts_master"
+                    f" WHERE LOWER(COALESCE(NULLIF({val_email_col},''::text),NULLIF({email_col},''::text)))"
+                    f"     = LOWER(%s) LIMIT 1",
+                    (email.strip(),),
+                )
+                if hit:
+                    return hit
+
+            if linkedin_url:
+                hit = _first(
+                    f"SELECT {sel} FROM contacts_master"
+                    f" WHERE {li_col} = %s LIMIT 1",
+                    (linkedin_url.strip(),),
+                )
+                if hit:
+                    return hit
+
+            if first_name and last_name:
+                hit = _first(
+                    f"SELECT {sel} FROM contacts_master"
+                    f" WHERE LOWER({fn_col}) = LOWER(%s)"
+                    f"   AND LOWER({ln_col}) = LOWER(%s) LIMIT 1",
+                    (first_name.strip(), last_name.strip()),
+                )
+                if hit:
+                    return hit
+    except Exception as e:
+        logger.debug(f"get_contacts_master_match failed (contacts_master unavailable): {e}")
     return None
 
 

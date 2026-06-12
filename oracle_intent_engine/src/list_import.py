@@ -529,29 +529,47 @@ def _import_contact(record: dict, user_id: int = None,
     if critical:
         raise ValueError(f"DQE: {critical[0]['message']}")
 
-    # CRM pre-check — avoid spending Apollo/ZeroBounce credits if we already have this person
-    crm_hit = db.get_crm_contact(
-        email=record.get("email", ""),
-        linkedin_url=record.get("linkedin_url", ""),
+    email_in     = record.get("email", "")
+    linkedin_in  = record.get("linkedin_url", "")
+
+    # 1. Check company_contacts — contact already in our system
+    existing = db.find_existing_contact(
+        email=email_in,
+        linkedin_url=linkedin_in,
         first_name=first,
         last_name=last,
-        company=record.get("company_name", ""),
     )
-    if crm_hit:
-        logger.info(
-            f"[list_import] CRM match for {first} {last} — skipping Apollo/ZeroBounce"
-        )
+    if existing:
+        logger.info(f"[list_import] existing contact for {first} {last} — skipping API calls")
         completed: dict = {
-            "email":              crm_hit.get("email") or record.get("email") or None,
-            "linkedin_url":       crm_hit.get("linkedin_url") or record.get("linkedin_url") or None,
-            "title":              crm_hit.get("job_title") or record.get("title") or "",
-            "email_source":       "manufacturer_contacts",
-            "validation_status":  "not_validated",
-            "ready_for_outreach": bool(crm_hit.get("email")),
+            "email":              existing.get("email") or email_in or None,
+            "linkedin_url":       existing.get("linkedin_url") or linkedin_in or None,
+            "title":              existing.get("title") or record.get("title") or "",
+            "email_source":       existing.get("email_source") or "import",
+            "validation_status":  existing.get("validation_status") or "not_validated",
+            "ready_for_outreach": bool(existing.get("email")),
         }
     else:
-        # Complete the contact (Apollo fill-in + ZeroBounce validation) BEFORE saving
-        completed = _complete_contact(record, apollo_key, zerobounce_key)
+        # 2. Check contacts_master (Salesforce CRM export)
+        crm_hit = db.get_contacts_master_match(
+            email=email_in,
+            linkedin_url=linkedin_in,
+            first_name=first,
+            last_name=last,
+        )
+        if crm_hit:
+            logger.info(f"[list_import] contacts_master match for {first} {last} — skipping API calls")
+            completed = {
+                "email":              crm_hit.get("email") or email_in or None,
+                "linkedin_url":       crm_hit.get("linkedin_url") or linkedin_in or None,
+                "title":              crm_hit.get("job_title") or record.get("title") or "",
+                "email_source":       "contacts_master",
+                "validation_status":  crm_hit.get("email_validation_status") or "not_validated",
+                "ready_for_outreach": bool(crm_hit.get("email")),
+            }
+        else:
+            # 3. Complete the contact (Apollo fill-in + ZeroBounce validation)
+            completed = _complete_contact(record, apollo_key, zerobounce_key)
 
     # Find or create company; inherit its target_product for the contact
     company_name   = record.get("company_name", "").strip()
