@@ -503,12 +503,22 @@ def get_active_search_queries() -> list[str]:
       - If it is a new product not yet in that dict → auto-generate queries from
         its canonical name + aliases using config.generate_queries_for_product().
 
-    This means adding a product to the taxonomy automatically gives it search
-    coverage on the next scan without any code change.
+    Falls back to all QUERIES_BY_PRODUCT entries if the taxonomy is empty or
+    the DB is unreachable, so a scan never silently runs with zero queries.
     """
+    import logging
     from src import config
 
+    logger = logging.getLogger(__name__)
     products = get_active_products()
+
+    if not products:
+        logger.warning("[tech_profiles] taxonomy empty or inactive — falling back to all QUERIES_BY_PRODUCT")
+        fallback: list[str] = []
+        for qs in config.QUERIES_BY_PRODUCT.values():
+            fallback.extend(qs)
+        return fallback
+
     queries: list[str] = []
     seen: set[str] = set()
 

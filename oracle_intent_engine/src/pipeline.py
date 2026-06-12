@@ -351,7 +351,13 @@ def run_scan(
                 result["phase_label"] = clf.PHASE_LABELS.get(result["phase"], result["phase"])
                 result["confidence"] = min(result["confidence"] + 0.2, 1.0)
             if sig.get("_product_hint") and sig["_product_hint"] != "Oracle Cloud":
-                result["oracle_product"] = sig.pop("_product_hint")
+                hint = sig.pop("_product_hint")
+                # Normalize hint against active taxonomy canonical names so stale
+                # scraper-supplied names (e.g. "JD Edwards") don't bypass the taxonomy.
+                active_names, _ = clf._get_products()
+                if hint in active_names:
+                    result["oracle_product"] = hint
+                # else: classifier result stands — hint is an old/unknown name
             sig.update(result)
             classified.append(sig)
 

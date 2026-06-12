@@ -1226,10 +1226,12 @@ def backfill_target_product() -> int:
             UPDATE companies c
             SET    target_product = sub.top_product
             FROM (
-                SELECT company_id,
+                SELECT DISTINCT ON (company_id)
+                       company_id,
                        oracle_product AS top_product
                 FROM   oracle_signals
-                WHERE  oracle_product IS NOT NULL AND oracle_product <> ''
+                WHERE  oracle_product IS NOT NULL
+                  AND  oracle_product NOT IN ('', 'Oracle (General)')
                 GROUP  BY company_id, oracle_product
                 ORDER  BY company_id, COUNT(*) DESC
             ) sub
