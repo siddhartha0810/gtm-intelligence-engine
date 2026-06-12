@@ -28,13 +28,20 @@ POST-IMPORT COMPLETION (automatic):
 import csv
 import io
 import json
+import logging
 import re
 from typing import Optional
 
 import openpyxl
+from rapidfuzz import fuzz
 
 import oracle_intent_engine.src.database as db
 from oracle_intent_engine.src.data_quality import run_dqe_on_company, run_dqe_on_contact
+
+logger = logging.getLogger(__name__)
+
+# Fuzzy match threshold for company dedup (0-100); >= this → treat as duplicate
+_COMPANY_FUZZY_THRESHOLD = 85
 
 # ── HubSpot field definitions (single source of truth) ───────────────────────
 
@@ -336,6 +343,14 @@ def process_import(
     success, errors = 0, []
     company_names: list = []   # companies imported this batch → auto-enrichment
 
+    # Load existing company names once for fuzzy dedup (company imports only)
+    existing_company_names: list[str] = []
+    if entity_type == "company":
+        try:
+            existing_company_names = db.get_all_company_names()
+        except Exception:
+            pass  # non-fatal — fuzzy check is skipped if DB unavailable
+
     for idx, row in enumerate(rows, start=2):
         # Map CSV columns → HubSpot fields
         record: dict = {}
@@ -348,7 +363,7 @@ def process_import(
             if entity_type == "company":
                 if default_product and not record.get("target_product"):
                     record["target_product"] = default_product
-                _import_company(record, user_id)
+                _import_company(record, user_id, existing_company_names)
                 if record.get("name"):
                     company_names.append(record["name"].strip())
             elif entity_type == "contact":
@@ -372,10 +387,27 @@ def process_import(
             "errors": errors[:50], "company_names": company_names}
 
 
-def _import_company(record: dict, user_id: int = None) -> None:
+def _import_company(record: dict, user_id: int = None,
+                    existing_names: list[str] | None = None) -> None:
     name = record.get("name", "").strip()
     if not name:
         raise ValueError("Company name is required")
+
+    # Fuzzy dedup — if >= 85% similar to an existing company, normalise to that name
+    if existing_names:
+        best_match: str | None = None
+        best_score = 0
+        for existing in existing_names:
+            score = fuzz.token_sort_ratio(name.lower(), existing.lower())
+            if score > best_score:
+                best_score = score
+                best_match = existing
+        if best_score >= _COMPANY_FUZZY_THRESHOLD and best_match and best_match != name:
+            logger.info(
+                f"[list_import] fuzzy dedup: '{name}' → '{best_match}' (score={best_score})"
+            )
+            record["name"] = best_match
+            name = best_match
 
     # DQE check before insert
     issues = run_dqe_on_company(record)
@@ -497,8 +529,29 @@ def _import_contact(record: dict, user_id: int = None,
     if critical:
         raise ValueError(f"DQE: {critical[0]['message']}")
 
-    # Complete the contact (Apollo fill-in + ZeroBounce validation) BEFORE saving
-    completed = _complete_contact(record, apollo_key, zerobounce_key)
+    # CRM pre-check — avoid spending Apollo/ZeroBounce credits if we already have this person
+    crm_hit = db.get_crm_contact(
+        email=record.get("email", ""),
+        linkedin_url=record.get("linkedin_url", ""),
+        first_name=first,
+        last_name=last,
+        company=record.get("company_name", ""),
+    )
+    if crm_hit:
+        logger.info(
+            f"[list_import] CRM match for {first} {last} — skipping Apollo/ZeroBounce"
+        )
+        completed: dict = {
+            "email":              crm_hit.get("email") or record.get("email") or None,
+            "linkedin_url":       crm_hit.get("linkedin_url") or record.get("linkedin_url") or None,
+            "title":              crm_hit.get("job_title") or record.get("title") or "",
+            "email_source":       "manufacturer_contacts",
+            "validation_status":  "not_validated",
+            "ready_for_outreach": bool(crm_hit.get("email")),
+        }
+    else:
+        # Complete the contact (Apollo fill-in + ZeroBounce validation) BEFORE saving
+        completed = _complete_contact(record, apollo_key, zerobounce_key)
 
     # Find or create company; inherit its target_product for the contact
     company_name   = record.get("company_name", "").strip()

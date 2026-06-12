@@ -969,6 +969,64 @@ def get_company_ids_by_names(names: list) -> list:
         cur.execute("SELECT id FROM companies WHERE name = ANY(%s)", (names,))
         return [row["id"] for row in cur.fetchall()]
 
+
+def get_all_company_names() -> list[str]:
+    """Return all company names in the DB — used for fuzzy dedup during import."""
+    with db_cursor(commit=False) as cur:
+        cur.execute("SELECT name FROM companies WHERE name IS NOT NULL ORDER BY name")
+        return [row["name"] for row in cur.fetchall()]
+
+
+def get_crm_contact(
+    email: str = "",
+    linkedin_url: str = "",
+    first_name: str = "",
+    last_name: str = "",
+    company: str = "",
+) -> Optional[dict]:
+    """
+    Check manufacturer_contacts (Salesforce CRM export) for a matching contact.
+    Tries email match, then linkedin_url match, then first+last+company match.
+    Returns the first match found, or None if the table is absent or empty.
+    READ-ONLY — never writes to manufacturer_contacts.
+    """
+    try:
+        with db_cursor(commit=False) as cur:
+            if email:
+                cur.execute(
+                    "SELECT * FROM manufacturer_contacts WHERE LOWER(email) = LOWER(%s) LIMIT 1",
+                    (email.strip(),),
+                )
+                row = cur.fetchone()
+                if row:
+                    return dict(row)
+            if linkedin_url:
+                cur.execute(
+                    "SELECT * FROM manufacturer_contacts WHERE linkedin_url = %s LIMIT 1",
+                    (linkedin_url.strip(),),
+                )
+                row = cur.fetchone()
+                if row:
+                    return dict(row)
+            if first_name and last_name:
+                params: list = [first_name.lower().strip(), last_name.lower().strip()]
+                query = (
+                    "SELECT * FROM manufacturer_contacts "
+                    "WHERE LOWER(first_name) = %s AND LOWER(last_name) = %s"
+                )
+                if company:
+                    query += " AND LOWER(company) = %s"
+                    params.append(company.lower().strip())
+                query += " LIMIT 1"
+                cur.execute(query, params)
+                row = cur.fetchone()
+                if row:
+                    return dict(row)
+    except Exception as e:
+        logger.debug(f"get_crm_contact failed (manufacturer_contacts unavailable): {e}")
+    return None
+
+
 def get_enrichment_stats() -> dict:
     """Return counts for the enrichment dashboard."""
     with db_cursor(commit=False) as cur:
