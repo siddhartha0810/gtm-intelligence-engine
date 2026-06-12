@@ -930,6 +930,7 @@ async def api_delete_company(company_id: int, current_user: dict = Depends(oracl
     if not deleted:
         raise HTTPException(status_code=404, detail="Company not found")
     _invalidate_companies_cache()
+    _invalidate_dashboard_cache()
     return {"deleted": True, "company_id": company_id}
 
 @app.delete("/api/contacts/{contact_id}")
@@ -943,6 +944,7 @@ async def api_delete_contact(contact_id: int, current_user: dict = Depends(oracl
     if not deleted:
         raise HTTPException(status_code=404, detail="Contact not found")
     _invalidate_companies_cache()
+    _invalidate_dashboard_cache()
     return {"deleted": True, "contact_id": contact_id}
 
 
