@@ -1250,6 +1250,36 @@ async def normalize_industries(current_user: dict = Depends(oracle_auth.require_
     _invalidate_companies_cache()
     return {"updated": updated, "message": f"Normalized {updated} industry values."}
 
+@app.post("/admin/normalize-products")
+async def normalize_products(current_user: dict = Depends(oracle_auth.require_admin)):
+    """Migrate legacy target_product values in companies to the canonical taxonomy names."""
+    _PRODUCT_MAP = {
+        "JD Edwards":        "JD Edwards EnterpriseOne",
+        "Oracle EBS":        "Oracle E-Business Suite",
+        "Oracle HCM":        "Oracle HCM Cloud",
+        "Oracle SCM":        "Oracle SCM Cloud",
+        "NetSuite":          "Oracle NetSuite",
+        # Out-of-scope products — clear them
+        "Oracle EPM":        "",
+        "Oracle CX":         "",
+        "Oracle Database":   "",
+        "Oracle OCI":        "",
+        "Oracle Integration":"",
+        "Oracle (General)":  "",
+    }
+    updated = 0
+    with oracle_db.db_cursor() as cur:
+        for old, new in _PRODUCT_MAP.items():
+            cur.execute(
+                "UPDATE companies SET target_product = %s WHERE target_product = %s",
+                (new, old),
+            )
+            updated += cur.rowcount
+    _invalidate_companies_cache()
+    _invalidate_dashboard_cache()
+    log_audit(current_user, "normalize_products", "system", "", new_value={"updated": updated})
+    return {"updated": updated, "message": f"Migrated {updated} company product values."}
+
 @app.post("/admin/purge-invalid")
 async def purge_invalid(current_user: dict = Depends(oracle_auth.require_admin)):
     count = oracle_db.purge_invalid_companies(is_valid_company_name)

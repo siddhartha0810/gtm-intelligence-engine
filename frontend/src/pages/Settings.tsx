@@ -175,6 +175,19 @@ export default function Settings() {
     }
   }
 
+const [normalizingProducts, setNormalizingProducts] = useState(false)
+  const normalizeProducts = async () => {
+    setNormalizingProducts(true)
+    try {
+      const r = await fetch('/admin/normalize-products', { method: 'POST', headers: { Authorization: `Bearer ${localStorage.getItem('token') || ''}` } }).then(r => r.json())
+      toast.success(r.message)
+    } catch {
+      toast.error('Product migration failed')
+    } finally {
+      setNormalizingProducts(false)
+    }
+  }
+
   const [resettingTaxonomy, setResettingTaxonomy] = useState(false)
   const resetTaxonomy = async () => {
     setResettingTaxonomy(true)
@@ -239,6 +252,20 @@ export default function Settings() {
               : 'Reset Product Taxonomy'}
           </button>
           <span style={{ fontSize: 12, color: '#94a3b8' }}>Replaces the product taxonomy with the full 8-product curated set</span>
+        </div>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginTop: 12 }}>
+          <button
+            onClick={normalizeProducts}
+            disabled={normalizingProducts}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 8, border: '1px solid #e2e8f0', background: '#fff', color: normalizingProducts ? '#94a3b8' : '#0f172a', fontSize: 13, cursor: normalizingProducts ? 'not-allowed' : 'pointer', fontWeight: 500 }}
+            onMouseEnter={e => { if (!normalizingProducts) e.currentTarget.style.borderColor = '#3b82f6' }}
+            onMouseLeave={e => e.currentTarget.style.borderColor = '#e2e8f0'}
+          >
+            {normalizingProducts
+              ? <><Loader size={13} style={{ animation: 'spin 1s linear infinite' }} /> Migrating…</>
+              : 'Migrate Legacy Product Names'}
+          </button>
+          <span style={{ fontSize: 12, color: '#94a3b8' }}>Updates old product values (e.g. "JD Edwards" → "JD Edwards EnterpriseOne") to match the current taxonomy</span>
         </div>
       </div>
 
