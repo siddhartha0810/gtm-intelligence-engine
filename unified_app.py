@@ -106,7 +106,7 @@ from src import exporter as oracle_exporter
 from src import contact_finder as oracle_contact_finder
 from src import apollo_enrichment as oracle_apollo
 from src.utils import is_valid_company_name
-from src.phase_classifier import PHASE_LABELS, PHASE_COLORS
+from src.phase_classifier import PHASE_LABELS, PHASE_COLORS, reload_products_cache
 from src import auth as oracle_auth
 from src.audit import log_audit, get_audit_logs
 from src import tech_profiles as tp_mod
@@ -1290,11 +1290,12 @@ async def purge_invalid(current_user: dict = Depends(oracle_auth.require_admin))
 async def reset_taxonomy(current_user: dict = Depends(oracle_auth.require_admin)):
     """Replace the product taxonomy with the full curated 8-product set."""
     result = tp_mod.reset_taxonomy()
+    reloaded = reload_products_cache()
     log_audit(current_user, "reset_taxonomy", "system", "", new_value=result)
     return {
         "updated": result["updated"],
         "deleted": result["deleted"],
-        "message": f"Taxonomy reset: {result['updated']} products updated, {result['deleted']} obsolete entries removed.",
+        "message": f"Taxonomy reset: {result['updated']} products updated, {result['deleted']} obsolete entries removed. Classifier reloaded with {reloaded} products.",
     }
 
 @app.post("/admin/reset-all")

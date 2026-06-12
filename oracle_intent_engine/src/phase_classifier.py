@@ -50,82 +50,107 @@ PHASE DEFINITIONS:
   post_live     — live on Oracle (support/admin roles = expansion opportunity)
 """
 
+import logging
+
 from src.utils import clean_text
 
-ORACLE_PRODUCTS = {
-    "Oracle Cloud ERP": [
-        "oracle cloud erp", "oracle fusion erp", "oracle erp cloud",
-        "fusion financials", "oracle financials cloud", "oracle general ledger",
-        "oracle accounts payable", "oracle accounts receivable",
-        "oracle procurement cloud", "oracle fusion financials",
-        "oracle project costing", "oracle fixed assets",
-    ],
-    "Oracle HCM": [
-        "oracle hcm", "oracle human capital management", "oracle hcm cloud",
-        "fusion hcm", "oracle global hr", "oracle payroll cloud",
-        "oracle talent management", "oracle workforce management",
-        "oracle absence management", "oracle benefits cloud",
-        "oracle recruiting cloud", "oracle learning cloud",
-    ],
-    "Oracle SCM": [
-        "oracle scm", "oracle supply chain", "oracle scm cloud",
-        "oracle inventory cloud", "oracle order management cloud",
-        "oracle manufacturing cloud", "oracle planning cloud scm",
-        "oracle warehouse management", "oracle logistics cloud",
-    ],
-    "Oracle EPM": [
-        "oracle epm", "oracle hyperion", "oracle planning cloud",
-        "oracle essbase", "oracle fccs", "oracle financial consolidation",
-        "oracle account reconciliation", "oracle narrative reporting",
-        "oracle profitability", "oracle epbcs",
-    ],
-    "Oracle CX": [
-        "oracle cx", "oracle sales cloud", "oracle service cloud",
-        "oracle marketing cloud", "oracle cpq", "oracle commerce cloud",
-        "oracle field service", "oracle configure price quote",
-        "oracle subscription management",
-    ],
-    "NetSuite": [
-        "netsuite", "oracle netsuite", "netsuite erp",
-        "netsuite implementation", "netsuite administrator",
-        "netsuite developer", "netsuite consultant",
-    ],
-    "Oracle OCI": [
-        "oracle cloud infrastructure", " oci ", "oci architect",
-        "oracle iaas", "oracle paas", "oracle cloud platform",
-        "oracle autonomous", "oracle exadata cloud",
-        "oracle cloud migration", "lift and shift oracle",
-    ],
-    "Oracle Database": [
-        "oracle database", "oracle dba", "oracle db ",
-        "oracle autonomous database", "oracle exadata",
-        "oracle 19c", "oracle 21c", "oracle rac",
-        "oracle data guard", "oracle goldengate",
-    ],
-    "Oracle Integration": [
-        "oracle integration cloud", " oic ", "oracle middleware",
-        "oracle soa suite", "oracle mft", "oracle api gateway",
-        "oracle service bus", "oracle b2b",
-    ],
-    "Oracle APEX": [
-        "oracle apex", "oracle application express", "apex developer",
-    ],
-    "JD Edwards": [
-        "jd edwards", "jde", "jd edwards enterpriseone", "jde enterpriseone",
+logger = logging.getLogger(__name__)
+
+# Fallback used when the DB is unavailable at startup.
+# Mirrors the 8-product taxonomy so signals are never silently lost.
+_FALLBACK_PRODUCTS: dict[str, list[str]] = {
+    "JD Edwards EnterpriseOne": [
+        "jd edwards enterpriseone", "jd edwards", "jde", "jde enterpriseone",
         "jde e1", "jde oneworld", "jd edwards oneworld", "jdedwards",
-        "jde technical developer", "jde functional consultant",
         "jde cnc", "jde cnc administrator", "jde basis administrator",
-        "jde orchestrator", "jde tools administrator", "jde system administrator",
-        "jde architect", "jde integration", "jde finance consultant",
-        "jde manufacturing consultant", "jde distribution consultant",
-        "jde hr consultant", "jde payroll", "jde project costing",
-        "jde support analyst", "jde security administrator",
-        "jde report developer", "jde data migration", "jde analytics",
-        "jde business analyst", "jde solution architect", "jde project manager",
-        "jde upgrade", "jde implementation", "jde e900", "jde e812",
         "enterpriseone", "e1 developer", "e1 consultant",
     ],
+    "JD Edwards World": [
+        "jd edwards world", "jde world", "world software", "as/400 jde",
+        "jde world to enterpriseone",
+    ],
+    "Oracle Cloud ERP": [
+        "oracle cloud erp", "oracle fusion erp", "oracle erp cloud",
+        "fusion financials", "oracle financials cloud", "oracle fusion financials",
+        "oracle general ledger cloud", "oracle procurement cloud",
+    ],
+    "Oracle E-Business Suite": [
+        "oracle e-business suite", "oracle ebs", "oracle apps", "oracle applications",
+        "oracle r12", "oracle 11i", "apps dba", "oracle ebusiness",
+    ],
+    "Oracle PeopleSoft": [
+        "peoplesoft", "oracle peoplesoft", "psft", "peopletools", "people tools",
+        "hcm peoplesoft", "fscm", "campus solutions",
+    ],
+    "Oracle NetSuite": [
+        "netsuite", "oracle netsuite", "netsuite erp", "netsuite implementation",
+        "netsuite administrator", "netsuite developer", "netsuite consultant",
+        "suitescript", "netsuite oneworld",
+    ],
+    "Oracle HCM Cloud": [
+        "oracle hcm cloud", "oracle hcm", "oracle human capital management",
+        "fusion hcm", "oracle global hr", "oracle payroll cloud",
+        "oracle talent management", "oracle recruiting cloud",
+        "oracle learning cloud", "oracle orc",
+    ],
+    "Oracle SCM Cloud": [
+        "oracle scm cloud", "oracle scm", "oracle supply chain cloud",
+        "oracle inventory cloud", "oracle order management cloud",
+        "oracle manufacturing cloud", "oracle otm", "oracle warehouse management",
+    ],
 }
+
+_FALLBACK_WEIGHTS: dict[str, float] = {
+    "JD Edwards EnterpriseOne": 1.0,
+    "JD Edwards World":         1.0,
+    "Oracle Cloud ERP":         1.0,
+    "Oracle E-Business Suite":  0.9,
+    "Oracle PeopleSoft":        0.9,
+    "Oracle NetSuite":          0.8,
+    "Oracle HCM Cloud":         0.9,
+    "Oracle SCM Cloud":         0.85,
+}
+
+_products_cache: dict[str, list[str]] | None = None
+_weights_cache:  dict[str, float] | None = None
+
+
+def _load_products() -> tuple[dict[str, list[str]], dict[str, float]]:
+    try:
+        from src import tech_profiles
+        rows = tech_profiles.get_active_products()
+        if not rows:
+            raise ValueError("taxonomy table is empty")
+        products: dict[str, list[str]] = {}
+        weights:  dict[str, float] = {}
+        for row in rows:
+            name = row["canonical_name"]
+            aliases = [a.lower() for a in (row.get("aliases") or [])]
+            if name.lower() not in aliases:
+                aliases.insert(0, name.lower())
+            products[name] = aliases
+            weights[name] = float(row.get("confidence_weight") or 0.8)
+        logger.info(f"[phase_classifier] loaded {len(products)} products from taxonomy DB")
+        return products, weights
+    except Exception as exc:
+        logger.warning(f"[phase_classifier] DB unavailable, using fallback: {exc}")
+        return _FALLBACK_PRODUCTS, _FALLBACK_WEIGHTS
+
+
+def _get_products() -> tuple[dict[str, list[str]], dict[str, float]]:
+    global _products_cache, _weights_cache
+    if _products_cache is None:
+        _products_cache, _weights_cache = _load_products()
+    return _products_cache, _weights_cache
+
+
+def reload_products_cache() -> int:
+    """Flush the in-memory cache and reload from DB. Returns product count."""
+    global _products_cache, _weights_cache
+    _products_cache = None
+    _weights_cache = None
+    products, _ = _get_products()
+    return len(products)
 
 PHASE_CONFIG = {
     "researching": {
@@ -233,17 +258,23 @@ PHASE_COLORS = {
 
 def detect_oracle_product(title: str, description: str) -> tuple[str, float]:
     combined = f"{title} {description}".lower()
+    products, weights = _get_products()
+
     best_product = "Oracle (General)"
     best_score = 0
 
-    for product, keywords in ORACLE_PRODUCTS.items():
+    for product, keywords in products.items():
         score = sum(1 for kw in keywords if kw in combined)
         if score > best_score:
             best_score = score
             best_product = product
 
-    confidence = min(best_score / 3.0, 1.0) if best_score > 0 else 0.3
-    return best_product, confidence
+    if best_score == 0:
+        return "Oracle (General)", 0.3
+
+    base_conf = min(best_score / 3.0, 1.0)
+    weight = weights.get(best_product, 0.8)
+    return best_product, round(base_conf * weight, 2)
 
 
 def detect_phase(title: str, description: str) -> tuple[str, float]:
