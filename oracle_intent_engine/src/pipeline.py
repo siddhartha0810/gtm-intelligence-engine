@@ -6,6 +6,7 @@ from datetime import datetime
 from collections import deque
 from src.utils import get_logger, is_valid_company_name
 from src import config
+from src import tech_profiles
 from src import database as db
 from src import phase_classifier as clf
 from src import company_aggregator as agg
@@ -87,7 +88,7 @@ def run_scan(
     try:
         job_queries = job_queries or (
             config.JDE_MANUFACTURING_QUERIES if jde_manufacturing_focus
-            else config.ORACLE_SEARCH_QUERIES
+            else tech_profiles.get_active_search_queries()
         )
         news_queries = news_queries or config.NEWS_QUERIES
         sources = sources or [

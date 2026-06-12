@@ -91,118 +91,193 @@ CONTACTS_CSV_PATH = os.getenv(
 FLASK_SECRET_KEY = os.getenv("FLASK_SECRET_KEY", "oracle-intent-secret")
 FLASK_PORT = int(os.getenv("FLASK_PORT", "5001"))
 
-ORACLE_SEARCH_QUERIES = [
-    # ── Oracle Cloud ERP (Fusion) ──────────────────────────────────────
-    "Oracle Cloud ERP consultant",
-    "Oracle Fusion ERP implementation",
-    "Oracle Financials Cloud",
-    "Oracle ERP Cloud migration",
-    "Oracle Fusion Cloud implementation manager",
-    "Oracle Financials Cloud project manager",
-    # ── Oracle HCM Cloud ──────────────────────────────────────────────
-    "Oracle HCM Cloud consultant",
-    "Oracle Fusion HCM implementation",
-    "Oracle Global HR Cloud",
-    "Oracle HCM Cloud project manager",
-    "Oracle Payroll Cloud consultant",
-    # ── Oracle SCM Cloud ──────────────────────────────────────────────
-    "Oracle SCM Cloud consultant",
-    "Oracle Supply Chain Cloud implementation",
-    "Oracle Procurement Cloud consultant",
-    "Oracle Manufacturing Cloud consultant",
-    # ── Oracle EPM Cloud ──────────────────────────────────────────────
-    "Oracle EPM Cloud consultant",
-    "Oracle Hyperion implementation",
-    "Oracle Planning Cloud",
-    "Oracle Hyperion Financial Management consultant",
-    "Oracle Hyperion Planning administrator",
-    "Oracle EPM Cloud project manager",
-    # ── Oracle CX Cloud ───────────────────────────────────────────────
-    "Oracle CX Cloud consultant",
-    "Oracle Sales Cloud implementation",
-    "Oracle Service Cloud consultant",
-    "Oracle CPQ Cloud consultant",
-    # ── NetSuite ──────────────────────────────────────────────────────
-    "NetSuite implementation consultant",
-    "Oracle NetSuite ERP",
-    "NetSuite administrator",
-    "NetSuite ERP project manager",
-    # ── OCI / Infrastructure ──────────────────────────────────────────
-    "Oracle Cloud Infrastructure architect",
-    "OCI migration consultant",
-    "Oracle OCI cloud engineer",
-    # ── Oracle Integration ────────────────────────────────────────────
-    "Oracle Integration Cloud OIC",
-    "Oracle middleware consultant",
-    "Oracle SOA Suite integration developer",
-    # ── Oracle Database ───────────────────────────────────────────────
-    "Oracle Autonomous Database migration",
-    "Oracle Database administrator",
-    "Oracle Database DBA consultant",
-    # ── Oracle E-Business Suite (EBS) — legacy, massive install base ──
-    "Oracle E-Business Suite consultant",
-    "Oracle EBS implementation",
-    "Oracle EBS R12 upgrade",
-    "Oracle EBS functional consultant",
-    "Oracle EBS technical developer",
-    "Oracle E-Business Suite project manager",
-    "Oracle EBS migration cloud",
-    "Oracle EBS financials consultant",
-    "Oracle EBS HRMS consultant",
-    "Oracle EBS supply chain consultant",
-    # ── Oracle PeopleSoft — HR/Finance, huge public sector base ───────
-    "Oracle PeopleSoft consultant",
-    "PeopleSoft HCM implementation",
-    "PeopleSoft Financials consultant",
-    "PeopleSoft FSCM consultant",
-    "PeopleSoft technical developer",
-    "PeopleSoft upgrade consultant",
-    "PeopleSoft to Oracle Cloud migration",
-    "PeopleSoft campus solutions consultant",
-    # ── Oracle Siebel CRM — legacy, still active in telco/insurance ───
-    "Oracle Siebel CRM consultant",
-    "Siebel CRM implementation",
-    "Siebel to Oracle CX migration",
-    "Oracle Siebel developer",
-    # ── JD Edwards — core ─────────────────────────────────────────────
-    "JD Edwards consultant",
-    "JDE EnterpriseOne implementation",
-    "JD Edwards ERP upgrade",
-    "JDE technical developer",
-    "JD Edwards functional consultant",
-    "JDE CNC administrator",
-    "JD Edwards migration Oracle Cloud",
-    "JDE EnterpriseOne support analyst",
-    # JD Edwards — Manufacturing
-    "JD Edwards manufacturing consultant",
-    "JDE MRP work orders bill of materials",
-    "JD Edwards shop floor manufacturing ERP",
-    "JDE discrete manufacturing implementation",
-    # JD Edwards — Construction & Home Building
-    "JD Edwards construction ERP consultant",
-    "JDE job costing homebuilder",
-    "JD Edwards EnterpriseOne construction",
-    "JDE land development procurement",
-    "JD Edwards home builder ERP",
-    # JD Edwards — Energy & Utilities
-    "JD Edwards energy oil gas ERP",
-    "JDE EnterpriseOne utilities consultant",
-    "JD Edwards upstream downstream ERP",
-    "JDE energy sector implementation",
-    # JD Edwards — Agriculture
-    "JD Edwards agriculture ERP consultant",
-    "JDE food beverage agribusiness implementation",
-    "JD Edwards agricultural distribution",
-    # JD Edwards — Distribution & Logistics
-    "JD Edwards distribution consultant",
-    "JDE inventory procurement sales order",
-    "JD Edwards supply chain distribution",
-    "JDE wholesale distribution implementation",
-    # High-yield queries confirmed working (tested May 2026)
-    "JD Edwards 9.2 upgrade",             # 772+ results, very specific version-upgrade intent
-    "JD Edwards upgrade project manager",  # 1,000+ results, clear upgrade cycle signal
-    "JDE system administrator",            # 6,000+ results, broad but catches active JDE shops
+# ── Role suffixes used by the auto-generator for new taxonomy products ────────
+# When a product is added to the taxonomy but has no entry in QUERIES_BY_PRODUCT,
+# these suffixes are crossed with the canonical name and multi-word aliases to
+# produce search queries automatically.
+_ROLE_SUFFIXES = [
+    "consultant",
+    "implementation consultant",
+    "functional consultant",
+    "technical consultant",
+    "administrator",
+    "project manager",
+    "developer",
+    "upgrade",
+    "implementation",
+    "migration consultant",
 ]
+
+
+def generate_queries_for_product(canonical_name: str, aliases: list[str]) -> list[str]:
+    """
+    Auto-generate job-board search queries for a taxonomy product that has no
+    handcrafted entry in QUERIES_BY_PRODUCT.
+
+    Strategy:
+      - canonical_name × _ROLE_SUFFIXES  → core queries
+      - aliases with 3+ words            → used directly (already search-query quality)
+      - aliases with 2 words             → paired with top 3 suffixes
+    """
+    seen: set[str] = set()
+    queries: list[str] = []
+
+    def _add(q: str) -> None:
+        q = q.strip()
+        if q and q not in seen:
+            seen.add(q)
+            queries.append(q)
+
+    for suffix in _ROLE_SUFFIXES:
+        _add(f"{canonical_name} {suffix}")
+
+    for alias in aliases:
+        words = alias.strip().split()
+        titled = " ".join(w.capitalize() for w in words)
+        if len(words) >= 3:
+            _add(titled)
+        elif len(words) == 2:
+            for suffix in ("consultant", "implementation", "administrator"):
+                _add(f"{titled} {suffix}")
+
+    return queries
+
+
+# ── Proven queries per canonical product name ─────────────────────────────────
+# Pipeline reads only the queries whose product is active in the taxonomy.
+# When a new product is added to the taxonomy AND is not listed here,
+# generate_queries_for_product() is called automatically.
+QUERIES_BY_PRODUCT: dict[str, list[str]] = {
+    # ── JD Edwards EnterpriseOne ──────────────────────────────────────
+    "JD Edwards EnterpriseOne": [
+        "JD Edwards consultant",
+        "JDE EnterpriseOne implementation",
+        "JD Edwards ERP upgrade",
+        "JDE technical developer",
+        "JD Edwards functional consultant",
+        "JDE CNC administrator",
+        "JD Edwards project manager",
+        "JDE EnterpriseOne support analyst",
+        "JDE system administrator",
+        "JDE basis administrator",
+        "JDE solution architect",
+        "JDE orchestrator developer",
+        "JDE security administrator",
+        "JDE report developer",
+        "JD Edwards business analyst",
+        # High-yield confirmed (tested May 2026)
+        "JD Edwards 9.2 upgrade",
+        "JD Edwards upgrade project manager",
+        # Migration
+        "JD Edwards migration Oracle Cloud",
+        "JDE to Oracle Cloud migration",
+        "JDE EnterpriseOne cloud migration",
+        # Verticals — manufacturing
+        "JD Edwards manufacturing consultant",
+        "JDE MRP work orders bill of materials",
+        "JD Edwards shop floor manufacturing ERP",
+        "JDE discrete manufacturing implementation",
+        # Verticals — construction & home building
+        "JD Edwards construction ERP consultant",
+        "JDE job costing homebuilder",
+        "JD Edwards EnterpriseOne construction",
+        "JDE land development procurement",
+        # Verticals — energy & utilities
+        "JD Edwards energy oil gas ERP",
+        "JDE EnterpriseOne utilities consultant",
+        # Verticals — agriculture & distribution
+        "JD Edwards agriculture ERP consultant",
+        "JDE food beverage agribusiness implementation",
+        "JD Edwards distribution consultant",
+        "JDE wholesale distribution implementation",
+    ],
+    # ── JD Edwards World ─────────────────────────────────────────────
+    "JD Edwards World": [
+        "JD Edwards World consultant",
+        "JDE World administrator",
+        "JD Edwards World AS400 administrator",
+        "JDE World upgrade EnterpriseOne",
+        "JD Edwards World to EnterpriseOne migration",
+        "JDE World technical developer",
+        "JD Edwards World support analyst",
+    ],
+    # ── Oracle Cloud ERP (Fusion) ─────────────────────────────────────
+    "Oracle Cloud ERP": [
+        "Oracle Cloud ERP consultant",
+        "Oracle Fusion ERP implementation",
+        "Oracle Financials Cloud consultant",
+        "Oracle ERP Cloud migration",
+        "Oracle Fusion Cloud implementation manager",
+        "Oracle Financials Cloud project manager",
+        "Oracle Cloud ERP project manager",
+        "Oracle Fusion ERP developer",
+        "Oracle Cloud ERP functional consultant",
+        "Oracle Fusion financials administrator",
+    ],
+    # ── Oracle E-Business Suite ───────────────────────────────────────
+    "Oracle E-Business Suite": [
+        "Oracle E-Business Suite consultant",
+        "Oracle EBS implementation",
+        "Oracle EBS R12 upgrade",
+        "Oracle EBS functional consultant",
+        "Oracle EBS technical developer",
+        "Oracle E-Business Suite project manager",
+        "Oracle EBS migration cloud",
+        "Oracle EBS financials consultant",
+        "Oracle EBS HRMS consultant",
+        "Oracle EBS supply chain consultant",
+        "Oracle Apps DBA",
+        "Oracle EBS database administrator",
+    ],
+    # ── Oracle PeopleSoft ─────────────────────────────────────────────
+    "Oracle PeopleSoft": [
+        "Oracle PeopleSoft consultant",
+        "PeopleSoft HCM implementation",
+        "PeopleSoft Financials consultant",
+        "PeopleSoft FSCM consultant",
+        "PeopleSoft technical developer",
+        "PeopleSoft upgrade consultant",
+        "PeopleSoft to Oracle Cloud migration",
+        "PeopleSoft campus solutions consultant",
+        "PeopleSoft administrator",
+        "PeopleSoft project manager",
+    ],
+    # ── Oracle NetSuite ───────────────────────────────────────────────
+    "Oracle NetSuite": [
+        "NetSuite implementation consultant",
+        "Oracle NetSuite ERP",
+        "NetSuite administrator",
+        "NetSuite ERP project manager",
+        "NetSuite developer",
+        "NetSuite functional consultant",
+        "NetSuite SuiteScript developer",
+        "NetSuite OneWorld implementation",
+        "NetSuite ERP migration",
+    ],
+    # ── Oracle HCM Cloud ─────────────────────────────────────────────
+    "Oracle HCM Cloud": [
+        "Oracle HCM Cloud consultant",
+        "Oracle Fusion HCM implementation",
+        "Oracle Global HR Cloud consultant",
+        "Oracle HCM Cloud project manager",
+        "Oracle Payroll Cloud consultant",
+        "Oracle HCM Cloud administrator",
+        "Oracle HCM Cloud functional consultant",
+        "Oracle Recruiting Cloud consultant",
+        "Oracle Learning Cloud consultant",
+    ],
+    # ── Oracle SCM Cloud ─────────────────────────────────────────────
+    "Oracle SCM Cloud": [
+        "Oracle SCM Cloud consultant",
+        "Oracle Supply Chain Cloud implementation",
+        "Oracle Procurement Cloud consultant",
+        "Oracle Manufacturing Cloud consultant",
+        "Oracle SCM Cloud project manager",
+        "Oracle Order Management Cloud consultant",
+        "Oracle Inventory Cloud consultant",
+        "Oracle OTM consultant",
+    ],
+}
 
 # ── JDE Manufacturing Focus queries ─────────────────────────────────────────
 # Used when "JDE Manufacturing Focus" is enabled in Engine Control.

@@ -492,3 +492,38 @@ def get_active_products() -> list[dict]:
                ORDER BY pt.confidence_weight DESC""",
         )
         return [dict(r) for r in cur.fetchall()]
+
+
+def get_active_search_queries() -> list[str]:
+    """
+    Returns job-board search queries for all active taxonomy products.
+
+    For each active product:
+      - If it has an entry in config.QUERIES_BY_PRODUCT → use those proven queries.
+      - If it is a new product not yet in that dict → auto-generate queries from
+        its canonical name + aliases using config.generate_queries_for_product().
+
+    This means adding a product to the taxonomy automatically gives it search
+    coverage on the next scan without any code change.
+    """
+    from src import config
+
+    products = get_active_products()
+    queries: list[str] = []
+    seen: set[str] = set()
+
+    for product in products:
+        name = product["canonical_name"]
+        aliases = product.get("aliases") or []
+
+        if name in config.QUERIES_BY_PRODUCT:
+            product_queries = config.QUERIES_BY_PRODUCT[name]
+        else:
+            product_queries = config.generate_queries_for_product(name, aliases)
+
+        for q in product_queries:
+            if q not in seen:
+                seen.add(q)
+                queries.append(q)
+
+    return queries
