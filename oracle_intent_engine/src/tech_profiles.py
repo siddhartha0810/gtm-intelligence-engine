@@ -61,7 +61,7 @@ _ORACLE_SEED = {
         "indeed.com", "glassdoor.com",
     ],
     "competitor_domains": ["sap.com", "workday.com"],
-    "partner_domains":    ["inoapps.com"],
+    "partner_domains":    [],
     "manufacturer_domain": "oracle.com",
     "oracle_products": [
         "JD Edwards", "JD Edwards World",

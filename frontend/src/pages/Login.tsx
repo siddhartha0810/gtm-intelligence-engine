@@ -79,7 +79,7 @@ export default function Login({ onLogin }: Props) {
               <label style={{ display: 'block', color: '#374151', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Email address</label>
               <input
                 type="email" value={email} onChange={e => setEmail(e.target.value)}
-                placeholder="you@inoapps.com" required autoFocus
+                placeholder="you@yourcompany.com" required autoFocus
                 style={{ width: '100%', boxSizing: 'border-box', background: '#ffffff', border: '1px solid #d1d5db', borderRadius: 8, padding: '10px 14px', color: '#0f172a', fontSize: 14, outline: 'none' }}
                 onFocus={e => e.currentTarget.style.borderColor = '#3b82f6'}
                 onBlur={e => e.currentTarget.style.borderColor = '#d1d5db'}

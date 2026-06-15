@@ -15,7 +15,7 @@ class TestAuthLogin:
 
     def test_login_wrong_password(self, client):
         resp = client.post("/api/auth/login", json={
-            "email":    "test-owner@inoapps.com",
+            "email":    "test-owner@example.com",
             "password": "WrongPassword!",
         })
         assert resp.status_code == 401

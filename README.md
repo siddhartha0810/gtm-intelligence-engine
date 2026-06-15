@@ -1,6 +1,6 @@
-# Inoapps Intelligence Platform
+# Oracle Intelligence Platform
 
-> AI-powered B2B sales intelligence tool for the Inoapps Oracle/JDE go-to-market team.
+> AI-powered B2B sales intelligence tool for Oracle/JDE go-to-market teams.
 > Automatically identifies companies that are buying, implementing, or upgrading Oracle products,
 > enriches them with verified decision-maker contacts, and surfaces them in a React dashboard
 > ready for outreach or HubSpot CRM push.
@@ -33,7 +33,7 @@
 
 ## What It Does
 
-The platform answers one question for the Inoapps sales team:
+The platform answers one question for your sales team:
 
 > **Which companies are actively buying, implementing, or upgrading Oracle/JDE right now — and who should we call?**
 
@@ -51,7 +51,7 @@ It works in two automated stages:
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
-│                     Inoapps Intelligence Platform                    │
+│                   Oracle Intelligence Platform                       │
 │                                                                      │
 │  ┌───────────────────────────┐    ┌───────────────────────────────┐  │
 │  │   Oracle Intent Engine    │    │   Lead Enrichment Engine      │  │
@@ -72,7 +72,7 @@ It works in two automated stages:
 │                │                                  │                   │
 │                ▼                                  ▼                   │
 │  ┌─────────────────────────────────────────────────────────────────┐  │
-│  │           PostgreSQL — Inoapps-Data-DB (10.0.0.149:5432)        │  │
+│  │           PostgreSQL — oracle_intent (10.0.0.149:5432)          │  │
 │  │                                                                 │  │
 │  │  companies · signals · company_contacts · contacts_master       │  │
 │  │  scan_runs · enrichment_cache · domain_knowledge · users        │  │
@@ -319,7 +319,7 @@ Salesforce fields like `FirstName`, `LinkedIn_URL__c`, `HasOptedOutOfEmail` all 
 
 ## Database Schema
 
-**Database:** `Inoapps-Data-DB` · **Host:** `10.0.0.149:5432` · **User:** `postgres`
+**Database:** `oracle_intent` · **Host:** `10.0.0.149:5432` · **User:** `postgres`
 
 | Table | Purpose | Key Rules |
 |-------|---------|-----------|
@@ -490,7 +490,7 @@ pytest tests/ -v
 | `HomeBuildersSignal` | Home builder directories | HTML scraping |
 
 ### Staffing agency filter
-All signals pass through a staffing filter. If the company posting a job is a staffing or consulting firm (e.g. Randstad, Accenture, Infosys), it is **excluded** — these are not Oracle end-users and are not valid prospects for Inoapps.
+All signals pass through a staffing filter. If the company posting a job is a staffing or consulting firm (e.g. Randstad, Accenture, Infosys), it is **excluded** — these are not Oracle end-users and are not valid sales prospects.
 
 ---
 
@@ -563,4 +563,4 @@ Write an `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` migration. All DDL is in `or
 
 ---
 
-> **Built by Inoapps AI Team**
+> **Oracle Sales Intelligence Platform**

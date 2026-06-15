@@ -45,7 +45,7 @@ def auth_token(client):
     """Register (or login) a test owner and return a valid JWT token."""
     # Try login first (user may already exist from a previous run)
     resp = client.post("/api/auth/login", json={
-        "email":    "test-owner@inoapps.com",
+        "email":    "test-owner@example.com",
         "password": "TestPass123!",
     })
     if resp.status_code == 200:
@@ -53,7 +53,7 @@ def auth_token(client):
 
     # First run — register
     resp = client.post("/api/auth/register", json={
-        "email":    "test-owner@inoapps.com",
+        "email":    "test-owner@example.com",
         "name":     "Test Owner",
         "password": "TestPass123!",
         "role":     "owner",

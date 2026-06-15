@@ -1,0 +1,26 @@
+{
+  "name": "data-tool",
+  "version": "1.0.0",
+  "description": "> AI-powered B2B intelligence platform for Oracle/JDE go-to-market teams. Identifies companies actively using or evaluating Oracle products, enriches them with validated contacts, and pushes qualified leads directly into HubSpot CRM.",
+  "main": "generate_explainer.js",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Siddhartha-ino/oracle-intelligence.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Siddhartha-ino/oracle-intelligence/issues"
+  },
+  "homepage": "https://github.com/Siddhartha-ino/oracle-intelligence#readme",
+  "dependencies": {
+    "docx": "^9.7.1"
+  }
+}

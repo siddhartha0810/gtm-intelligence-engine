@@ -86,7 +86,7 @@ _SI_PARTNERS: set[str] = {
     "lti", "larsen toubro infotech", "ltimindtree",
     "persistent systems",
     "niit technologies", "niit",
-    # ── JDE-specific SIs (direct InoApps competitors) ────────────────────────
+    # ── JDE-specific SIs ─────────────────────────────────────────────────────
     "syntax", "syntax systems",
     "denovo", "denovo consulting",
     "terillium",
@@ -111,7 +111,7 @@ _SI_PARTNERS: set[str] = {
     "clarkston consulting",
     "sierra-cedar", "sierra cedar",
     "collaborative solutions",
-    "inoapps",   # shouldn't surface ourselves
+
     "linium",
     "xellera informatics", "xellera",
     "unilogix", "unilogix solutions",

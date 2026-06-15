@@ -8,7 +8,7 @@ Extracts the END CLIENT company from each result — not the SI partner itself.
 Covers:
   - Big 4 / global SIs (IBM, PwC, Deloitte, Accenture, Capgemini, etc.)
   - Oracle Cloud SIs (Infosys, Wipro, HCL, Mastek, Evosys, etc.)
-  - JDE specialist SIs — InoApps competitors (Syntax, Denovo, Terillium,
+  - JDE specialist SIs (Syntax, Denovo, Terillium,
     Steltix, Wipro/Edgewater, HCL/Ciber, Spinnaker, Rimini Street, etc.)
 """
 
@@ -39,7 +39,7 @@ _ORACLE_PARTNERS = [
     ("Oracle Go-Live",    "oracle cloud ERP go-live case study 2024"),
 ]
 
-# ── JDE specialist SI partners — InoApps competitors ────────────────────────
+# ── JDE specialist SI partners ───────────────────────────────────────────────
 _JDE_PARTNERS = [
     # Big SIs with large JDE practices
     ("IBM JDE",               "IBM JD Edwards implementation case study client success"),

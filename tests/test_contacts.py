@@ -18,7 +18,7 @@ class TestContactsEndpoint:
         assert resp.status_code == 401
 
     def test_get_contacts_by_company_filter(self, client, auth_headers):
-        resp = client.get("/api/contacts?company=inoapps", headers=auth_headers)
+        resp = client.get("/api/contacts?company=example", headers=auth_headers)
         assert resp.status_code == 200
         assert isinstance(resp.json(), list)
 
