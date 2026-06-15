@@ -67,6 +67,7 @@ HS_CONTACT_FIELD_MAP = {
     "job_function":  "job_function",
     "level":         "level",
     "linkedin_url":  "linkedinbio",
+    "company_name":  "company",
     # Location
     "city":          "city",
     "state":         "state",
@@ -276,7 +277,11 @@ async def bulk_push_contacts(status_filter: str = "approved", limit: int = 100) 
     import oracle_intent_engine.src.database as db
     with db.db_cursor(commit=False) as cur:
         cur.execute(
-            "SELECT * FROM company_contacts WHERE status=%s LIMIT %s",
+            """SELECT cc.*, c.name AS company_name
+               FROM company_contacts cc
+               JOIN companies c ON c.id = cc.company_id
+               WHERE cc.status = %s
+               LIMIT %s""",
             (status_filter, limit),
         )
         records = [dict(r) for r in cur.fetchall()]
