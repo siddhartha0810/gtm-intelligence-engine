@@ -41,6 +41,7 @@ IMPORTANT:
     maintained on every insert via UPDATE — never query COUNT(*) in hot paths.
 """
 
+import hashlib
 import os
 import secrets
 import threading
@@ -135,7 +136,8 @@ _DDL = [
         evidence       TEXT,
         url            TEXT,
         confidence     REAL DEFAULT 0.5,
-        detected_at    TIMESTAMP DEFAULT NOW()
+        detected_at    TIMESTAMP DEFAULT NOW(),
+        content_hash   TEXT
     )
     """,
     """
@@ -494,6 +496,10 @@ _DDL = [
     "ALTER TABLE companies ADD COLUMN IF NOT EXISTS signal_count  INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE companies ADD COLUMN IF NOT EXISTS contact_count INTEGER NOT NULL DEFAULT 0",
 
+    # content_hash dedup for oracle_signals — prevents cross-source duplicates
+    "ALTER TABLE oracle_signals ADD COLUMN IF NOT EXISTS content_hash TEXT",
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_signals_hash ON oracle_signals(content_hash) WHERE content_hash IS NOT NULL",
+
     # indexes on new columns
     "CREATE INDEX IF NOT EXISTS idx_companies_status       ON companies(status)",
     "CREATE INDEX IF NOT EXISTS idx_companies_profile      ON companies(technology_profile_id)",
@@ -749,24 +755,43 @@ def reset_all_data():
 def insert_signal(company_id: int, oracle_product: str, phase: str, source: str,
                   signal_type: str, job_title: str, evidence: str,
                   url: str, confidence: float, scan_run_id: int = None) -> int:
+    raw = f"{company_id}|{job_title or ''}|{source or ''}"
+    content_hash = hashlib.md5(raw.encode()).hexdigest()
     with db_cursor() as cur:
         cur.execute("""
             INSERT INTO oracle_signals
                 (company_id, scan_run_id, oracle_product, phase, source,
-                 signal_type, job_title, evidence, url, confidence)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                 signal_type, job_title, evidence, url, confidence, content_hash)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (content_hash) DO NOTHING
             RETURNING id
         """, (company_id, scan_run_id, oracle_product, phase, source,
-              signal_type, job_title, evidence, url, confidence))
-        signal_id = cur.fetchone()["id"]
-        # Keep denormalized count in sync
+              signal_type, job_title, evidence, url, confidence, content_hash))
+        row = cur.fetchone()
+        return row["id"] if row else 0
+
+
+def batch_update_signal_counts(company_ids: list) -> None:
+    """Batch-update denormalized signal_count for a list of company IDs.
+    Call this once after all signals for a scan batch are inserted, instead
+    of running a COUNT(*) per-insert (N+1).
+    """
+    if not company_ids:
+        return
+    unique_ids = list(set(company_ids))
+    with db_cursor() as cur:
         cur.execute("""
-            UPDATE companies
-            SET signal_count = (SELECT COUNT(*) FROM oracle_signals WHERE company_id = %s),
+            UPDATE companies SET
+                signal_count = subq.cnt,
                 last_updated = NOW()
-            WHERE id = %s
-        """, (company_id, company_id))
-        return signal_id
+            FROM (
+                SELECT company_id, COUNT(*) AS cnt
+                FROM oracle_signals
+                WHERE company_id = ANY(%s)
+                GROUP BY company_id
+            ) AS subq
+            WHERE companies.id = subq.company_id
+        """, (unique_ids,))
 
 def get_signals_for_company(company_id: int):
     with db_cursor(commit=False) as cur:

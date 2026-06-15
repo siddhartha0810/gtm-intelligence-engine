@@ -60,6 +60,23 @@ export default function App() {
     return () => window.removeEventListener('keydown', handler)
   }, [])
 
+  // Global 401 interceptor — intercept fetch so any expired session triggers logout
+  useEffect(() => {
+    const _orig = window.fetch.bind(window)
+    window.fetch = async (...args) => {
+      const res = await _orig(...args)
+      if (res.status === 401) {
+        const url = typeof args[0] === 'string' ? args[0] : (args[0] as Request).url
+        if (url.includes('/api/') && !url.includes('/api/auth/login')) {
+          handleLogout()
+        }
+      }
+      return res
+    }
+    return () => { window.fetch = _orig }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const handleLogin = (tok: string, usr: User) => {
     setToken(tok); setUser(usr)
   }

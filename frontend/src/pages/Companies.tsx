@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Search, Download, ArrowUpRight, MoreHorizontal, Zap, Users, Send,
          Eye, UserX, Trash2, RefreshCw, X, Mail, ExternalLink, ChevronRight,
          Building2, Loader2, Package, ChevronDown, Filter, GitMerge } from 'lucide-react'
@@ -669,22 +670,24 @@ const phaseColor = (p: string) => {
 }
 
 export default function Companies() {
+  const [searchParams, setSearchParams] = useSearchParams()
+
   const [companies, setCompanies]         = useState<Company[]>([])
   const [total, setTotal]                 = useState(0)
   const [loadingMore, setLoadingMore]     = useState(false)
   const [loading, setLoading]             = useState(true)
-  const [searchInput, setSearchInput]     = useState('')
-  const [search, setSearch]               = useState('')
-  const [phase, setPhase]                 = useState('All')
+  const [searchInput, setSearchInput]     = useState(() => searchParams.get('search') || '')
+  const [search, setSearch]               = useState(() => searchParams.get('search') || '')
+  const [phase, setPhase]                 = useState(() => searchParams.get('phase') || 'All')
   const [selected, setSelected]           = useState<number[]>([])
   const [sortKey, setSortKey]             = useState('score')
   const [sortDir, setSortDir]             = useState<'asc' | 'desc'>('desc')
   const [openMenu, setOpenMenu]           = useState<number | null>(null)
   const [contactsPanel, setContactsPanel] = useState<Company | null>(null)
-  const [productFilter, setProductFilter]   = useState('All')
-  const [industryFilter, setIndustryFilter] = useState<string[]>([])
-  const [locationFilter, setLocationFilter] = useState<string[]>([])
-  const [contactsFilter, setContactsFilter] = useState<string[]>([])
+  const [productFilter, setProductFilter]   = useState(() => searchParams.get('product') || 'All')
+  const [industryFilter, setIndustryFilter] = useState<string[]>(() => searchParams.get('industry')?.split(',').filter(Boolean) ?? [])
+  const [locationFilter, setLocationFilter] = useState<string[]>(() => searchParams.get('location')?.split(',').filter(Boolean) ?? [])
+  const [contactsFilter, setContactsFilter] = useState<string[]>(() => { const v = searchParams.get('has_contacts'); return v ? [v] : [] })
   const [filterOptions, setFilterOptions]   = useState<{ industries: string[]; locations: string[]; products: string[] }>({ industries: [], locations: [], products: [] })
   const [editingProduct, setEditingProduct] = useState<number | null>(null)
   const [exporting, setExporting] = useState(false)
@@ -692,8 +695,25 @@ export default function Companies() {
   const [dupePairs, setDupePairs]   = useState<DupePair[]>([])
   const [dupeLoading, setDupeLoading] = useState(false)
   const [merging, setMerging]       = useState<string | null>(null)
-  const menuRefs = useRef<Map<number, HTMLButtonElement>>(new Map())
+  const menuRefs   = useRef<Map<number, HTMLButtonElement>>(new Map())
+  const bulkPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const PAGE = 200
+
+  // Sync active filters to URL so the view is bookmarkable / shareable
+  useEffect(() => {
+    const p: Record<string, string> = {}
+    if (search)                         p['search']      = search
+    if (phase !== 'All')                p['phase']       = phase
+    if (productFilter !== 'All')        p['product']     = productFilter
+    if (industryFilter.length > 0)      p['industry']    = industryFilter.join(',')
+    if (locationFilter.length > 0)      p['location']    = locationFilter.join(',')
+    if (contactsFilter.length > 0)      p['has_contacts']= contactsFilter[0]
+    setSearchParams(p, { replace: true })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, phase, productFilter, JSON.stringify(industryFilter), JSON.stringify(locationFilter), JSON.stringify(contactsFilter)])
+
+  // Clean up bulk-enrich poll on unmount
+  useEffect(() => () => { if (bulkPollRef.current) clearInterval(bulkPollRef.current) }, [])
 
   const findDuplicates = async () => {
     setDupeLoading(true)
@@ -870,11 +890,12 @@ export default function Companies() {
                     if (r.ok) {
                       toast.success(`Enrichment running for ${selected.length} companies — check back in a few minutes`)
                       setSelected([])
-                      // Poll progress
-                      const poll = setInterval(async () => {
+                      // Poll progress — stored in ref so it can be cleared on unmount
+                      if (bulkPollRef.current) clearInterval(bulkPollRef.current)
+                      bulkPollRef.current = setInterval(async () => {
                         const pr = await fetch('/api/companies/bulk-enrich/progress', { headers: authH() })
                         const p = await pr.json()
-                        if (!p.running) { clearInterval(poll); toast.success(`Enrichment complete: ${p.done} done, ${p.errors} errors`); fetchCompanies() }
+                        if (!p.running) { clearInterval(bulkPollRef.current!); bulkPollRef.current = null; toast.success(`Enrichment complete: ${p.done} done, ${p.errors} errors`); fetchCompanies() }
                       }, 5000)
                     } else { toast.error(d.error || 'Bulk enrich failed') }
                   } catch { toast.error('Network error') }

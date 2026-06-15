@@ -188,6 +188,24 @@ const [normalizingProducts, setNormalizingProducts] = useState(false)
     }
   }
 
+  const [revalidatingEmails, setRevalidatingEmails] = useState(false)
+  const revalidateEmails = async () => {
+    setRevalidatingEmails(true)
+    try {
+      const r = await fetch('/api/contacts/revalidate-emails', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${localStorage.getItem('token') || ''}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      }).then(r => r.json())
+      if (r.queued) toast.success('Email re-validation started in the background')
+      else toast.error(r.error || 'Revalidation failed')
+    } catch {
+      toast.error('Revalidation failed')
+    } finally {
+      setRevalidatingEmails(false)
+    }
+  }
+
   const [resettingTaxonomy, setResettingTaxonomy] = useState(false)
   const resetTaxonomy = async () => {
     setResettingTaxonomy(true)
@@ -266,6 +284,20 @@ const [normalizingProducts, setNormalizingProducts] = useState(false)
               : 'Migrate Legacy Product Names'}
           </button>
           <span style={{ fontSize: 12, color: '#94a3b8' }}>Updates old product values (e.g. "JD Edwards" → "JD Edwards EnterpriseOne") to match the current taxonomy</span>
+        </div>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginTop: 12 }}>
+          <button
+            onClick={revalidateEmails}
+            disabled={revalidatingEmails}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 8, border: '1px solid #e2e8f0', background: '#fff', color: revalidatingEmails ? '#94a3b8' : '#0f172a', fontSize: 13, cursor: revalidatingEmails ? 'not-allowed' : 'pointer', fontWeight: 500 }}
+            onMouseEnter={e => { if (!revalidatingEmails) e.currentTarget.style.borderColor = '#10b981' }}
+            onMouseLeave={e => e.currentTarget.style.borderColor = '#e2e8f0'}
+          >
+            {revalidatingEmails
+              ? <><Loader size={13} style={{ animation: 'spin 1s linear infinite' }} /> Starting…</>
+              : 'Revalidate Emails (ZeroBounce)'}
+          </button>
+          <span style={{ fontSize: 12, color: '#94a3b8' }}>Re-runs ZeroBounce on contacts with unknown/catch-all status — up to 1,000 at a time</span>
         </div>
       </div>
 

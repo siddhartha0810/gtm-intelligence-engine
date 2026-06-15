@@ -68,6 +68,23 @@ from src.utils import get_logger
 
 logger = get_logger(__name__)
 
+_RETRY_STATUSES = {429, 503}
+
+def _http_with_retry(make_request: Callable, max_retries: int = 3) -> bytes:
+    """Execute an HTTP request with exponential backoff on 429/503."""
+    delay = 1.0
+    for attempt in range(max_retries):
+        try:
+            return make_request()
+        except urllib.error.HTTPError as e:
+            if e.code in _RETRY_STATUSES and attempt < max_retries - 1:
+                logger.warning(f"HTTP {e.code} — retrying in {delay:.0f}s (attempt {attempt+1}/{max_retries})")
+                time.sleep(delay)
+                delay *= 2
+                continue
+            raise
+    raise RuntimeError("Unreachable")
+
 APOLLO_SEARCH_URL = "https://api.apollo.io/api/v1/mixed_people/api_search"
 APOLLO_REVEAL_URL = "https://api.apollo.io/api/v1/people/match"
 ZB_BATCH_URL      = "https://bulkapi.zerobounce.net/v2/validatebatch"
@@ -494,8 +511,10 @@ def _apollo_call(org_name: str, api_key: str, max_per: int,
             headers={"Content-Type": "application/json", "X-Api-Key": api_key},
             method="POST",
         )
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            data = json.loads(resp.read())
+        def _do_request() -> bytes:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                return resp.read()
+        data = json.loads(_http_with_retry(_do_request))
     except urllib.error.HTTPError as e:
         body = ""
         try:
@@ -682,16 +701,18 @@ def _zb_validate_batch(emails: list, api_key: str) -> dict:
             "email_batch": [{"email_address": e} for e in batch],
         }).encode()
         try:
-            req = urllib.request.Request(
+            zb_req = urllib.request.Request(
                 ZB_BATCH_URL, data=payload,
                 headers={"Content-Type": "application/json"},
                 method="POST",
             )
-            with urllib.request.urlopen(req, timeout=120) as resp:
-                data = json.loads(resp.read())
+            def _do_zb() -> bytes:
+                with urllib.request.urlopen(zb_req, timeout=120) as resp:
+                    return resp.read()
+            data = json.loads(_http_with_retry(_do_zb))
         except Exception as e:
             logger.warning(f"ZeroBounce batch error: {e}")
-            result.update({e: {"status": "unknown", "sub_status": "api_error"} for e in batch})
+            result.update({addr: {"status": "unknown", "sub_status": "api_error"} for addr in batch})
             continue
 
         for item in (data.get("email_batch") or []):

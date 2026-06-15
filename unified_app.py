@@ -263,35 +263,46 @@ _IDLE_STATUS = {
 }
 
 def _scan_current_status() -> dict:
-    try:
-        if _SCAN_STATUS_FILE.exists():
-            raw = _SCAN_STATUS_FILE.read_text(encoding="utf-8").strip()
-            if raw:
-                st = json.loads(raw)
-                # If process has exited but file still says running, correct it
-                with _scan_proc_lock:
-                    if _scan_proc is not None and _scan_proc.poll() is not None:
-                        if st.get("status") == "running":
-                            st["status"]   = "idle"
-                            st["progress"] = "Done." if _scan_proc.returncode == 0 else "Stopped."
-                            # Auto-update Product Intelligence whenever a scan finishes
-                            if _scan_proc.returncode == 0:
-                                try:
-                                    oracle_db.aggregate_product_intel()
-                                except Exception:
-                                    logger.warning("aggregate_product_intel failed after scan completed", exc_info=True)
-                return st
-    except Exception:
-        logger.warning("Failed to read scan status file", exc_info=True)
+    for _attempt in range(2):
+        try:
+            if _SCAN_STATUS_FILE.exists():
+                raw = _SCAN_STATUS_FILE.read_text(encoding="utf-8").strip()
+                if raw:
+                    st = json.loads(raw)
+                    # If process has exited but file still says running, correct it
+                    with _scan_proc_lock:
+                        if _scan_proc is not None and _scan_proc.poll() is not None:
+                            if st.get("status") == "running":
+                                st["status"]   = "idle"
+                                st["progress"] = "Done." if _scan_proc.returncode == 0 else "Stopped."
+                                # Auto-update Product Intelligence whenever a scan finishes
+                                if _scan_proc.returncode == 0:
+                                    try:
+                                        oracle_db.aggregate_product_intel()
+                                    except Exception:
+                                        logger.warning("aggregate_product_intel failed after scan completed", exc_info=True)
+                    return st
+            break  # file missing or empty — no retry needed
+        except (json.JSONDecodeError, ValueError):
+            if _attempt == 0:
+                time.sleep(0.1)  # file was mid-write; retry once
+                continue
+            logger.warning("Failed to parse scan status file after retry", exc_info=True)
+        except Exception:
+            logger.warning("Failed to read scan status file", exc_info=True)
+            break
     return dict(_IDLE_STATUS)
+
+_LOG_LINE_CAP = 500
 
 def _scan_get_log() -> list:
     try:
         if _SCAN_LOG_FILE.exists():
-            return [
+            lines = [
                 line for line in _SCAN_LOG_FILE.read_text(encoding="utf-8").splitlines()
                 if line
             ]
+            return lines[-_LOG_LINE_CAP:]
     except Exception:
         logger.warning("Failed to read scan log file", exc_info=True)
     return []
@@ -1022,6 +1033,66 @@ async def api_delete_contact(contact_id: int, current_user: dict = Depends(oracl
     _invalidate_companies_cache()
     _invalidate_dashboard_cache()
     return {"deleted": True, "contact_id": contact_id}
+
+
+@app.post("/api/contacts/revalidate-emails")
+async def api_revalidate_emails(
+    request: Request,
+    current_user: dict = Depends(oracle_auth.require_analyst),
+):
+    """
+    Bulk ZeroBounce re-validation for contacts whose email_validation_status
+    is not 'valid'. Useful after the first scan to clean up unknown/catch-all
+    results. Runs in a background thread; returns immediately with a job count.
+    """
+    from src.apollo_enrichment import _zb_validate_batch
+
+    body = await request.json()
+    company_id: Optional[int] = body.get("company_id")  # None = all companies
+
+    zb_key = os.environ.get("ZEROBOUNCE_API_KEY", "").strip()
+    if not zb_key:
+        return JSONResponse({"error": "ZeroBounce API key not configured"}, status_code=400)
+
+    def _do_revalidate():
+        with oracle_db.db_cursor(commit=False) as cur:
+            if company_id:
+                cur.execute(
+                    """SELECT id, email FROM company_contacts
+                       WHERE company_id = %s AND email IS NOT NULL AND email != ''
+                         AND (email_validation_status IS NULL
+                              OR email_validation_status NOT IN ('valid', 'invalid', 'spamtrap'))""",
+                    (company_id,),
+                )
+            else:
+                cur.execute(
+                    """SELECT id, email FROM company_contacts
+                       WHERE email IS NOT NULL AND email != ''
+                         AND (email_validation_status IS NULL
+                              OR email_validation_status NOT IN ('valid', 'invalid', 'spamtrap'))
+                       LIMIT 1000"""
+                )
+            rows = cur.fetchall()
+
+        if not rows:
+            return
+
+        emails = [r["email"] for r in rows]
+        results = _zb_validate_batch(emails, zb_key)
+
+        with oracle_db.db_cursor() as cur:
+            for row in rows:
+                status_info = results.get(row["email"].lower(), {})
+                status = status_info.get("status", "unknown")
+                cur.execute(
+                    "UPDATE company_contacts SET email_validation_status = %s WHERE id = %s",
+                    (status, row["id"]),
+                )
+
+        logger.info(f"[revalidate-emails] validated {len(emails)} contacts")
+
+    threading.Thread(target=_do_revalidate, daemon=True).start()
+    return {"queued": True, "message": "Re-validation started in background"}
 
 
 @app.post("/api/contacts/{contact_id}/predict-email")

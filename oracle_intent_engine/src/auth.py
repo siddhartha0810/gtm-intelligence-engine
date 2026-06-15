@@ -36,11 +36,20 @@ _JWT_SECRET = os.environ.get("JWT_SECRET", "").strip()
 if not _JWT_SECRET:
     import logging as _log
     import secrets as _sec
-    _JWT_SECRET = _sec.token_hex(32)
+    from pathlib import Path as _Path
+    _KEY_FILE = _Path(__file__).parent.parent / ".jwt_fallback_key"
+    if _KEY_FILE.exists():
+        _JWT_SECRET = _KEY_FILE.read_text().strip()
+    else:
+        _JWT_SECRET = _sec.token_hex(32)
+        try:
+            _KEY_FILE.write_text(_JWT_SECRET)
+        except Exception:
+            pass
     _log.getLogger(__name__).warning(
-        "JWT_SECRET is not set — using a random ephemeral key. "
-        "All sessions will be invalidated on restart. "
-        "Set JWT_SECRET in oracle_intent_engine/.env to fix this."
+        "JWT_SECRET is not set — using a persisted fallback key (%s). "
+        "Sessions survive restarts but set JWT_SECRET in oracle_intent_engine/.env for production.",
+        _KEY_FILE,
     )
 _JWT_ALG     = "HS256"
 _TOKEN_HOURS = 12

@@ -567,6 +567,7 @@ def _persist(companies: list[dict], run_id: int = None) -> tuple[int, int]:
     from rapidfuzz import fuzz as _fuzz
 
     new_count = known_count = 0
+    signal_company_ids: list[int] = []
 
     # Load existing company names once for fuzzy dedup.
     # Prevents name variants (e.g. "Ford Motor Company" vs "Ford") creating duplicates.
@@ -622,6 +623,15 @@ def _persist(companies: list[dict], run_id: int = None) -> tuple[int, int]:
                     confidence=sig.get("confidence", 0.5),
                     scan_run_id=run_id,
                 )
+                signal_company_ids.append(company_id)
         except Exception as e:
             _log(f"  Persist error for '{company.get('company_name')}': {e}")
+
+    # Batch-update signal_count once per scan instead of per-insert (avoids N+1).
+    if signal_company_ids:
+        try:
+            db.batch_update_signal_counts(signal_company_ids)
+        except Exception as e:
+            _log(f"  Warning: batch_update_signal_counts failed: {e}")
+
     return new_count, known_count
