@@ -14,6 +14,98 @@ const SERVICES = [
   { id: 'apify',       label: 'Apify Token',          desc: 'Powers LinkedIn and web scraping actors',               placeholder: 'apify_api_xxxxxxxx',                           color: '#6366f1' },
 ]
 
+function ZoomInfoCard({ status, onTest }: { status: Status; onTest: (u: string, p: string) => Promise<void> }) {
+  const [showPwd, setShowPwd] = useState(false)
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
+  const [msg, setMsg] = useState('')
+  const isTesting = status === 'testing'
+
+  const statusStyle: Record<Status, { text: string; bg: string; color: string }> = {
+    connected:    { text: 'Connected',      bg: 'rgba(16,185,129,0.12)', color: '#34d399' },
+    error:        { text: 'Auth Error',     bg: 'rgba(239,68,68,0.1)',   color: '#f87171' },
+    unconfigured: { text: 'Not configured', bg: 'rgba(107,114,128,0.15)',color: '#9ca3af' },
+    testing:      { text: 'Testing…',      bg: 'rgba(59,130,246,0.12)', color: '#60a5fa' },
+    loading:      { text: 'Loading…',      bg: 'rgba(107,114,128,0.15)',color: '#9ca3af' },
+  }
+
+  const st = statusStyle[status]
+  const borderColor = status === 'error' ? 'rgba(239,68,68,0.4)' : status === 'connected' ? 'rgba(16,185,129,0.4)' : '#d1d5db'
+  const canTest = username.trim().length > 0 && password.trim().length > 0
+
+  const handleTest = async () => {
+    setMsg('')
+    const result: TestResponse = await fetch('/config/test/zoominfo', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: username.trim(), password: password.trim() }),
+    }).then(r => r.json()).catch(() => ({ status: 'error', message: 'Network error' }))
+    setMsg(result.message || '')
+    await onTest(username.trim(), password.trim())
+  }
+
+  return (
+    <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 12, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ width: 36, height: 36, borderRadius: 8, background: 'rgba(99,102,241,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <Zap size={15} color="#6366f1" />
+          </div>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: '#0f172a' }}>ZoomInfo Credentials</div>
+            <div style={{ fontSize: 12, color: '#64748b', marginTop: 3 }}>Alternative contact-discovery provider — username + password</div>
+          </div>
+        </div>
+        <span style={{ fontSize: 12, padding: '3px 10px', borderRadius: 999, fontWeight: 500, background: st.bg, color: st.color, flexShrink: 0, marginLeft: 8 }}>
+          {st.text}
+        </span>
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
+        <input
+          type="text"
+          value={username}
+          onChange={e => setUsername(e.target.value)}
+          placeholder="ZoomInfo username (email)"
+          style={{ width: '100%', padding: '9px 12px', borderRadius: 8, background: '#ffffff', border: `1px solid ${borderColor}`, color: '#0f172a', fontSize: 13, outline: 'none', boxSizing: 'border-box' }}
+        />
+        <div style={{ position: 'relative' }}>
+          <input
+            type={showPwd ? 'text' : 'password'}
+            value={password}
+            onChange={e => setPassword(e.target.value)}
+            placeholder="ZoomInfo password"
+            style={{ width: '100%', padding: '9px 40px 9px 12px', borderRadius: 8, background: '#ffffff', border: `1px solid ${borderColor}`, color: '#0f172a', fontSize: 13, outline: 'none', boxSizing: 'border-box' }}
+          />
+          <button onClick={() => setShowPwd(s => !s)} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#475569', display: 'flex' }}>
+            {showPwd ? <EyeOff size={14} /> : <Eye size={14} />}
+          </button>
+        </div>
+      </div>
+
+      {msg && (
+        <div style={{ fontSize: 12, color: status === 'connected' ? '#34d399' : '#f87171', marginBottom: 10 }}>
+          {msg}
+        </div>
+      )}
+
+      <button
+        onClick={handleTest}
+        disabled={isTesting || !canTest}
+        style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 8, border: '1px solid #e2e8f0', background: 'transparent', color: status === 'connected' ? '#10b981' : status === 'error' ? '#ef4444' : '#94a3b8', fontSize: 12, cursor: (!canTest || isTesting) ? 'not-allowed' : 'pointer', opacity: (!canTest || isTesting) ? 0.5 : 1 }}
+      >
+        {isTesting
+          ? <><Loader size={11} style={{ animation: 'spin 1s linear infinite' }} /> Testing...</>
+          : status === 'connected'
+          ? <><Check size={11} /> Test passed</>
+          : status === 'error'
+          ? <><AlertCircle size={11} /> Test failed — retry</>
+          : <><Zap size={11} /> Test connection</>}
+      </button>
+    </div>
+  )
+}
+
 const statusStyle: Record<Status, { text: string; bg: string; color: string }> = {
   connected:    { text: 'Connected',     bg: 'rgba(16,185,129,0.12)', color: '#34d399' },
   error:        { text: 'Auth Error',    bg: 'rgba(239,68,68,0.1)',   color: '#f87171' },
@@ -104,9 +196,8 @@ function ApiCard({
 }
 
 export default function Settings() {
-  const [statuses, setStatuses] = useState<Record<string, Status>>(
-    Object.fromEntries(SERVICES.map(s => [s.id, 'loading' as Status]))
-  )
+  const initialStatuses = Object.fromEntries([...SERVICES.map(s => [s.id, 'loading' as Status]), ['zoominfo', 'loading' as Status]])
+  const [statuses, setStatuses] = useState<Record<string, Status>>(initialStatuses)
   const [confirm, setConfirm] = useState<{ title: string; message: string; action: () => void } | null>(null)
 
   // Load real status on mount
@@ -138,6 +229,29 @@ export default function Settings() {
       toast.success(`${result.message || `${serviceId} connected`} — key saved`)
     } else {
       toast.error(result.message || `${serviceId} auth failed`)
+    }
+  }
+
+  const handleTestZoomInfo = async (username: string, password: string) => {
+    setStatuses(prev => ({ ...prev, zoominfo: 'testing' }))
+    const result: TestResponse = await fetch('/config/test/zoominfo', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    }).then(r => r.json()).catch(() => ({ status: 'error', message: 'Could not reach server' }))
+
+    const newStatus: Status = result.status === 'connected' ? 'connected' : 'error'
+    setStatuses(prev => ({ ...prev, zoominfo: newStatus }))
+
+    if (newStatus === 'connected') {
+      await fetch('/config/save/zoominfo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+      }).catch(() => null)
+      toast.success(`${result.message || 'ZoomInfo connected'} — credentials saved`)
+    } else {
+      toast.error(result.message || 'ZoomInfo auth failed')
     }
   }
 
@@ -237,6 +351,10 @@ const [normalizingProducts, setNormalizingProducts] = useState(false)
             onTest={(key) => handleTest(svc.id, key)}
           />
         ))}
+        <ZoomInfoCard
+          status={statuses['zoominfo'] || 'unconfigured'}
+          onTest={handleTestZoomInfo}
+        />
       </div>
 
       {/* Maintenance */}

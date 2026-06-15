@@ -1503,26 +1503,55 @@ async def config_status(current_user: dict = Depends(oracle_auth.require_user)):
         except Exception:
             return "error"
 
-    hs, ap, zb, af = await asyncio.gather(
+    async def _test_zoominfo(uname: str, pwd: str) -> str:
+        if not uname or not pwd:
+            return "unconfigured"
+        try:
+            async with httpx.AsyncClient(timeout=10) as c:
+                r = await c.post(
+                    "https://api.zoominfo.com/authenticate",
+                    json={"username": uname, "password": pwd},
+                    headers={"Content-Type": "application/json"},
+                )
+            return "connected" if r.status_code == 200 and r.json().get("jwt") else "error"
+        except Exception:
+            return "error"
+
+    hs, ap, zb, af, zi = await asyncio.gather(
         _test_hubspot(os.getenv("HUBSPOT_API_KEY", "") or os.getenv("HUBSPOT_TOKEN", "")),
         _test_apollo(APOLLO_API_KEY),
         _test_zerobounce(ZEROBOUNCE_API_KEY),
         _test_apify(APIFY_TOKEN),
+        _test_zoominfo(ZOOMINFO_USERNAME, ZOOMINFO_PASSWORD),
     )
-    return {"hubspot": hs, "apollo": ap, "zerobounce": zb, "apify": af}
+    return {"hubspot": hs, "apollo": ap, "zerobounce": zb, "apify": af, "zoominfo": zi}
 
 @app.post("/config/test/{service}")
 async def config_test(service: str, request: Request,
                       current_user: dict = Depends(oracle_auth.require_admin)):
     """Test a single API key supplied in the request body."""
     data = await request.json()
-    key  = (data.get("key") or "").strip()
-
-    if not key:
-        return JSONResponse({"status": "error", "message": "No key provided"}, status_code=400)
 
     try:
         async with httpx.AsyncClient(timeout=10) as c:
+            if service == "zoominfo":
+                uname = (data.get("username") or "").strip()
+                pwd   = (data.get("password") or "").strip()
+                if not uname or not pwd:
+                    return JSONResponse({"status": "error", "message": "Username and password required"}, status_code=400)
+                r = await c.post(
+                    "https://api.zoominfo.com/authenticate",
+                    json={"username": uname, "password": pwd},
+                    headers={"Content-Type": "application/json"},
+                )
+                ok = r.status_code == 200 and bool(r.json().get("jwt"))
+                return {"status": "connected" if ok else "error",
+                        "message": "ZoomInfo authenticated" if ok else f"ZoomInfo auth failed (HTTP {r.status_code})"}
+
+            key = (data.get("key") or "").strip()
+            if not key:
+                return JSONResponse({"status": "error", "message": "No key provided"}, status_code=400)
+
             if service == "hubspot":
                 r = await c.get(
                     "https://api.hubapi.com/crm/v3/objects/contacts",
@@ -1543,8 +1572,8 @@ async def config_test(service: str, request: Request,
             elif service == "zerobounce":
                 r = await c.get("https://api.zerobounce.net/v2/getcredits",
                                 params={"api_key": key})
-                data = r.json() if r.status_code == 200 else {}
-                credits = int(data.get("Credits", -1))
+                resp_data = r.json() if r.status_code == 200 else {}
+                credits = int(resp_data.get("Credits", -1))
                 ok = credits >= 0
                 return {"status": "connected" if ok else "error",
                         "message": f"ZeroBounce connected — {credits} credits remaining" if ok else "Invalid ZeroBounce key"}
@@ -1553,9 +1582,9 @@ async def config_test(service: str, request: Request,
                 r = await c.get("https://api.apify.com/v2/users/me",
                                 headers={"Authorization": f"Bearer {key}"})
                 ok = r.status_code == 200
-                username = r.json().get("data", {}).get("username", "") if ok else ""
+                apify_user = r.json().get("data", {}).get("username", "") if ok else ""
                 return {"status": "connected" if ok else "error",
-                        "message": f"Apify connected as {username}" if ok else "Invalid Apify token"}
+                        "message": f"Apify connected as {apify_user}" if ok else "Invalid Apify token"}
 
             else:
                 return JSONResponse({"status": "error", "message": "Unknown service"}, status_code=400)
@@ -1566,11 +1595,52 @@ async def config_test(service: str, request: Request,
 @app.post("/config/save/{service}")
 async def config_save(service: str, request: Request,
                       current_user: dict = Depends(oracle_auth.require_admin)):
-    """Persist an API key to lead_enrichment_engine/.env and reload it in memory."""
-    global APOLLO_API_KEY, ZEROBOUNCE_API_KEY, APIFY_TOKEN
+    """Persist an API key to oracle_intent_engine/.env and reload it in memory."""
+    global APOLLO_API_KEY, ZEROBOUNCE_API_KEY, APIFY_TOKEN, ZOOMINFO_USERNAME, ZOOMINFO_PASSWORD
 
-    data = await request.json()
-    key  = (data.get("key") or "").strip()
+    data     = await request.json()
+    env_file = ENRICH_DIR / ".env"
+
+    def _write_env(var_updates: dict[str, str]) -> None:
+        lines = env_file.read_text(encoding="utf-8").splitlines() if env_file.exists() else []
+        result: list[str] = []
+        written = set()
+        for line in lines:
+            matched = False
+            for var, val in var_updates.items():
+                if line.strip().startswith(f"{var}=") or line.strip().startswith(f"{var} ="):
+                    result.append(f"{var}={val}")
+                    written.add(var)
+                    matched = True
+                    break
+            if not matched:
+                result.append(line)
+        for var, val in var_updates.items():
+            if var not in written:
+                result.append(f"{var}={val}")
+        env_file.write_text("\n".join(result) + "\n", encoding="utf-8")
+
+    if service == "zoominfo":
+        uname = (data.get("username") or "").strip()
+        pwd   = (data.get("password") or "").strip()
+        if not uname or not pwd:
+            return JSONResponse({"ok": False, "message": "Username and password required"}, status_code=400)
+        _write_env({"ZOOMINFO_USERNAME": uname, "ZOOMINFO_PASSWORD": pwd})
+        os.environ["ZOOMINFO_USERNAME"] = uname
+        os.environ["ZOOMINFO_PASSWORD"] = pwd
+        ZOOMINFO_USERNAME = uname
+        ZOOMINFO_PASSWORD = pwd
+        oracle_cfg.ZOOMINFO_USERNAME = uname
+        oracle_cfg.ZOOMINFO_PASSWORD = pwd
+        # Invalidate any cached JWT so the new credentials are picked up immediately
+        try:
+            from src import zoominfo_client as _zi
+            _zi._jwt_cache["token"] = ""
+        except Exception:
+            pass
+        return {"ok": True, "message": "ZoomInfo credentials saved and active"}
+
+    key = (data.get("key") or "").strip()
     if not key:
         return JSONResponse({"ok": False, "message": "No key provided"}, status_code=400)
 
@@ -1583,22 +1653,8 @@ async def config_save(service: str, request: Request,
     if service not in _VAR_MAP:
         return JSONResponse({"ok": False, "message": "Unknown service"}, status_code=400)
 
-    env_var  = _VAR_MAP[service]
-    env_file = ENRICH_DIR / ".env"
-
-    # Rewrite .env — update existing line or append
-    lines   = env_file.read_text(encoding="utf-8").splitlines() if env_file.exists() else []
-    found   = False
-    updated = []
-    for line in lines:
-        if line.strip().startswith(f"{env_var}=") or line.strip().startswith(f"{env_var} ="):
-            updated.append(f"{env_var}={key}")
-            found = True
-        else:
-            updated.append(line)
-    if not found:
-        updated.append(f"{env_var}={key}")
-    env_file.write_text("\n".join(updated) + "\n", encoding="utf-8")
+    env_var = _VAR_MAP[service]
+    _write_env({env_var: key})
 
     # Hot-reload into os.environ and module-level globals so current process picks it up
     os.environ[env_var] = key
