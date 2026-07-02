@@ -28,7 +28,24 @@ dnspython
 sqlalchemy
 psycopg2-binary
 
+# ── Campaign Builder ─────────────────────────────────────────────────────────
+trafilatura>=1.9.0
+anthropic>=0.34.0
+
+# ── Observability ────────────────────────────────────────────────────────────
+prometheus-client>=0.20.0
+
+# ── Job queue (optional — only used when REDIS_URL is set) ───────────────────
+redis>=5.0.0
+rq>=1.16.0
+
 # ── Optional (Oracle LLM scraping) ───────────────────────────────────────────
 # After install: playwright install chromium
 # scrapegraphai>=1.11.0
 httpx>=0.27.0
+
+# ── Optional (agentic_harvester_signal.py stealth fetching) ──────────────────
+# After install: scrapling install
+# Only needed for watch-list URLs behind Cloudflare/bot-protection — the
+# harvester falls back to plain requests without it.
+# scrapling[fetchers]>=0.2.0

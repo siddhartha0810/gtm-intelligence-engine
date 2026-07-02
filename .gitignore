@@ -60,9 +60,12 @@ lead_enrichment_engine/uploads/
 # ── Runtime state files ───────────────────────────────────────────────────────
 _scan_log.txt
 _scan_status.json
-_scan_worker.pid
 _enrich_log.txt
 _enrich_status.json
+*.pid
+
+# ── Local scrape/cache directories ────────────────────────────────────────────
+graphify-out/
 
 # ── One-off scripts (data migration / audit / fix tools) ─────────────────────
 scripts/
@@ -110,6 +113,9 @@ Desktop.ini
 *.dump
 *.sqlite
 *.db
+*.db-shm
+*.db-wal
+*.rdb
 
 # ── Playwright / browser ─────────────────────────────────────────────────────
 playwright-report/

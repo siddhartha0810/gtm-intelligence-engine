@@ -1,0 +1,70 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${DB_NAME:-oracle_intent}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-demo_password}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-oracle_intent}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    environment: &app_env
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-oracle_intent}
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-demo_password}
+      JWT_SECRET: ${JWT_SECRET:-demo-secret-do-not-use-in-production}
+      SEED_DEMO_DATA: "true"
+      REDIS_URL: redis://redis:6379/0
+      RUN_STATE_DIR: /run-state
+      # Optional — real API keys enable live enrichment/scraping features.
+      # Left empty here so the demo runs with zero external accounts.
+      APOLLO_API_KEY: ${APOLLO_API_KEY:-}
+      ZEROBOUNCE_API_KEY: ${ZEROBOUNCE_API_KEY:-}
+      HUBSPOT_API_KEY: ${HUBSPOT_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    volumes:
+      # Scan/enrich status+log+pid files are written by scan_worker.py /
+      # enrichment_worker.py inside the worker container and read back by
+      # this app container. A small dedicated mount (not the whole /app) so
+      # rebuilding the image doesn't leave stale code shadowed by the volume.
+      - run_state:/run-state
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build: .
+    command: ["python", "worker.py"]
+    environment: *app_env
+    volumes:
+      - run_state:/run-state
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  run_state:

@@ -91,6 +91,13 @@ CONTACTS_CSV_PATH = os.getenv(
 FLASK_SECRET_KEY = os.getenv("FLASK_SECRET_KEY", "oracle-intent-secret")
 FLASK_PORT = int(os.getenv("FLASK_PORT", "5001"))
 
+# agentic_harvester_signal.py watch list — comma-separated URLs, e.g. a
+# procurement portal's open-tenders page or an Oracle partner directory.
+# Adding a new source to watch is editing this list, not writing a scraper.
+AGENTIC_HARVESTER_URLS = [
+    u.strip() for u in os.getenv("AGENTIC_HARVESTER_URLS", "").split(",") if u.strip()
+]
+
 # ── Role suffixes used by the auto-generator for new taxonomy products ────────
 # When a product is added to the taxonomy but has no entry in QUERIES_BY_PRODUCT,
 # these suffixes are crossed with the canonical name and multi-word aliases to

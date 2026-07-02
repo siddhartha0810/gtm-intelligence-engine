@@ -18,6 +18,7 @@ const ReviewQueue         = lazy(() => import('./pages/ReviewQueue'))
 const IntentData          = lazy(() => import('./pages/IntentData'))
 const Settings            = lazy(() => import('./pages/Settings'))
 const Reporting           = lazy(() => import('./pages/Reporting'))
+const Metrics              = lazy(() => import('./pages/Metrics'))
 const TechnologyProfiles  = lazy(() => import('./pages/TechnologyProfiles'))
 const ListImport          = lazy(() => import('./pages/ListImport'))
 const Events              = lazy(() => import('./pages/Events'))
@@ -28,6 +29,9 @@ const HubSpotSync         = lazy(() => import('./pages/HubSpotSync'))
 const ProductIntelligence = lazy(() => import('./pages/ProductIntelligence'))
 const Recruitment         = lazy(() => import('./pages/Recruitment'))
 const Profile             = lazy(() => import('./pages/Profile'))
+const PeopleSearch        = lazy(() => import('./pages/PeopleSearch'))
+const CampaignBuilder     = lazy(() => import('./pages/CampaignBuilder'))
+const Campaigns           = lazy(() => import('./pages/Campaigns'))
 
 function PageLoader() {
   return (
@@ -131,6 +135,9 @@ export default function App() {
                   <Route path="/manufacturer-intelligence"  element={<ManufacturerIntel />} />
                   <Route path="/product-intelligence"       element={<ProductIntelligence />} />
                   <Route path="/profile"                    element={<Profile user={user ?? undefined} />} />
+                  <Route path="/people-search"              element={<PeopleSearch />} />
+                  <Route path="/campaign-builder"           element={<CampaignBuilder />} />
+                  <Route path="/campaigns"                  element={<Campaigns />} />
                 </>}
 
                 {/* analyst+ */}
@@ -140,6 +147,7 @@ export default function App() {
                   <Route path="/technology-profiles" element={<TechnologyProfiles />} />
                   <Route path="/list-import"         element={<ListImport />} />
                   <Route path="/reporting"           element={<Reporting />} />
+                  <Route path="/metrics"             element={<Metrics />} />
                 </>}
 
                 {/* admin+ */}

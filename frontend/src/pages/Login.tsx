@@ -45,7 +45,7 @@ export default function Login({ onLogin }: Props) {
           <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 56, height: 56, borderRadius: 16, background: 'linear-gradient(135deg,#3b82f6,#6366f1)', marginBottom: 16 }}>
             <Zap size={28} color="#fff" />
           </div>
-          <h1 style={{ color: '#0f172a', fontSize: 24, fontWeight: 700, margin: 0 }}>Inoapps Data Tool</h1>
+          <h1 style={{ color: '#0f172a', fontSize: 24, fontWeight: 700, margin: 0 }}>GTM DATA TOOL</h1>
           <p style={{ color: '#64748b', fontSize: 14, marginTop: 6 }}>Oracle Intelligence Platform</p>
         </div>
 

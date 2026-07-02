@@ -1,11 +1,13 @@
 """Orchestrates the full Oracle intent scan: scrape, classify, aggregate, persist, export."""
 
 import threading
+import time as _time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from collections import deque
 from src.utils import get_logger, is_valid_company_name
 from src import config
+from src import metrics as _metrics
 from src import tech_profiles
 from src import database as db
 from src import phase_classifier as clf
@@ -34,6 +36,7 @@ from src.signals.oracle_community_signal import OracleCommunitySignal
 from src.signals.oracle_event_signal import OracleEventSignal
 from src.signals.company_pages_signal import CompanyPagesSignal
 from src.signals.g2_reviews_signal import G2ReviewsSignal
+from src.signals.agentic_harvester_signal import AgenticHarvesterSignal
 
 logger = get_logger(__name__)
 
@@ -76,6 +79,8 @@ def run_scan(
     max_pages: int = None,
     sources: list[str] = None,
     jde_manufacturing_focus: bool = False,
+    campaign_id: int | None = None,
+    campaign_keywords: list[str] | None = None,
 ) -> dict:
     global _stop_requested
 
@@ -84,6 +89,8 @@ def run_scan(
 
     _stop_requested = False
     _log_buffer.clear()
+    _scan_start_time = _time.monotonic()
+    _metrics.scan_in_progress.set(1)
 
     try:
         job_queries = job_queries or (
@@ -134,6 +141,7 @@ def run_scan(
             "company_pages":    CompanyPagesSignal(),
             "home_builders":    HomeBuildersSignal(),
             "g2_reviews":       G2ReviewsSignal(),
+            "agentic_harvester": AgenticHarvesterSignal(),
         }
 
         raw_signals: list[dict] = []
@@ -299,6 +307,18 @@ def run_scan(
             except Exception as e:
                 _log(f"  [g2_reviews] ERROR: {e}")
 
+        # agentic harvester — arbitrary watch-list URLs, no dedicated parser needed
+        if "agentic_harvester" in sources and not _is_stopped():
+            _current_scan["progress"] = "Running agentic harvester on watch-list URLs..."
+            _log("▶ Starting AGENTIC HARVESTER (config.AGENTIC_HARVESTER_URLS)")
+            try:
+                results = scrapers["agentic_harvester"].fetch(location=location, max_pages=max_pages)
+                raw_signals.extend(results)
+                _current_scan["raw_signals"] = len(raw_signals)
+                _log(f"✓ AGENTIC HARVESTER done — {len(results)} signals")
+            except Exception as e:
+                _log(f"  [agentic_harvester] ERROR: {e}")
+
         # procurement / rfp tenders
         if "procurement" in sources and not _is_stopped():
             _current_scan["progress"] = "Scanning procurement tenders..."
@@ -345,11 +365,18 @@ def run_scan(
                 title=sig.get("job_title", ""),
                 description=sig.get("description", ""),
                 source=sig.get("source", ""),
+                campaign_keywords=campaign_keywords,
             )
             if sig.get("_phase_override"):
                 result["phase"] = sig.pop("_phase_override")
                 result["phase_label"] = clf.PHASE_LABELS.get(result["phase"], result["phase"])
                 result["confidence"] = min(result["confidence"] + 0.2, 1.0)
+
+            _metrics.signals_detected_total.labels(
+                signal_type=sig.get("signal_type", "unknown"),
+                phase=result.get("phase", "unknown"),
+                source=sig.get("source", "unknown"),
+            ).inc()
             if sig.get("_product_hint") and sig["_product_hint"] != "Oracle Cloud":
                 hint = sig.pop("_product_hint")
                 # Normalize hint against active taxonomy canonical names so stale
@@ -521,6 +548,24 @@ def run_scan(
         db.finish_scan_run(run_id, len(classified), new_count, status=status)
         _current_scan.update({"status": "idle", "progress": "Done.", "companies_found": new_count})
 
+        if campaign_id:
+            try:
+                db.update_campaign_run_stats(
+                    campaign_id=campaign_id,
+                    run_id=run_id,
+                    signals=len(classified),
+                    companies=new_count,
+                )
+            except Exception:
+                pass
+
+        # Prometheus metrics
+        _metrics.scan_in_progress.set(0)
+        _metrics.last_scan_duration_seconds.set(_time.monotonic() - _scan_start_time)
+        _metrics.last_scan_companies_found.set(new_count)
+        _metrics.last_scan_signals_found.set(len(classified))
+        _metrics.companies_found_total.inc(new_count)
+
         _log(f"─── Scan {status.upper()} ───")
         _log(f"   Signals: {len(classified)}  |  New companies: {new_count}  |  Already known: {known_count}")
 
@@ -539,6 +584,7 @@ def run_scan(
         if _current_scan.get("run_id"):
             db.finish_scan_run(_current_scan["run_id"], 0, 0, status="failed")
         _current_scan.update({"status": "idle", "progress": f"Failed: {e}"})
+        _metrics.scan_in_progress.set(0)
         return {"error": str(e)}
 
     finally:
@@ -547,6 +593,7 @@ def run_scan(
 def run_scan_async(
     job_queries=None, news_queries=None,
     location="", max_pages=None, sources=None,
+    campaign_id=None, campaign_keywords=None,
 ):
     thread = threading.Thread(
         target=run_scan,
@@ -556,6 +603,8 @@ def run_scan_async(
             location=location,
             max_pages=max_pages,
             sources=sources,
+            campaign_id=campaign_id,
+            campaign_keywords=campaign_keywords,
         ),
         daemon=True,
     )

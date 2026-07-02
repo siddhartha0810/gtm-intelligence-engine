@@ -302,18 +302,81 @@ def detect_phase(title: str, description: str) -> tuple[str, float]:
     return best_phase, min(confidence, 1.0)
 
 
-def classify(title: str, description: str, source: str = "") -> dict:
+def detect_campaign_product(title: str, description: str,
+                             keywords: list[str]) -> tuple[str | None, float]:
+    """
+    Generic product detector for universal campaigns.
+
+    Instead of checking the Oracle taxonomy, checks whether any of the
+    campaign's own keywords appear in the text. Returns the best-matching
+    keyword as the detected product name.
+
+    Args:
+        title:       Job title or article headline
+        description: Full text body
+        keywords:    Campaign keywords, e.g. ["Salesforce", "SFDC", "Salesforce CRM"]
+
+    Returns:
+        (matched_keyword_or_None, confidence_0_to_1)
+    """
+    if not keywords:
+        return None, 0.0
+
+    combined = f"{title} {description}".lower()
+    title_l  = title.lower() if title else ""
+
+    best_kw: str | None = None
+    best_score = 0.0
+
+    for kw in keywords:
+        kw_l = kw.strip().lower()
+        if not kw_l:
+            continue
+        # Title match is worth more — title is the most reliable field
+        title_hits = title_l.count(kw_l)
+        desc_hits  = combined.count(kw_l) - title_hits
+        score = (title_hits * 2.0) + (desc_hits * 1.0)
+        if score > best_score:
+            best_score = score
+            best_kw = kw.strip()
+
+    if best_score == 0 or best_kw is None:
+        return None, 0.0
+
+    # Confidence: 1 title hit = 0.60, 2+ hits = 0.80+, keyword in title alone = 0.75
+    confidence = min(0.40 + (best_score * 0.15), 1.0)
+    return best_kw, round(confidence, 2)
+
+
+def classify(title: str, description: str, source: str = "",
+             campaign_keywords: list[str] | None = None) -> dict:
+    """
+    Classify a raw signal into product + phase + confidence.
+
+    Args:
+        title:             Job title or article headline
+        description:       Full text
+        source:            Signal source name (e.g. "indeed", "news")
+        campaign_keywords: If provided, use generic keyword matching instead of
+                           the Oracle taxonomy. Pass the campaign's keywords list.
+
+    Returns:
+        {oracle_product, phase, phase_label, confidence}
+    """
     title = clean_text(title)
     description = clean_text(description)
 
-    product, prod_conf = detect_oracle_product(title, description)
+    if campaign_keywords:
+        product, prod_conf = detect_campaign_product(title, description, campaign_keywords)
+    else:
+        product, prod_conf = detect_oracle_product(title, description)
+
     phase, phase_conf = detect_phase(title, description)
 
-    # prod_conf is 0.0 when product is None (unclassified) — combined stays low
     combined_confidence = round((prod_conf + phase_conf) / 2, 2)
 
     return {
-        "oracle_product": product,  # None means no specific product detected
+        "oracle_product": product,
         "phase": phase,
         "phase_label": PHASE_LABELS.get(phase, phase),
         "confidence": combined_confidence,

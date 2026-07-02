@@ -53,9 +53,13 @@ def _gen_unique_key() -> str:
     """64-char URL-safe unique key (doc §6.1 — nanoid equivalent)."""
     return secrets.token_urlsafe(48)  # 48 bytes → 64-char base64url string
 
-import psycopg2
-import psycopg2.extras
-import psycopg2.pool
+try:
+    import psycopg2
+    import psycopg2.extras
+    import psycopg2.pool
+    _PSYCOPG2_AVAILABLE = True
+except ImportError:
+    _PSYCOPG2_AVAILABLE = False
 
 logger = get_logger(__name__)
 
@@ -63,7 +67,7 @@ logger = get_logger(__name__)
 # ThreadedConnectionPool(max=10) — safe for up to 10 concurrent API request threads.
 # The pool is created lazily on first use and held open for the process lifetime.
 # ORACLE_PG_DSN env var takes priority over DB_* vars (set by unified_app.py at boot).
-_pool: Optional[psycopg2.pool.ThreadedConnectionPool] = None
+_pool = None  # type: ignore[assignment]  # psycopg2.pool.ThreadedConnectionPool when PG is active
 _pool_lock = threading.Lock()
 
 def _dsn() -> str:
@@ -78,7 +82,7 @@ def _dsn() -> str:
         )
     return dsn
 
-def _get_pool() -> psycopg2.pool.ThreadedConnectionPool:
+def _get_pool():
     global _pool
     with _pool_lock:
         if _pool is None or _pool.closed:
@@ -598,6 +602,47 @@ CREATE TABLE IF NOT EXISTS review_queue (
     # Partial index excludes pre-backfill empty-string rows.
     "CREATE UNIQUE INDEX IF NOT EXISTS idx_companies_unique_key ON companies(unique_key) WHERE unique_key != ''",
     "CREATE UNIQUE INDEX IF NOT EXISTS idx_contacts_unique_key  ON company_contacts(unique_key) WHERE unique_key != ''",
+
+    # campaigns table — drives Campaign Builder / Campaigns pages
+    """
+    CREATE TABLE IF NOT EXISTS campaigns (
+        id                    BIGSERIAL PRIMARY KEY,
+        name                  TEXT NOT NULL UNIQUE,
+        description           TEXT NOT NULL DEFAULT '',
+        keywords              JSONB NOT NULL DEFAULT '[]',
+        extra_job_suffixes    JSONB NOT NULL DEFAULT '[]',
+        extra_news_templates  JSONB NOT NULL DEFAULT '[]',
+        custom_job_queries    JSONB NOT NULL DEFAULT '[]',
+        custom_news_queries   JSONB NOT NULL DEFAULT '[]',
+        location              TEXT NOT NULL DEFAULT '',
+        max_pages             INTEGER NOT NULL DEFAULT 3,
+        sources               JSONB NOT NULL DEFAULT '[]',
+        query_tier            INTEGER NOT NULL DEFAULT 1,
+        is_active             BOOLEAN NOT NULL DEFAULT TRUE,
+        last_run_at           TIMESTAMPTZ,
+        last_run_id           BIGINT REFERENCES scan_runs(id) ON DELETE SET NULL,
+        total_signals         INTEGER NOT NULL DEFAULT 0,
+        total_companies       INTEGER NOT NULL DEFAULT 0,
+        created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_campaigns_active ON campaigns(is_active)",
+
+    # apollo_credit_log table — tracks Apollo credit consumption per pipeline step
+    """
+    CREATE TABLE IF NOT EXISTS apollo_credit_log (
+        id             BIGSERIAL PRIMARY KEY,
+        run_id         TEXT,
+        step           TEXT NOT NULL,
+        credits_before INTEGER,
+        credits_after  INTEGER,
+        credits_used   INTEGER,
+        logged_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_credit_log_run ON apollo_credit_log(run_id)",
+    "CREATE INDEX IF NOT EXISTS idx_credit_log_ts  ON apollo_credit_log(logged_at DESC)",
 ]
 
 # core context manager
@@ -1521,6 +1566,7 @@ def get_all_companies_with_signals(run_id: int = None):
                            STRING_AGG(DISTINCT phase, ',')           AS phases,
                            STRING_AGG(DISTINCT source, ',')          AS sources,
                            MAX(confidence)                           AS max_confidence,
+                           MAX(detected_at)                          AS latest_signal_at,
                            (ARRAY_AGG(url ORDER BY confidence DESC)
                             FILTER (WHERE url LIKE 'http%%'))[1]     AS source_url
                     FROM oracle_signals
@@ -1544,6 +1590,7 @@ def get_all_companies_with_signals(run_id: int = None):
                     COALESCE(sig.sources, '')        AS sources,
                     sig.max_confidence,
                     sig.source_url,
+                    sig.latest_signal_at::text       AS latest_signal_at,
                     COALESCE(ct.contact_count, 0)   AS contact_count
                 FROM companies c
                 JOIN sig ON sig.company_id = c.id
@@ -1998,3 +2045,271 @@ def bulk_resolve_review_queue(item_ids: list, status: str, resolved_by: str = No
                WHERE id = ANY(%s)""",
             (status, resolved_by, item_ids),
         )
+
+
+# ── Companies list page — bulk lookups by ID ────────────────────────────────
+# Split out of the /api/companies route so the SQLite backend can supply its
+# own implementation (ARRAY_AGG/FILTER/ANY() have no direct SQLite equivalent).
+
+def get_signal_aggregates_by_company(company_ids: list) -> dict:
+    if not company_ids:
+        return {}
+    with db_cursor(commit=False) as cur:
+        cur.execute("""
+            SELECT company_id,
+                   STRING_AGG(DISTINCT oracle_product, ',') AS products,
+                   STRING_AGG(DISTINCT phase, ',')          AS phases,
+                   STRING_AGG(DISTINCT source, ',')         AS sources,
+                   MAX(confidence)                          AS max_confidence,
+                   (ARRAY_AGG(url ORDER BY confidence DESC)
+                    FILTER (WHERE url LIKE 'http%%'))[1]   AS source_url
+            FROM oracle_signals
+            WHERE company_id = ANY(%s)
+            GROUP BY company_id
+        """, (company_ids,))
+        return {r["company_id"]: dict(r) for r in cur.fetchall()}
+
+
+def get_companies_by_ids(company_ids: list) -> dict:
+    if not company_ids:
+        return {}
+    with db_cursor(commit=False) as cur:
+        cur.execute("""
+            SELECT c.id, c.name, c.domain, c.industry, c.size, c.location, c.website,
+                   c.target_product, c.status, c.source AS import_source,
+                   c.first_scan_run_id, c.first_seen::text AS first_seen,
+                   c.signal_count, c.contact_count, c.last_updated::text AS last_updated
+            FROM companies c
+            WHERE c.id = ANY(%s)
+        """, (company_ids,))
+        return {r["id"]: dict(r) for r in cur.fetchall()}
+
+
+# ── Campaigns ─────────────────────────────────────────────────────────────────
+# Backs the Campaign Builder / Campaigns pages. Kept in parity with
+# database_sqlite.py so unified_app.py's oracle_db.* calls work on either backend.
+
+def _serialize_campaign(row: Optional[dict]) -> Optional[dict]:
+    """Parse JSON fields back to Python objects for API responses.
+    psycopg2 already returns JSONB columns as parsed objects, so this is a
+    no-op there — kept identical to the SQLite version for interchangeability."""
+    if not row:
+        return row
+    import json
+    for field in ("keywords", "extra_job_suffixes", "extra_news_templates",
+                  "custom_job_queries", "custom_news_queries", "sources"):
+        val = row.get(field)
+        if isinstance(val, str):
+            try:
+                row[field] = json.loads(val)
+            except Exception:
+                row[field] = []
+    return row
+
+
+def list_campaigns(active_only: bool = False) -> list:
+    with db_cursor(commit=False) as cur:
+        if active_only:
+            cur.execute("SELECT * FROM campaigns WHERE is_active = TRUE ORDER BY created_at DESC")
+        else:
+            cur.execute("SELECT * FROM campaigns ORDER BY created_at DESC")
+        return [_serialize_campaign(dict(r)) for r in cur.fetchall()]
+
+
+def get_campaign(campaign_id: int) -> Optional[dict]:
+    with db_cursor(commit=False) as cur:
+        cur.execute("SELECT * FROM campaigns WHERE id = %s", (campaign_id,))
+        row = cur.fetchone()
+        return _serialize_campaign(dict(row)) if row else None
+
+
+def create_campaign(
+    name: str,
+    description: str = "",
+    keywords: list = None,
+    extra_job_suffixes: list = None,
+    extra_news_templates: list = None,
+    custom_job_queries: list = None,
+    custom_news_queries: list = None,
+    location: str = "",
+    max_pages: int = 3,
+    sources: list = None,
+    query_tier: int = 1,
+) -> dict:
+    import json
+    with db_cursor() as cur:
+        cur.execute("""
+            INSERT INTO campaigns
+                (name, description, keywords, extra_job_suffixes, extra_news_templates,
+                 custom_job_queries, custom_news_queries, location, max_pages,
+                 sources, query_tier)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING id
+        """, (
+            name.strip(),
+            description.strip(),
+            json.dumps(keywords or []),
+            json.dumps(extra_job_suffixes or []),
+            json.dumps(extra_news_templates or []),
+            json.dumps(custom_job_queries or []),
+            json.dumps(custom_news_queries or []),
+            location.strip(),
+            max_pages,
+            json.dumps(sources or []),
+            query_tier,
+        ))
+        cid = cur.fetchone()["id"]
+    return get_campaign(cid)
+
+
+def update_campaign(campaign_id: int, **kwargs) -> dict:
+    import json
+    json_fields = {"keywords", "extra_job_suffixes", "extra_news_templates",
+                   "custom_job_queries", "custom_news_queries", "sources"}
+    parts, vals = [], []
+    for k, v in kwargs.items():
+        if k in json_fields:
+            parts.append(f"{k} = %s"); vals.append(json.dumps(v or []))
+        else:
+            parts.append(f"{k} = %s"); vals.append(v)
+    if not parts:
+        return get_campaign(campaign_id)
+    parts.append("updated_at = NOW()")
+    vals.append(campaign_id)
+    with db_cursor() as cur:
+        cur.execute(f"UPDATE campaigns SET {', '.join(parts)} WHERE id = %s", vals)
+    return get_campaign(campaign_id)
+
+
+def delete_campaign(campaign_id: int) -> bool:
+    with db_cursor() as cur:
+        cur.execute("DELETE FROM campaigns WHERE id = %s", (campaign_id,))
+        return cur.rowcount > 0
+
+
+def update_campaign_run_stats(campaign_id: int, run_id: int,
+                               signals: int, companies: int):
+    with db_cursor() as cur:
+        cur.execute("""
+            UPDATE campaigns SET
+                last_run_at      = NOW(),
+                last_run_id      = %s,
+                total_signals    = total_signals + %s,
+                total_companies  = total_companies + %s,
+                updated_at       = NOW()
+            WHERE id = %s
+        """, (run_id, signals, companies, campaign_id))
+
+
+# ── Apollo credit tracking ──────────────────────────────────────────────────
+
+def log_apollo_credits(run_id: str, step: str, credits_before: Optional[int], credits_after: Optional[int]) -> None:
+    """Record Apollo credit consumption for one pipeline step."""
+    used = None
+    if credits_before is not None and credits_after is not None:
+        used = credits_before - credits_after
+    with db_cursor() as cur:
+        cur.execute(
+            """INSERT INTO apollo_credit_log (run_id, step, credits_before, credits_after, credits_used)
+               VALUES (%s, %s, %s, %s, %s)""",
+            (run_id, step, credits_before, credits_after, used),
+        )
+
+
+def get_credit_log(limit: int = 100) -> list:
+    """Return recent Apollo credit log entries, newest first."""
+    with db_cursor(commit=False) as cur:
+        cur.execute(
+            "SELECT * FROM apollo_credit_log ORDER BY logged_at DESC LIMIT %s",
+            (limit,),
+        )
+        return [dict(r) for r in cur.fetchall()]
+
+
+def get_credit_summary() -> dict:
+    """Aggregate credit spend by step across all runs."""
+    with db_cursor(commit=False) as cur:
+        cur.execute("""
+            SELECT step,
+                   COUNT(*)          AS calls,
+                   SUM(credits_used) AS total_used,
+                   MAX(logged_at)    AS last_used_at
+            FROM apollo_credit_log
+            WHERE credits_used IS NOT NULL
+            GROUP BY step
+            ORDER BY total_used DESC
+        """)
+        rows = [dict(r) for r in cur.fetchall()]
+        cur.execute("SELECT SUM(credits_used) AS grand_total FROM apollo_credit_log WHERE credits_used IS NOT NULL")
+        grand = cur.fetchone()
+        return {
+            "by_step":     rows,
+            "grand_total": int(grand["grand_total"] or 0),
+        }
+
+
+# ── Audit logs ────────────────────────────────────────────────────────────────
+
+def log_audit_event(user_id: Optional[int], user_email: str, action: str,
+                    entity_type: str, entity_id: str = "",
+                    old_value=None, new_value=None, ip_address: str = ""):
+    import json
+    with db_cursor() as cur:
+        cur.execute("""
+            INSERT INTO audit_logs
+                (user_id, user_email, action, entity_type, entity_id,
+                 old_value, new_value, ip_address)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        """, (
+            user_id, user_email, action, entity_type, entity_id,
+            json.dumps(old_value) if old_value is not None else None,
+            json.dumps(new_value) if new_value is not None else None,
+            ip_address,
+        ))
+
+
+def get_audit_logs_list(limit: int = 100, entity_type: str = None) -> list:
+    with db_cursor(commit=False) as cur:
+        if entity_type:
+            cur.execute(
+                "SELECT * FROM audit_logs WHERE entity_type = %s ORDER BY created_at DESC LIMIT %s",
+                (entity_type, limit),
+            )
+        else:
+            cur.execute(
+                "SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT %s", (limit,)
+            )
+        return [dict(r) for r in cur.fetchall()]
+
+
+# ── SQLite auto-fallback ──────────────────────────────────────────────────────
+# When PostgreSQL is unreachable (no office network / VPN), all public functions
+# in this module are replaced by their SQLite equivalents at import time.
+# unified_app.py imports `database as oracle_db` and never needs to change.
+
+def _pg_reachable() -> bool:
+    if not _PSYCOPG2_AVAILABLE:
+        return False
+    try:
+        conn = psycopg2.connect(_dsn(), connect_timeout=3)
+        conn.close()
+        return True
+    except Exception:
+        return False
+
+
+def _activate_sqlite_fallback():
+    import importlib
+    sqlite_mod = importlib.import_module("src.database_sqlite")
+    g = globals()
+    for name in dir(sqlite_mod):
+        if not name.startswith("_"):
+            g[name] = getattr(sqlite_mod, name)
+    logger.warning(
+        "PostgreSQL unreachable — running on local SQLite (%s)",
+        sqlite_mod._DB_PATH,
+    )
+
+
+if not _pg_reachable():
+    _activate_sqlite_fallback()

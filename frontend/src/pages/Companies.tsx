@@ -5,20 +5,23 @@ import { Search, Download, ArrowUpRight, MoreHorizontal, Zap, Users, Send,
          Building2, Loader2, Package, ChevronDown, Filter, GitMerge } from 'lucide-react'
 import { toast } from '../components/Toast'
 
-// Product colors keyed by canonical taxonomy name
-const PRODUCT_COLORS: Record<string, { bg: string; color: string }> = {
-  'JD Edwards EnterpriseOne': { bg: 'rgba(239,68,68,0.1)',   color: '#ef4444' },
-  'JD Edwards World':         { bg: 'rgba(249,115,22,0.12)', color: '#f97316' },
-  'Oracle Cloud ERP':         { bg: 'rgba(59,130,246,0.12)', color: '#3b82f6' },
-  'Oracle E-Business Suite':  { bg: 'rgba(99,102,241,0.12)', color: '#6366f1' },
-  'Oracle PeopleSoft':        { bg: 'rgba(139,92,246,0.12)', color: '#8b5cf6' },
-  'Oracle NetSuite':          { bg: 'rgba(168,85,247,0.12)', color: '#a855f7' },
-  'Oracle HCM Cloud':         { bg: 'rgba(16,185,129,0.12)', color: '#10b981' },
-  'Oracle SCM Cloud':         { bg: 'rgba(245,158,11,0.12)', color: '#f59e0b' },
-}
+// Deterministic product badge color — hash product name to a palette slot
+const _PRODUCT_PALETTE: Array<{ bg: string; color: string }> = [
+  { bg: 'rgba(59,130,246,0.12)',  color: '#3b82f6' },
+  { bg: 'rgba(99,102,241,0.12)', color: '#6366f1' },
+  { bg: 'rgba(139,92,246,0.12)', color: '#8b5cf6' },
+  { bg: 'rgba(16,185,129,0.12)', color: '#10b981' },
+  { bg: 'rgba(245,158,11,0.12)', color: '#f59e0b' },
+  { bg: 'rgba(239,68,68,0.10)',  color: '#ef4444' },
+  { bg: 'rgba(249,115,22,0.12)', color: '#f97316' },
+  { bg: 'rgba(20,184,166,0.12)', color: '#14b8a6' },
+]
 
 function productStyle(p: string) {
-  return PRODUCT_COLORS[p] ?? { bg: 'rgba(107,114,128,0.1)', color: '#6b7280' }
+  if (!p) return { bg: 'rgba(107,114,128,0.1)', color: '#6b7280' }
+  let hash = 0
+  for (let i = 0; i < p.length; i++) hash = (hash * 31 + p.charCodeAt(i)) >>> 0
+  return _PRODUCT_PALETTE[hash % _PRODUCT_PALETTE.length]
 }
 
 const authH = (): Record<string, string> => ({
@@ -39,6 +42,15 @@ interface Company {
   source: string
   domain?: string
   target_product: string
+  // Fit/Intent split (chadboyda pattern)
+  fit_score?: number
+  intent_score?: number
+  routing?: string
+  routing_color?: string
+  // Signal tier (janskuba pattern)
+  signal_tier?: string
+  // Why-now
+  why_now_reason?: string
 }
 
 interface DupeCompany {
@@ -785,9 +797,15 @@ export default function Companies() {
     signals:       Number(c.signal_count ?? 0),
     contacts:      Number(c.contact_count ?? 0),
     location:      String(c.location || 'UK'),
-    source:        ((c.sources as string[]) || [])[0] || 'Oracle Scan',
+    source:        ((c.sources as string[]) || [])[0] || 'Intent Scan',
     domain:        String(c.domain || ''),
     target_product: String(c.target_product || ''),
+    fit_score:     c.fit_score   != null ? Number(c.fit_score)   : undefined,
+    intent_score:  c.intent_score != null ? Number(c.intent_score) : undefined,
+    routing:       c.routing      ? String(c.routing)       : undefined,
+    routing_color: c.routing_color ? String(c.routing_color) : undefined,
+    signal_tier:   c.signal_tier  ? String(c.signal_tier)   : undefined,
+    why_now_reason: c.why_now_reason ? String(c.why_now_reason) : undefined,
   })
 
   const buildUrl = (offset = 0, q = search) => {
@@ -876,7 +894,7 @@ export default function Companies() {
         <div>
           <h1 style={{ fontSize: 20, fontWeight: 700, color: '#0f172a', margin: 0 }}>Companies</h1>
           <p style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>
-            {loading ? 'Loading…' : `${companies.length} tracked · ${companies.filter(c => c.phase === 'Implementing').length} implementing Oracle`}
+            {loading ? 'Loading…' : `${companies.length} tracked · ${companies.filter(c => c.phase === 'Implementing').length} implementing`}
           </p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -1045,7 +1063,7 @@ export default function Companies() {
             )}
             {!loading && filtered.length === 0 && (
               <tr><td colSpan={9} style={{ padding: '48px 0', textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>
-                No companies found. Run the Oracle Intent Engine to populate data.
+                No companies found. Run the Intent Engine to populate data.
               </td></tr>
             )}
             {!loading && filtered.map((c) => (
@@ -1083,7 +1101,7 @@ export default function Companies() {
                   ) : (
                     <span
                       onClick={() => setEditingProduct(c.id)}
-                      title="Click to set Oracle product"
+                      title="Click to set target product"
                       style={{
                         display: 'inline-flex', alignItems: 'center', gap: 4,
                         fontSize: 11, padding: '3px 8px', borderRadius: 6, fontWeight: 500, cursor: 'pointer',
@@ -1099,11 +1117,52 @@ export default function Companies() {
                   </span>
                 </td>
                 <td style={tdStyle}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ fontSize: 12, fontWeight: 700, padding: '2px 8px', borderRadius: 6, background: `${scoreColor(c.score)}18`, color: scoreColor(c.score), minWidth: 28, textAlign: 'center' }}>{c.score}</span>
-                    <div style={{ width: 52, height: 4, borderRadius: 999, background: '#e2e8f0', overflow: 'hidden' }}>
-                      <div style={{ width: `${Math.min(c.score, 100)}%`, height: '100%', borderRadius: 999, background: scoreColor(c.score) }} />
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    {/* Score + progress bar */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: 12, fontWeight: 700, padding: '2px 8px', borderRadius: 6, background: `${scoreColor(c.score)}18`, color: scoreColor(c.score), minWidth: 28, textAlign: 'center' }}>{c.score}</span>
+                      <div style={{ width: 52, height: 4, borderRadius: 999, background: '#e2e8f0', overflow: 'hidden' }}>
+                        <div style={{ width: `${Math.min(c.score, 100)}%`, height: '100%', borderRadius: 999, background: scoreColor(c.score) }} />
+                      </div>
                     </div>
+                    {/* Signal tier badge (P0/P1/P2) */}
+                    {c.signal_tier && (
+                      <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                        <span style={{
+                          fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 4,
+                          background: c.signal_tier === 'P0' ? '#fee2e2' : c.signal_tier === 'P1' ? '#fef3c7' : '#f1f5f9',
+                          color:      c.signal_tier === 'P0' ? '#dc2626' : c.signal_tier === 'P1' ? '#d97706' : '#64748b',
+                          letterSpacing: '0.04em',
+                        }}>{c.signal_tier}</span>
+                        {/* Routing badge */}
+                        {c.routing && (
+                          <span style={{
+                            fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 4,
+                            background: `${c.routing_color || '#94a3b8'}18`,
+                            color: c.routing_color || '#64748b',
+                          }}>{c.routing}</span>
+                        )}
+                      </div>
+                    )}
+                    {/* Fit / intent mini bars */}
+                    {c.fit_score != null && c.intent_score != null && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <span style={{ fontSize: 9, color: '#94a3b8', width: 24 }}>Fit</span>
+                          <div style={{ flex: 1, height: 3, background: '#e2e8f0', borderRadius: 999, overflow: 'hidden', maxWidth: 44 }}>
+                            <div style={{ width: `${Math.round(c.fit_score * 100)}%`, height: '100%', background: '#6366f1', borderRadius: 999 }} />
+                          </div>
+                          <span style={{ fontSize: 9, color: '#64748b' }}>{Math.round(c.fit_score * 100)}</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <span style={{ fontSize: 9, color: '#94a3b8', width: 24 }}>Int</span>
+                          <div style={{ flex: 1, height: 3, background: '#e2e8f0', borderRadius: 999, overflow: 'hidden', maxWidth: 44 }}>
+                            <div style={{ width: `${Math.round(c.intent_score * 100)}%`, height: '100%', background: '#f59e0b', borderRadius: 999 }} />
+                          </div>
+                          <span style={{ fontSize: 9, color: '#64748b' }}>{Math.round(c.intent_score * 100)}</span>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </td>
                 <td style={tdStyle}>

@@ -82,6 +82,7 @@ const EXPERIMENTAL_SOURCES = [
   { id: 'procurement',       label: 'Procurement Tenders',    desc: 'Contracts Finder (UK) + USASpending.gov + Bing procurement RSS' },
   { id: 'sec_filing',        label: 'SEC Filings (EDGAR)',    desc: 'Free EDGAR search — 10-K/10-Q/8-K filings mentioning Oracle, EBS, PeopleSoft' },
   { id: 'indeed',            label: 'Indeed',                 desc: 'Job postings — limited by bot detection' },
+  { id: 'agentic_harvester', label: 'Agentic Harvester',      desc: 'LLM-driven extraction from watch-list URLs — no per-site parser needed, add URLs in config' },
 ]
 
 const DEFAULT_SOURCES = ['linkedin', 'oracle_website', 'erp_today', 'news', 'g2_reviews']

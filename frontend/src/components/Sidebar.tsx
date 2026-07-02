@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Building2, Users, Cpu, ClipboardCheck,
   BarChart3, Settings, ChevronLeft, ChevronRight,
   Zap, Target, Layers, Upload, CalendarDays, Factory,
-  ScrollText, UserCog, Shield, RefreshCw, PackageSearch, Briefcase
+  ScrollText, UserCog, Shield, RefreshCw, PackageSearch, Briefcase, Search, Rocket, Crosshair, Activity
 } from 'lucide-react'
 
 interface NavItem {
@@ -68,6 +68,9 @@ function buildNavGroups(user?: User): NavGroup[] {
   // DATA MODULES — viewer+
   if (is(role, 'owner', 'admin', 'analyst', 'viewer')) {
     const dataItems: NavItem[] = [
+      { to: '/campaign-builder',           icon: Rocket,        label: 'Campaign Builder' },
+      { to: '/campaigns',                  icon: Crosshair,     label: 'Signal Campaigns' },
+      { to: '/people-search',              icon: Search,        label: 'People Search' },
       { to: '/companies',                 icon: Building2,     label: 'Companies' },
       { to: '/contacts',                  icon: Users,         label: 'Contacts' },
       { to: '/product-intelligence',      icon: PackageSearch, label: 'Product Intel' },
@@ -83,7 +86,10 @@ function buildNavGroups(user?: User): NavGroup[] {
 
   // ANALYTICS — analyst+
   if (is(role, 'owner', 'admin', 'analyst')) {
-    groups.push({ label: 'ANALYTICS', items: [{ to: '/reporting', icon: BarChart3, label: 'Reporting' }] })
+    groups.push({ label: 'ANALYTICS', items: [
+      { to: '/reporting', icon: BarChart3, label: 'Reporting' },
+      { to: '/metrics',   icon: Activity,  label: 'System Metrics' },
+    ] })
   }
 
   // SYSTEM — admin+ only
@@ -136,7 +142,7 @@ export default function Sidebar({ collapsed, onToggle, user }: SidebarProps) {
         </div>
         {!collapsed && (
           <div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: 'white', lineHeight: 1 }}>Inoapps</div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'white', lineHeight: 1 }}>GTM Data Tool</div>
             <div style={{ fontSize: 11, color: '#4a7ab5', marginTop: 3 }}>Intelligence Hub</div>
           </div>
         )}

@@ -56,7 +56,9 @@ import io
 import json
 import logging
 import os
+import platform
 import queue
+import signal
 import subprocess
 import sys
 import threading
@@ -72,6 +74,15 @@ from typing import Dict, List, Optional
 BASE_DIR    = Path(__file__).parent
 ORACLE_DIR  = BASE_DIR / "oracle_intent_engine"
 ENRICH_DIR  = BASE_DIR / "lead_enrichment_engine"
+
+# Scan/enrich status+log+PID files are written by scan_worker.py /
+# enrichment_worker.py and read back by this app. When those run inside a
+# separate worker.py container (RQ path), they need a shared volume that
+# ISN'T the whole /app directory (that would shadow the image's code on every
+# rebuild). RUN_STATE_DIR lets docker-compose point both containers at a
+# small dedicated mount instead; defaults to BASE_DIR for the non-Docker path.
+RUN_STATE_DIR = Path(os.environ.get("RUN_STATE_DIR", str(BASE_DIR)))
+RUN_STATE_DIR.mkdir(parents=True, exist_ok=True)
 
 # Add oracle engine first so its `src` package is the one resolved for bare imports.
 # Lead enrichment pipeline runs as subprocess with cwd=ENRICH_DIR, so no conflict.
@@ -115,8 +126,12 @@ from src import events as events_mod
 from src import manufacturer as mfr_mod
 from src import list_import as import_mod
 from src import data_quality as dqe_mod
+import job_queue
 
 # Explicitly set oracle DB DSN so oracle database.py never picks up PG_MASTER_CONNECTION_STRING
+# Real process env vars (e.g. set by docker-compose) take priority over the .env
+# file, which in turn takes priority over the LAN default — so a containerized
+# `postgres` service host works without needing a committed .env file.
 _oracle_env: Dict[str, str] = {}
 _dotenv_path = BASE_DIR / "oracle_intent_engine" / ".env"
 if _dotenv_path.exists():
@@ -125,12 +140,16 @@ if _dotenv_path.exists():
         if _line and not _line.startswith('#') and '=' in _line:
             _k, _v = _line.split('=', 1)
             _oracle_env[_k.strip()] = _v.strip()
+
+def _oracle_db_setting(key: str, default: str) -> str:
+    return os.environ.get(key, _oracle_env.get(key, default))
+
 _oracle_pg_dsn = (
-    f"host={_oracle_env.get('DB_HOST','10.0.0.149')} "
-    f"port={_oracle_env.get('DB_PORT','5432')} "
-    f"dbname={_oracle_env.get('DB_NAME','Inoapps-Data-DB')} "
-    f"user={_oracle_env.get('DB_USER','postgres')} "
-    f"password={_oracle_env.get('DB_PASSWORD','')}"
+    f"host={_oracle_db_setting('DB_HOST','10.0.0.149')} "
+    f"port={_oracle_db_setting('DB_PORT','5432')} "
+    f"dbname={_oracle_db_setting('DB_NAME','Inoapps-Data-DB')} "
+    f"user={_oracle_db_setting('DB_USER','postgres')} "
+    f"password={_oracle_db_setting('DB_PASSWORD','')}"
 )
 os.environ["ORACLE_PG_DSN"] = _oracle_pg_dsn
 
@@ -177,9 +196,31 @@ async def lifespan(app: FastAPI):
         oracle_db.seed_engine_configs()
     except Exception as e:
         _startup_log.warning("Engine configs seed warning: %s", e)
+    if os.environ.get("SEED_DEMO_DATA", "").strip().lower() in ("1", "true", "yes"):
+        try:
+            import seed_demo_data
+            seed_demo_data.seed_if_empty()
+        except Exception as e:
+            _startup_log.warning("Demo data seed warning: %s", e)
     (ENRICH_DIR / "input").mkdir(exist_ok=True)
     (ENRICH_DIR / "output").mkdir(exist_ok=True)
     (ORACLE_DIR / "output").mkdir(exist_ok=True)
+
+    # ARE health monitor — start background loop (bduffy089 pattern)
+    try:
+        import threading as _threading
+        from oracle_intent_engine.src.health_monitor import run_health_check_loop
+        _hm_thread = _threading.Thread(
+            target=run_health_check_loop,
+            kwargs={"interval_minutes": 15},
+            daemon=True,
+            name="SignalHealthMonitor",
+        )
+        _hm_thread.start()
+        _startup_log.info("Signal health monitor started (15-min interval)")
+    except Exception as e:
+        _startup_log.warning("Health monitor failed to start: %s", e)
+
     yield  # Application runs here
     # Shutdown — connection pools close automatically via psycopg2 GC
 
@@ -250,10 +291,24 @@ def _cached_pg_master_contacts() -> int:
     threading.Thread(target=_fetch, daemon=True).start()
     return _pg_master_cache["contacts"]  # type: ignore[return-value]
 
+def _kill_pid_tree(pid: int) -> None:
+    """Cross-platform "kill by saved PID" — used to stop an orphaned worker
+    subprocess after a server restart (when there's no in-memory Popen handle).
+    Windows uses taskkill /T to also kill child processes; POSIX (Docker,
+    macOS, Linux) uses os.kill with SIGTERM."""
+    if platform.system() == "Windows":
+        subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)], capture_output=True)
+    else:
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass  # already exited
+
+
 # oracle scan subprocess state
-_SCAN_STATUS_FILE = BASE_DIR / "_scan_status.json"
-_SCAN_LOG_FILE    = BASE_DIR / "_scan_log.txt"
-_SCAN_PID_FILE    = BASE_DIR / "_scan_worker.pid"
+_SCAN_STATUS_FILE = RUN_STATE_DIR / "_scan_status.json"
+_SCAN_LOG_FILE    = RUN_STATE_DIR / "_scan_log.txt"
+_SCAN_PID_FILE    = RUN_STATE_DIR / "_scan_worker.pid"
 _scan_proc: Optional[subprocess.Popen] = None
 _scan_proc_lock   = threading.Lock()
 
@@ -322,14 +377,36 @@ def _watch_scan_then_enrich(proc: subprocess.Popen, enrich_params: dict) -> None
     except Exception:
         logger.warning("Auto-enrich watcher failed", exc_info=True)
 
+def _watch_queued_scan_then_enrich(enrich_params: dict) -> None:
+    """Same as _watch_scan_then_enrich, but for the RQ-queued path — blocks on
+    the "scan" job's Redis-tracked status instead of a local Popen handle."""
+    try:
+        job = job_queue.wait_for_job("scan")
+        if job is not None and job.is_failed:
+            logger.info("Auto-enrich skipped — queued scan job failed")
+            return
+        time.sleep(2)  # let the scan status file settle
+        started = _start_enrich_subprocess(**enrich_params)
+        logger.info(f"Auto-enrich after queued scan: {'started' if started else 'already running'}")
+    except Exception:
+        logger.warning("Queued auto-enrich watcher failed", exc_info=True)
+
 def _start_scan_subprocess(sources: list, location: str, max_pages: int,
                            jde_manufacturing: bool = False,
                            auto_enrich: bool = False,
                            enrich_params: Optional[dict] = None) -> bool:
-    """Spawn scan_worker.py as a subprocess. Returns False if already running."""
+    """Runs scan_worker.py — via the RQ queue if REDIS_URL is configured
+    (job executes in a separate worker.py process, scales horizontally),
+    otherwise spawns it directly in this process. Returns False if a scan
+    is already running either way."""
     global _scan_proc
+    use_queue = job_queue.get_queue() is not None
+
     with _scan_proc_lock:
-        if _scan_proc is not None and _scan_proc.poll() is None:
+        if use_queue:
+            if job_queue.is_job_active("scan"):
+                return False
+        elif _scan_proc is not None and _scan_proc.poll() is None:
             return False  # already running
 
         # Seed status + clear log before spawning so reads never see stale data
@@ -356,25 +433,38 @@ def _start_scan_subprocess(sources: list, location: str, max_pages: int,
         if jde_manufacturing:
             cmd += ["--jde-manufacturing"]
 
-        _scan_proc = subprocess.Popen(
-            cmd,
-            cwd=str(BASE_DIR),
-            env=os.environ.copy(),
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        _SCAN_PID_FILE.write_text(str(_scan_proc.pid), encoding="utf-8")
+        if use_queue:
+            job_queue.enqueue("scan", cmd, str(BASE_DIR), os.environ.copy())
+        else:
+            _scan_proc = subprocess.Popen(
+                cmd,
+                cwd=str(BASE_DIR),
+                env=os.environ.copy(),
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            _SCAN_PID_FILE.write_text(str(_scan_proc.pid), encoding="utf-8")
 
         if auto_enrich:
-            threading.Thread(
-                target=_watch_scan_then_enrich,
-                args=(_scan_proc, enrich_params or {}),
-                daemon=True,
-            ).start()
+            if use_queue:
+                threading.Thread(
+                    target=_watch_queued_scan_then_enrich,
+                    args=(enrich_params or {},),
+                    daemon=True,
+                ).start()
+            else:
+                threading.Thread(
+                    target=_watch_scan_then_enrich,
+                    args=(_scan_proc, enrich_params or {}),
+                    daemon=True,
+                ).start()
         return True
 
 def _stop_scan_subprocess() -> None:
     global _scan_proc
+
+    if job_queue.get_queue() is not None:
+        job_queue.stop_job("scan")
     with _scan_proc_lock:
         if _scan_proc is not None and _scan_proc.poll() is None:
             _scan_proc.terminate()
@@ -386,10 +476,7 @@ def _stop_scan_subprocess() -> None:
         if _SCAN_PID_FILE.exists():
             try:
                 saved_pid = int(_SCAN_PID_FILE.read_text().strip())
-                subprocess.run(
-                    ["taskkill", "/F", "/T", "/PID", str(saved_pid)],
-                    capture_output=True,
-                )
+                _kill_pid_tree(saved_pid)
             except Exception:
                 logger.warning("Could not kill scan worker by saved PID", exc_info=True)
             finally:
@@ -406,9 +493,9 @@ def _stop_scan_subprocess() -> None:
         logger.warning("Failed to update scan status file after stop", exc_info=True)
 
 # oracle enrichment subprocess state
-_ENRICH_STATUS_FILE = BASE_DIR / "_enrich_status.json"
-_ENRICH_LOG_FILE    = BASE_DIR / "_enrich_log.txt"
-_ENRICH_PID_FILE    = BASE_DIR / "_enrich_worker.pid"
+_ENRICH_STATUS_FILE = RUN_STATE_DIR / "_enrich_status.json"
+_ENRICH_LOG_FILE    = RUN_STATE_DIR / "_enrich_log.txt"
+_ENRICH_PID_FILE    = RUN_STATE_DIR / "_enrich_worker.pid"
 _enrich_proc: Optional[subprocess.Popen] = None
 _enrich_proc_lock   = threading.Lock()
 
@@ -450,10 +537,16 @@ def _start_enrich_subprocess(
     provider: str = "apollo",
     company_ids: Optional[List[int]] = None,
 ) -> bool:
-    """Spawn enrichment_worker.py. Returns False if already running."""
+    """Runs enrichment_worker.py — via the RQ queue if REDIS_URL is configured,
+    otherwise spawns it directly in this process. Returns False if already running."""
     global _enrich_proc
+    use_queue = job_queue.get_queue() is not None
+
     with _enrich_proc_lock:
-        if _enrich_proc is not None and _enrich_proc.poll() is None:
+        if use_queue:
+            if job_queue.is_job_active("enrich"):
+                return False
+        elif _enrich_proc is not None and _enrich_proc.poll() is None:
             return False  # already running
 
         _ENRICH_STATUS_FILE.write_text(
@@ -488,20 +581,25 @@ def _start_enrich_subprocess(
         if company_ids:
             cmd += ["--company-ids", json.dumps(company_ids)]
 
-        _enrich_proc = subprocess.Popen(
-            cmd,
-            cwd=str(BASE_DIR),
-            env=env,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        # Persist PID so stop works even after a server restart
-        _ENRICH_PID_FILE.write_text(str(_enrich_proc.pid), encoding="utf-8")
+        if use_queue:
+            job_queue.enqueue("enrich", cmd, str(BASE_DIR), env)
+        else:
+            _enrich_proc = subprocess.Popen(
+                cmd,
+                cwd=str(BASE_DIR),
+                env=env,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            # Persist PID so stop works even after a server restart
+            _ENRICH_PID_FILE.write_text(str(_enrich_proc.pid), encoding="utf-8")
         return True
 
 def _stop_enrich_subprocess() -> None:
     global _enrich_proc
 
+    if job_queue.get_queue() is not None:
+        job_queue.stop_job("enrich")
     with _enrich_proc_lock:
         # Kill the in-memory handle if available
         if _enrich_proc is not None and _enrich_proc.poll() is None:
@@ -515,11 +613,7 @@ def _stop_enrich_subprocess() -> None:
         if _ENRICH_PID_FILE.exists():
             try:
                 saved_pid = int(_ENRICH_PID_FILE.read_text().strip())
-                # taskkill works on Windows and kills the whole process tree
-                subprocess.run(
-                    ["taskkill", "/F", "/T", "/PID", str(saved_pid)],
-                    capture_output=True,
-                )
+                _kill_pid_tree(saved_pid)
             except Exception:
                 logger.warning("Could not kill enrich worker by saved PID", exc_info=True)
             finally:
@@ -859,29 +953,11 @@ async def api_companies(
             if not page_ids:
                 return JSONResponse({"total": total, "offset": offset, "limit": page_limit, "rows": []})
 
-            cur.execute("""
-                SELECT company_id,
-                       STRING_AGG(DISTINCT oracle_product, ',') AS products,
-                       STRING_AGG(DISTINCT phase, ',')          AS phases,
-                       STRING_AGG(DISTINCT source, ',')         AS sources,
-                       MAX(confidence)                          AS max_confidence,
-                       (ARRAY_AGG(url ORDER BY confidence DESC)
-                        FILTER (WHERE url LIKE 'http%%'))[1]   AS source_url
-                FROM oracle_signals
-                WHERE company_id = ANY(%s)
-                GROUP BY company_id
-            """, (page_ids,))
-            sig_map = {r["company_id"]: r for r in cur.fetchall()}
-
-            cur.execute("""
-                SELECT c.id, c.name, c.domain, c.industry, c.size, c.location, c.website,
-                       c.target_product, c.status, c.source AS import_source,
-                       c.first_scan_run_id, c.first_seen::text AS first_seen,
-                       c.signal_count, c.contact_count, c.last_updated::text AS last_updated
-                FROM companies c
-                WHERE c.id = ANY(%s)
-            """, (page_ids,))
-            co_map = {r["id"]: dict(r) for r in cur.fetchall()}
+        # Split into dedicated backend-aware functions — ARRAY_AGG/FILTER/ANY()
+        # have no direct SQLite equivalent, so database_sqlite.py supplies its
+        # own natively-written version behind the same function names.
+        sig_map = oracle_db.get_signal_aggregates_by_company(page_ids)
+        co_map = oracle_db.get_companies_by_ids(page_ids)
 
         rows = []
         for cid in page_ids:
@@ -3095,6 +3171,356 @@ async def update_engine_config_endpoint(
     log_audit(current_user, "update_engine_config", "system", engine_type, new_value=body)
     return result
 
+# ── Signal Health & Observability (ARE pattern) ───────────────────────────────
+
+@app.get("/metrics")
+async def prometheus_metrics():
+    """
+    Standard Prometheus scrape target — unauthenticated by convention (scraped
+    by an in-cluster Prometheus server, not browsed directly). Returns 503 text
+    if prometheus-client isn't installed rather than erroring.
+    """
+    try:
+        from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
+        from fastapi import Response
+        return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
+    except ImportError:
+        return Response(content="# prometheus_client not installed\n", media_type="text/plain", status_code=503)
+
+
+@app.get("/api/health/signals")
+async def signal_health(
+    current_user: dict = Depends(oracle_auth.require_user),
+):
+    """
+    ARE health check — returns status of every signal scraper source.
+    Shows hours-since-last-result per source and P0/P1/P2 tier alerts.
+    Use with Grafana or the frontend dashboard to catch silent scraper failures.
+    """
+    from oracle_intent_engine.src.health_monitor import get_health_status
+    return get_health_status()
+
+
+@app.post("/api/health/signals/check")
+async def trigger_health_check(
+    current_user: dict = Depends(oracle_auth.require_admin),
+):
+    """Manually trigger a health check + Slack alert (admin only)."""
+    from oracle_intent_engine.src.health_monitor import check_signal_health
+    return check_signal_health(notify=True)
+
+
+@app.get("/api/metrics/summary")
+async def metrics_summary(
+    current_user: dict = Depends(oracle_auth.require_user),
+):
+    """
+    High-level pipeline metrics for the Grafana-style dashboard.
+    Returns signal counts, enrichment stats, and credit burn estimates.
+    """
+    try:
+        with oracle_db.db_cursor(commit=False) as cur:
+            cur.execute("""
+                SELECT
+                    COUNT(*)                                    AS total_signals,
+                    COUNT(DISTINCT company_id)                  AS companies_with_signals,
+                    COUNT(CASE WHEN signal_tier = 'P0' THEN 1 END) AS p0_signals,
+                    COUNT(CASE WHEN signal_tier = 'P1' THEN 1 END) AS p1_signals,
+                    COUNT(CASE WHEN signal_tier = 'P2' THEN 1 END) AS p2_signals,
+                    COUNT(CASE WHEN phase = 'implementing' THEN 1 END) AS implementing,
+                    COUNT(CASE WHEN phase = 'evaluating' THEN 1 END)   AS evaluating,
+                    COUNT(CASE WHEN phase = 'hiring' THEN 1 END)       AS hiring,
+                    MAX(detected_at)                            AS last_signal_at
+                FROM oracle_signals
+            """)
+            signal_stats = cur.fetchone() or {}
+
+            # master_leads lives outside this module's schema (pre-existing Postgres
+            # table, not created by init_db()) and is stubbed out on the SQLite
+            # fallback — don't let its absence blow away the signal stats above.
+            leads_row, ready_row = {}, {}
+            try:
+                cur.execute("SELECT COUNT(*) AS total FROM master_leads")
+                leads_row = cur.fetchone() or {}
+                cur.execute("SELECT COUNT(*) AS ready FROM master_leads WHERE ready_for_outreach = 1")
+                ready_row = cur.fetchone() or {}
+            except Exception as e:
+                logger.debug("master_leads unavailable on this backend: %s", e)
+    except Exception as e:
+        return {"error": str(e)}
+
+    return {
+        "signals": {
+            "total":          int(signal_stats.get("total_signals") or 0),
+            "companies":      int(signal_stats.get("companies_with_signals") or 0),
+            "p0":             int(signal_stats.get("p0_signals") or 0),
+            "p1":             int(signal_stats.get("p1_signals") or 0),
+            "p2":             int(signal_stats.get("p2_signals") or 0),
+            "implementing":   int(signal_stats.get("implementing") or 0),
+            "evaluating":     int(signal_stats.get("evaluating") or 0),
+            "hiring":         int(signal_stats.get("hiring") or 0),
+            "last_signal_at": signal_stats.get("last_signal_at"),
+        },
+        "leads": {
+            "total":              int(leads_row.get("total") or 0),
+            "ready_for_outreach": int(ready_row.get("ready") or 0),
+        },
+    }
+
+
+@app.post("/api/contacts/enrich-linkedin")
+async def enrich_linkedin_urls(
+    request: Request,
+    current_user: dict = Depends(oracle_auth.require_analyst),
+):
+    """
+    Maigret OSINT: fill missing linkedin_url on master_leads contacts.
+    Runs as a batch — checks up to `limit` contacts (default 25).
+    No API keys required. May take 1-2 minutes for 25 contacts.
+    """
+    body = {}
+    try:
+        body = await request.json()
+    except Exception:
+        pass
+
+    limit = min(int(body.get("limit", 25)), 100)  # cap at 100 per call
+
+    try:
+        from oracle_intent_engine.src.maigret_enricher import fill_missing_linkedin_urls
+        result = await fill_missing_linkedin_urls(limit=limit)
+        log_audit(current_user, "maigret_linkedin_enrich", "master_leads",
+                  "batch", new_value=result)
+        return result
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+# ── Universal Signal Campaigns ────────────────────────────────────────────────
+# Campaigns let users define intent searches for ANY product or technology,
+# not just Oracle. Each campaign stores keywords + query config and can
+# launch a full signal scan scoped to those keywords.
+
+@app.get("/api/campaigns")
+async def list_campaigns(
+    active_only: bool = False,
+    current_user: dict = Depends(oracle_auth.require_user),
+):
+    """List all campaigns (or only active ones)."""
+    rows = oracle_db.list_campaigns(active_only=active_only)
+    return rows
+
+
+@app.get("/api/campaigns/{campaign_id}")
+async def get_campaign(
+    campaign_id: int,
+    current_user: dict = Depends(oracle_auth.require_user),
+):
+    row = oracle_db.get_campaign(campaign_id)
+    if not row:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Campaign not found")
+    return row
+
+
+@app.post("/api/campaigns")
+async def create_campaign(
+    request: Request,
+    current_user: dict = Depends(oracle_auth.require_analyst),
+):
+    """
+    Create a new signal campaign.
+
+    Body:
+      name                (required) Campaign name
+      description         Optional description
+      keywords            List of target keywords, e.g. ["Salesforce", "SFDC"]
+      extra_job_suffixes  Additional role suffixes beyond the universal defaults
+      extra_news_templates Additional news query templates
+      custom_job_queries  Override auto-generation with your own job queries
+      custom_news_queries Override auto-generation with your own news queries
+      location            Geographic filter (default: "United States")
+      max_pages           Pages per signal source (default: 3)
+      sources             Which signal sources to use (default: all)
+      query_tier          1 = high-signal queries only, 2 = broad queries too
+    """
+    body = await request.json()
+    if not body.get("name"):
+        return JSONResponse({"error": "name is required"}, status_code=400)
+    if not body.get("keywords"):
+        return JSONResponse({"error": "keywords is required (list of target keywords)"}, status_code=400)
+
+    campaign = oracle_db.create_campaign(
+        name=body["name"],
+        description=body.get("description", ""),
+        keywords=body.get("keywords", []),
+        extra_job_suffixes=body.get("extra_job_suffixes", []),
+        extra_news_templates=body.get("extra_news_templates", []),
+        custom_job_queries=body.get("custom_job_queries", []),
+        custom_news_queries=body.get("custom_news_queries", []),
+        location=body.get("location", ""),
+        max_pages=int(body.get("max_pages", 3)),
+        sources=body.get("sources", []),
+        query_tier=int(body.get("query_tier", 1)),
+    )
+    log_audit(current_user, "create_campaign", "campaign",
+              str(campaign.get("id", "")), new_value=campaign)
+    return campaign
+
+
+@app.put("/api/campaigns/{campaign_id}")
+async def update_campaign(
+    campaign_id: int,
+    request: Request,
+    current_user: dict = Depends(oracle_auth.require_analyst),
+):
+    body = await request.json()
+    allowed = {
+        "name", "description", "keywords", "extra_job_suffixes",
+        "extra_news_templates", "custom_job_queries", "custom_news_queries",
+        "location", "max_pages", "sources", "query_tier", "is_active",
+    }
+    updates = {k: v for k, v in body.items() if k in allowed}
+    campaign = oracle_db.update_campaign(campaign_id, **updates)
+    log_audit(current_user, "update_campaign", "campaign",
+              str(campaign_id), new_value=updates)
+    return campaign
+
+
+@app.delete("/api/campaigns/{campaign_id}")
+async def delete_campaign(
+    campaign_id: int,
+    current_user: dict = Depends(oracle_auth.require_admin),
+):
+    ok = oracle_db.delete_campaign(campaign_id)
+    if not ok:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Campaign not found")
+    log_audit(current_user, "delete_campaign", "campaign", str(campaign_id))
+    return {"deleted": campaign_id}
+
+
+@app.post("/api/campaigns/{campaign_id}/preview-queries")
+async def preview_campaign_queries(
+    campaign_id: int,
+    current_user: dict = Depends(oracle_auth.require_user),
+):
+    """
+    Preview what job and news queries would be generated for this campaign
+    without running a scan. Useful for tuning keywords before launching.
+    """
+    from src.query_builder import build_all, estimate_query_count
+
+    campaign = oracle_db.get_campaign(campaign_id)
+    if not campaign:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    keywords  = campaign.get("keywords") or []
+    job_sfx   = campaign.get("extra_job_suffixes") or []
+    news_tmpl = campaign.get("extra_news_templates") or []
+    custom_jq = campaign.get("custom_job_queries") or []
+    custom_nq = campaign.get("custom_news_queries") or []
+    tier      = campaign.get("query_tier", 1)
+
+    if custom_jq or custom_nq:
+        queries = {"job_queries": custom_jq, "news_queries": custom_nq}
+    else:
+        queries = build_all(keywords, extra_suffixes=job_sfx,
+                            extra_news_templates=news_tmpl, tier=tier)
+
+    return {
+        "campaign_id": campaign_id,
+        "campaign_name": campaign["name"],
+        "keywords": keywords,
+        "job_query_count": len(queries["job_queries"]),
+        "news_query_count": len(queries["news_queries"]),
+        "job_queries": queries["job_queries"][:20],   # preview first 20
+        "news_queries": queries["news_queries"][:10],
+        "estimates": estimate_query_count(keywords, tier),
+    }
+
+
+@app.post("/api/campaigns/{campaign_id}/scan")
+async def launch_campaign_scan(
+    campaign_id: int,
+    request: Request,
+    current_user: dict = Depends(oracle_auth.require_analyst),
+):
+    """
+    Launch a full signal scan for a campaign.
+
+    The campaign's keywords are used to auto-generate job and news queries
+    via query_builder.py. Custom queries override auto-generation if provided.
+
+    Optional body overrides:
+      max_pages  (int)   — override campaign default
+      location   (str)   — override campaign default
+      sources    (list)  — override campaign default
+    """
+    from src.query_builder import build_all
+    import src.pipeline as scan_pipeline
+
+    body = {}
+    try:
+        body = await request.json()
+    except Exception:
+        pass
+
+    campaign = oracle_db.get_campaign(campaign_id)
+    if not campaign:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    keywords   = campaign.get("keywords") or []
+    if not keywords:
+        return JSONResponse(
+            {"error": "Campaign has no keywords. Add keywords before launching a scan."},
+            status_code=400,
+        )
+
+    custom_jq  = campaign.get("custom_job_queries") or []
+    custom_nq  = campaign.get("custom_news_queries") or []
+    job_sfx    = campaign.get("extra_job_suffixes") or []
+    news_tmpl  = campaign.get("extra_news_templates") or []
+    tier       = campaign.get("query_tier", 1)
+    location   = body.get("location") or campaign.get("location") or ""
+    max_pages  = int(body.get("max_pages") or campaign.get("max_pages") or 3)
+    sources    = body.get("sources") or campaign.get("sources") or []
+
+    if custom_jq or custom_nq:
+        job_queries  = custom_jq or []
+        news_queries = custom_nq or []
+    else:
+        built = build_all(keywords, extra_suffixes=job_sfx,
+                          extra_news_templates=news_tmpl, tier=tier)
+        job_queries  = built["job_queries"]
+        news_queries = built["news_queries"]
+
+    scan_pipeline.run_scan_async(
+        job_queries=job_queries,
+        news_queries=news_queries,
+        location=location,
+        max_pages=max_pages,
+        sources=sources or None,
+        campaign_id=campaign_id,
+        campaign_keywords=keywords,
+    )
+
+    log_audit(current_user, "launch_campaign_scan", "campaign",
+              str(campaign_id), new_value={"keywords": keywords, "max_pages": max_pages})
+
+    return {
+        "status": "started",
+        "campaign_id": campaign_id,
+        "campaign_name": campaign["name"],
+        "job_queries": len(job_queries),
+        "news_queries": len(news_queries),
+        "location": location,
+        "max_pages": max_pages,
+    }
+
+
 # review queue (proper table)
 @app.get("/api/review-queue")
 async def get_review_queue(
@@ -3264,6 +3690,444 @@ async def refresh_product_intelligence(
     except Exception as e:
         logger.exception("Unhandled error in POST /api/product-intelligence/refresh")
         return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.post("/api/people-search")
+async def people_search(
+    request: Request,
+    current_user: dict = Depends(oracle_auth.require_user),
+):
+    """Search for people by job title or name using Apollo's people search API."""
+    try:
+        body = await request.json()
+        query    = body.get("q", "").strip()
+        company  = body.get("company", "").strip()
+        location = body.get("location", "").strip()
+        page     = max(1, int(body.get("page", 1)))
+        per_page = min(max(1, int(body.get("per_page", 25))), 100)
+
+        if not query and not company:
+            return JSONResponse({"error": "Search query required"}, status_code=400)
+
+        api_key = oracle_cfg.APOLLO_API_KEY
+        if not api_key:
+            return JSONResponse({"error": "Apollo API key not configured"}, status_code=503)
+
+        payload: dict = {"per_page": per_page, "page": page}
+
+        # Detect person name vs keyword/title — name = two title-cased words, no special chars
+        words = query.split()
+        is_name = (
+            len(words) == 2
+            and all(w[0].isupper() for w in words if w)
+            and not any(c in query for c in ["@", "&", "/", "(", ")"])
+        )
+        if is_name:
+            payload["q_person_name"] = query
+        elif query:
+            payload["q_keywords"] = query
+
+        if company:
+            payload["q_organization_name"] = company
+        if location:
+            payload["person_locations"] = [location]
+
+        headers = {"X-Api-Key": api_key, "Content-Type": "application/json"}
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(
+                "https://api.apollo.io/api/v1/mixed_people/api_search",
+                json=payload,
+                headers=headers,
+            )
+
+        if not resp.is_success:
+            logger.error(f"Apollo people search failed: {resp.status_code} {resp.text[:200]}")
+            return JSONResponse({"error": f"Apollo API error: {resp.status_code}"}, status_code=502)
+
+        data = resp.json()
+        people = data.get("people", [])
+        pagination = data.get("pagination", {})
+
+        results = []
+        for p in people:
+            org = p.get("organization") or {}
+            results.append({
+                "id":            p.get("id") or "",
+                "name":          f"{p.get('first_name','') or ''} {p.get('last_name','') or ''}".strip(),
+                "first_name":    p.get("first_name") or "",
+                "last_name":     p.get("last_name") or "",
+                "title":         p.get("title") or "",
+                "email":         p.get("email") or "",
+                "email_status":  p.get("email_status") or "",
+                "linkedin_url":  p.get("linkedin_url") or "",
+                "company":       org.get("name") or p.get("organization_name") or "",
+                "company_domain": org.get("primary_domain") or org.get("domain") or "",
+                "city":          p.get("city") or "",
+                "state":         p.get("state") or "",
+                "country":       p.get("country") or "",
+                "photo_url":     p.get("photo_url") or "",
+            })
+
+        return {
+            "results":  results,
+            "total":    pagination.get("total_entries", len(results)),
+            "page":     page,
+            "per_page": per_page,
+        }
+
+    except Exception as e:
+        logger.exception("Unhandled error in POST /api/people-search")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+# ── Campaign Builder ─────────────────────────────────────────────────────────
+
+@app.get("/api/campaign/icp-companies")
+async def campaign_icp_companies(
+    min_team: int = 8,
+    max_team: int = 400,
+    limit: int = 80,
+    current_user: dict = Depends(oracle_auth.require_user),
+):
+    """Fetch YC companies matching Weave's ICP from the public yc-oss/api."""
+    try:
+        from oracle_intent_engine.src.icp_hunter import fetch_weave_icp
+        companies = fetch_weave_icp(min_team=min_team, max_team=max_team, limit=limit)
+        return {"companies": companies, "count": len(companies)}
+    except Exception as e:
+        logger.exception("ICP fetch failed")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.post("/api/campaign/research-company")
+async def campaign_research_company(
+    request: Request,
+    current_user: dict = Depends(oracle_auth.require_user),
+):
+    """Scrape a company website and return a clean product description."""
+    try:
+        body = await request.json()
+        from oracle_intent_engine.src.company_researcher import research_company
+        result = research_company(
+            website=body.get("website", ""),
+            name=body.get("name", ""),
+            one_liner=body.get("one_liner", ""),
+        )
+        return result
+    except Exception as e:
+        logger.exception("Company research failed")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.post("/api/campaign/find-contacts")
+async def campaign_find_contacts(
+    request: Request,
+    current_user: dict = Depends(oracle_auth.require_user),
+):
+    """
+    Find CTO/VP Eng contacts at a list of companies via Apollo.
+    Body: { companies: [{name, website, ...}], titles: [...] }
+    """
+    try:
+        body = await request.json()
+        companies: list = body.get("companies", [])
+        titles: list = body.get("titles", [
+            "CTO", "Chief Technology Officer",
+            "VP Engineering", "VP of Engineering",
+            "Head of Engineering", "Engineering Lead",
+            "VP Product Engineering", "Director of Engineering",
+            "Co-founder CTO", "Founder CTO",
+        ])
+        api_key = oracle_cfg.APOLLO_API_KEY
+        if not api_key:
+            return JSONResponse({"error": "Apollo API key not configured"}, status_code=503)
+
+        contacts_out: list[dict] = []
+        async with httpx.AsyncClient(timeout=30) as client:
+            for co in companies[:30]:  # cap to avoid credit burn
+                co_name = co.get("name", "")
+                if not co_name:
+                    continue
+                payload = {
+                    "q_organization_name": co_name,
+                    "person_titles": titles,
+                    "per_page": 3,
+                    "page": 1,
+                }
+                try:
+                    resp = await client.post(
+                        "https://api.apollo.io/api/v1/mixed_people/api_search",
+                        json=payload,
+                        headers={"X-Api-Key": api_key, "Content-Type": "application/json"},
+                    )
+                    if resp.is_success:
+                        people = resp.json().get("people", [])
+                        for p in people:
+                            org = p.get("organization") or {}
+                            contacts_out.append({
+                                "first_name":   p.get("first_name") or "",
+                                "last_name":    p.get("last_name") or "",
+                                "title":        p.get("title") or "",
+                                "email":        p.get("email") or "",
+                                "email_status": p.get("email_status") or "",
+                                "linkedin_url": p.get("linkedin_url") or "",
+                                "company":      org.get("name") or co_name,
+                                "domain":       org.get("primary_domain") or "",
+                                # pass through ICP data for hook generation
+                                "team_size":    co.get("team_size"),
+                                "batch":        co.get("batch"),
+                                "one_liner":    co.get("one_liner"),
+                                "website":      co.get("website"),
+                            })
+                except Exception as inner_e:
+                    logger.warning(f"Apollo search failed for {co_name}: {inner_e}")
+                await asyncio.sleep(0.4)
+
+        return {"contacts": contacts_out, "count": len(contacts_out)}
+    except Exception as e:
+        logger.exception("Contact find failed")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.post("/api/campaign/generate-hooks")
+async def campaign_generate_hooks(
+    request: Request,
+    current_user: dict = Depends(oracle_auth.require_user),
+):
+    """
+    Generate personalised email hooks for a list of contacts.
+    Body: { contacts: [...], product_context: "..." (optional) }
+    Requires ANTHROPIC_API_KEY in .env.
+    """
+    try:
+        body = await request.json()
+        contacts: list = body.get("contacts", [])
+        product_context: str = body.get("product_context", "")
+
+        anthropic_key = os.getenv("ANTHROPIC_API_KEY", "").strip()
+        if not anthropic_key:
+            return JSONResponse(
+                {"error": "ANTHROPIC_API_KEY not set in .env — add it to oracle_intent_engine/.env"},
+                status_code=503,
+            )
+
+        from oracle_intent_engine.src.company_researcher import research_company
+        from oracle_intent_engine.src.hook_generator import generate_hook, _PRODUCT_CONTEXT
+
+        if not product_context:
+            product_context = _PRODUCT_CONTEXT
+
+        hooks: list[dict] = []
+        for contact in contacts[:50]:  # cap at 50 to be safe
+            co_research = {
+                "name":      contact.get("company", ""),
+                "team_size": contact.get("team_size"),
+                "batch":     contact.get("batch"),
+                "one_liner": contact.get("one_liner", ""),
+                "research":  {"summary": contact.get("one_liner", "")},
+            }
+            # Optionally scrape website for richer context
+            website = contact.get("website", "")
+            if website:
+                scraped = research_company(
+                    website=website,
+                    name=contact.get("company", ""),
+                    one_liner=contact.get("one_liner", ""),
+                )
+                co_research["research"] = scraped
+
+            hook = generate_hook(
+                contact=contact,
+                company_research=co_research,
+                product_context=product_context,
+                api_key=anthropic_key,
+            )
+            hooks.append(hook)
+            await asyncio.sleep(0.2)
+
+        return {"hooks": hooks, "count": len(hooks)}
+    except Exception as e:
+        logger.exception("Hook generation failed")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.get("/api/campaign/export-csv")
+async def campaign_export_csv(
+    request: Request,
+    current_user: dict = Depends(oracle_auth.require_user),
+):
+    """
+    Export campaign hooks as a downloadable CSV.
+    Expects hooks array in query param (POST body via GET workaround).
+    Use POST /api/campaign/export-csv-post instead.
+    """
+    return JSONResponse({"error": "Use POST /api/campaign/export-csv"}, status_code=405)
+
+
+@app.post("/api/campaign/export-csv")
+async def campaign_export_csv_post(
+    request: Request,
+    current_user: dict = Depends(oracle_auth.require_user),
+):
+    """Export generated hooks as CSV. Body: { hooks: [...] }"""
+    import csv
+    import io
+    from fastapi.responses import StreamingResponse
+
+    try:
+        body = await request.json()
+        hooks: list[dict] = body.get("hooks", [])
+
+        output = io.StringIO()
+        writer = csv.DictWriter(output, fieldnames=[
+            "company", "contact_name", "title", "email", "linkedin_url",
+            "subject", "angle", "body", "word_count",
+        ])
+        writer.writeheader()
+        for h in hooks:
+            writer.writerow({
+                "company":      h.get("company", ""),
+                "contact_name": h.get("contact_name", ""),
+                "title":        h.get("title", ""),
+                "email":        h.get("email", ""),
+                "linkedin_url": h.get("linkedin_url", ""),
+                "subject":      h.get("subject", ""),
+                "angle":        h.get("angle", ""),
+                "body":         h.get("body", ""),
+                "word_count":   h.get("word_count", ""),
+            })
+
+        output.seek(0)
+        return StreamingResponse(
+            iter([output.getvalue()]),
+            media_type="text/csv",
+            headers={"Content-Disposition": "attachment; filename=weave_campaign.csv"},
+        )
+    except Exception as e:
+        logger.exception("CSV export failed")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+# ── Cadence Builder ────────────────────────────────────────────────────────────
+
+@app.post("/api/campaign/build-cadence")
+async def build_cadence(
+    request: Request,
+    current_user: dict = Depends(oracle_auth.require_user),
+):
+    """
+    Generate a 5-touch multichannel sequence for each hook.
+    Input:  { hooks: [HookDict, ...] }
+    Output: { sequences: [SequenceDict, ...], ok_count: int }
+
+    Touch structure per contact:
+      Day 1  — Email (the personalised hook already generated)
+      Day 3  — LinkedIn connection request
+      Day 5  — Email follow-up (different angle, value-add)
+      Day 8  — LinkedIn message
+      Day 12 — Closing-the-loop breakup email
+    """
+    try:
+        body  = await request.json()
+        hooks = body.get("hooks", [])
+        if not hooks:
+            return JSONResponse({"error": "No hooks provided"}, status_code=400)
+
+        from oracle_intent_engine.src.cadence_builder import batch_build_sequences
+        import os
+        api_key = os.getenv("ANTHROPIC_API_KEY", "").strip()
+        if not api_key:
+            return JSONResponse({"error": "ANTHROPIC_API_KEY not set"}, status_code=500)
+
+        sequences = batch_build_sequences(hooks, api_key=api_key)
+        ok_count  = sum(1 for s in sequences if s.get("ok"))
+        log_audit(current_user, "build_cadence", "campaign", "batch", new_value={"count": len(sequences)})
+        return {"sequences": sequences, "ok_count": ok_count, "total": len(sequences)}
+
+    except Exception as e:
+        logger.exception("Cadence build failed")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.post("/api/campaign/export-cadence")
+async def export_cadence(
+    request: Request,
+    current_user: dict = Depends(oracle_auth.require_user),
+):
+    """
+    Export sequences as a flat CSV — one row per touch per contact.
+    Compatible with Apollo sequence import format.
+    Input: { sequences: [SequenceDict, ...] }
+    """
+    import csv
+    import io
+    from fastapi.responses import StreamingResponse
+
+    try:
+        body      = await request.json()
+        sequences = body.get("sequences", [])
+
+        from oracle_intent_engine.src.cadence_builder import sequences_to_csv_rows
+        rows = sequences_to_csv_rows(sequences)
+
+        output = io.StringIO()
+        if rows:
+            writer = csv.DictWriter(output, fieldnames=list(rows[0].keys()))
+            writer.writeheader()
+            writer.writerows(rows)
+
+        output.seek(0)
+        return StreamingResponse(
+            iter([output.getvalue()]),
+            media_type="text/csv",
+            headers={"Content-Disposition": "attachment; filename=cadence_sequence.csv"},
+        )
+    except Exception as e:
+        logger.exception("Cadence export failed")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+# ── Apollo Credit Log ──────────────────────────────────────────────────────────
+
+@app.get("/api/metrics/credits")
+async def get_credit_log(
+    limit: int = 100,
+    current_user: dict = Depends(oracle_auth.require_user),
+):
+    """
+    Returns Apollo credit consumption log — per-step, per-run.
+    Shows how many credits each pipeline stage burned.
+    """
+    try:
+        return {
+            "log":     oracle_db.get_credit_log(limit=limit),
+            "summary": oracle_db.get_credit_summary(),
+        }
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.post("/api/metrics/credits/log")
+async def post_credit_log(
+    request: Request,
+    current_user: dict = Depends(oracle_auth.require_analyst),
+):
+    """
+    Manually log Apollo credit consumption for a pipeline step.
+    Body: { run_id, step, credits_before, credits_after }
+    Useful for logging from the lead_enrichment_engine which runs as a separate process.
+    """
+    try:
+        body = await request.json()
+        oracle_db.log_apollo_credits(
+            run_id=body.get("run_id", "manual"),
+            step=body.get("step", "unknown"),
+            credits_before=body.get("credits_before"),
+            credits_after=body.get("credits_after"),
+        )
+        return {"ok": True}
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
 
 # static assets (js/css chunks)
 if REACT_DIST.exists() and (REACT_DIST / "assets").exists():

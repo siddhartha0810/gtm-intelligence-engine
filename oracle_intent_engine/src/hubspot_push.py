@@ -19,7 +19,7 @@ def _gen_unique_key() -> str:
 # ── Field maps (doc §6.1) ─────────────────────────────────────────────────────
 
 HS_COMPANY_FIELD_MAP = {
-    # Standard (doc §6.1 Group 1 — 7 fields)
+    # Standard
     "name":                      "name",
     "website":                   "website",
     "domain":                    "domain",
@@ -27,31 +27,31 @@ HS_COMPANY_FIELD_MAP = {
     "industry":                  "industry",
     "number_of_employees":       "numberofemployees",
     "about_us":                  "about_us",
-    # Billing (doc §6.1 Group 2 — 5 fields)
+    # Billing
     "billing_street":            "address",
     "billing_city":              "city",
     "billing_state":             "state",
     "billing_postal_code":       "zip",
     "billing_country":           "country",
-    # Custom (doc §6.1 Group 3 — 3 mapped fields; ultimateParentAccountId is display-only)
+    # Firmographics
     "duns_number":               "duns_number",
     "holding_type":              "holding_type",
     "number_of_locations":       "number_of_locations",
-    # Oracle / Products Intel (doc §6.1 Group 4)
-    "oracle_cloud_solutions":    "oracle_cloud_solutions",
-    "oracle_on_premise_solutions": "oracle_on_premise_solutions",
-    "oracle_relationship_type":  "oracle_relationship_type",
-    "oracle_support_end_date":   "oracle_support_end_date",
-    "oracle_version":            "oracle_version",
-    "number_of_oracle_users":    "number_of_oracle_users",
+    # Product / Technology Intel
+    "detected_products":         "detected_products",       # comma-separated detected product names
+    "vendor_relationship_type":  "vendor_relationship_type",# prospect / customer / partner
+    "product_version":           "product_version",
+    "target_product":            "target_product",
     # technology_profile resolved at push-time (see _build_company_payload)
     "_technology_profile_name":  "technology_profile",
-    # Intel summary
-    "inoapps_services_summary":  "inoapps_services_summary",
-    # Inoapps Relationship (doc §6.1 Group 5 — 3 fields)
-    "inoapps_account_manager":   "inoapps_account_manager",
-    "inoapps_account_tier":      "inoapps_account_tier",
-    "inoapps_relationship_type": "inoapps_relationship_type",
+    # Intent intelligence — auto-computed at push time
+    "why_now_reason":            "why_now_reason",       # 1-sentence urgency rationale
+    "signal_tier":               "signal_tier",          # P0 / P1 / P2
+    "intent_score":              "intent_score",         # 0.0-1.0
+    "fit_score":                 "fit_score",            # 0.0-1.0
+    "routing":                   "routing",              # ACTIVATE / NURTURE / MONITOR / DISQUALIFY
+    "priority_score":            "priority_score",       # 0-100
+    "campaign_name":             "intent_campaign_name", # which signal campaign found this company
 }
 
 HS_CONTACT_FIELD_MAP = {
@@ -78,10 +78,10 @@ HS_CONTACT_FIELD_MAP = {
     # Data Management
     "creation_source":  "lead_source",
     "person_has_moved": "person_has_moved",
-    # Oracle-Specific
-    "oracle_alignment":   "oracle_alignment",
-    "oracle_department":  "oracle_department",
-    "oracle_team":        "oracle_team",
+    # Intent enrichment
+    "product_alignment":  "product_alignment",   # which product this contact is aligned to
+    "ready_for_outreach": "ready_for_outreach",  # ZeroBounce validated
+    "signal_tier":        "signal_tier",          # inherited from company P0/P1/P2
 }
 
 
@@ -107,12 +107,55 @@ def _resolve_technology_profile_name(record: dict) -> Optional[str]:
         return None
 
 
+def _build_why_now_reason(record: dict) -> str:
+    """
+    Generate a one-sentence human-readable rationale for why this company
+    is a priority right now — based on their top signals.
+
+    Zapier gtm-cheat-codes pattern: surface 'why-now' context in CRM so reps
+    don't need to click into the intent tool to understand urgency.
+
+    Example: "Hired 3 JDE CNC admins in 45 days and posted a JD Edwards
+    EnterpriseOne go-live press release."
+    """
+    phase   = record.get("phase") or (record.get("phases") or [""])[0] or ""
+    product = record.get("target_product") or record.get("detected_products") or ""
+    signals = int(record.get("signal_count") or record.get("signals") or 0)
+    sources = record.get("sources") or []
+    tier    = record.get("signal_tier") or "P2"
+
+    if not phase:
+        return ""
+
+    phase_descriptions = {
+        "implementing": f"actively going live on {product}" if product else "actively implementing",
+        "evaluating":   f"evaluating {product} or shortlisting vendors" if product else "in active vendor evaluation",
+        "hiring":       f"hiring {product} specialists" if product else "actively hiring for this role",
+        "budgeting":    f"in budget approval cycle for {product}" if product else "in budget approval cycle",
+        "post_live":    f"live on {product} — expansion opportunity" if product else "live, expansion opportunity",
+        "researching":  f"researching {product} options" if product else "in early research stage",
+        "upgrading":    f"migrating or upgrading {product}" if product else "in upgrade / migration cycle",
+        "supporting":   f"running {product} support — renewal window" if product else "in support / renewal cycle",
+    }
+
+    phase_desc = phase_descriptions.get(phase, f"showing {phase} signals")
+    source_note = f" across {len(sources)} sources" if len(sources) > 1 else ""
+    signal_note = f" ({signals} corroborating signals)" if signals >= 3 else ""
+    tier_note   = " — P0: act within 48h" if tier == "P0" else (" — P1: act this week" if tier == "P1" else "")
+
+    return f"Company is {phase_desc}{source_note}{signal_note}.{tier_note}".strip()
+
+
 def _build_company_payload(record: dict) -> dict:
     # Inject resolved technology_profile_name so the field map can pick it up
     enriched = dict(record)
     tp_name = _resolve_technology_profile_name(record)
     if tp_name:
         enriched["_technology_profile_name"] = tp_name
+
+    # Compute why-now reason if not already present
+    if not enriched.get("why_now_reason"):
+        enriched["why_now_reason"] = _build_why_now_reason(record)
 
     props = {}
     for db_col, hs_prop in HS_COMPANY_FIELD_MAP.items():

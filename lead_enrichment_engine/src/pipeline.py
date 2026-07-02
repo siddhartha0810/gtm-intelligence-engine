@@ -753,6 +753,20 @@ def main() -> None:
     df = run("enriched", enrich, df, checkpoint_fn=ckpt)
     apollo_credits_after  = get_apollo_credits()
 
+    # Log Apollo credit consumption for this run so the UI can show per-step burn
+    try:
+        import sys, os as _os
+        _root = _os.path.dirname(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
+        if _root not in sys.path:
+            sys.path.insert(0, _root)
+        from oracle_intent_engine.src.database_sqlite import log_apollo_credits
+        _run_id = str(run_id) if run_id else "standalone"
+        _before = apollo_credits_before.get("consumed_credits") if isinstance(apollo_credits_before, dict) else None
+        _after  = apollo_credits_after.get("consumed_credits")  if isinstance(apollo_credits_after,  dict) else None
+        log_apollo_credits(_run_id, "stage_3_enrichment", _before, _after)
+    except Exception as _e:
+        pass  # credit logging is best-effort — never block the pipeline
+
     # ── STAGE 4: Validate Vendor Emails ────────────────────────────────────
     # Validate emails found by Apollo, Apify, or present in the original input
     df = run("vendor_validated", validate_emails, df, source_filter=VENDOR_SOURCES)
@@ -802,9 +816,41 @@ def main() -> None:
     # For leads still without an email, try to guess it from naming patterns
     df = run("email_predicted", predict_missing_emails, df)
 
+    # ── PRE-FLIGHT GATE: Test 25-row sample before full Stage 6 spend ─────────
+    # Validates a small sample first to check authentication rate.
+    # If the rate is below 70%, the domain patterns are unreliable and we skip
+    # the full run — saving the bulk of ZeroBounce credits.
+    _GATE_SAMPLE   = 25
+    _GATE_MIN_RATE = 0.70
+    _predicted_pool = df[
+        (df["email_source"].astype(str) == "predicted") &
+        (df["email"].astype(str).str.strip() != "")
+    ]
+
+    _run_stage6 = True
+    if not should_skip("pred_validated", last_stage) and len(_predicted_pool) > _GATE_SAMPLE:
+        print(f"\n  Pre-flight gate      : validating {_GATE_SAMPLE}-row sample before full Stage 6")
+        _sample = _predicted_pool.sample(_GATE_SAMPLE, random_state=42)
+        _sample_validated = validate_emails(_sample.copy(), source_filter=["predicted"])
+        _valid_statuses = {"valid", "catch-all"}
+        _valid_n = int(_sample_validated["email_validation_status"].isin(_valid_statuses).sum())
+        _rate    = _valid_n / _GATE_SAMPLE
+        print(f"  Pre-flight result    : {_valid_n}/{_GATE_SAMPLE} valid ({_rate:.0%}) — threshold {_GATE_MIN_RATE:.0%}")
+        if _rate < _GATE_MIN_RATE:
+            print(f"  !! Gate FAILED — skipping Stage 6 to save ZeroBounce credits.")
+            print(f"  !! Review domain patterns or check email_prediction_pattern distribution.")
+            _run_stage6 = False
+        else:
+            # Copy sample validation results back into main df so Stage 6 doesn't re-bill them
+            df.update(_sample_validated[["email_validation_status", "email_validation_sub_status"]])
+            print(f"  Pre-flight PASSED — proceeding with full Stage 6")
+
     # ── STAGE 6: Validate Predicted Emails ─────────────────────────────────
     # Run ZeroBounce again, but only on the predicted emails
-    df = run("pred_validated", validate_emails, df, source_filter=["predicted"])
+    if _run_stage6:
+        df = run("pred_validated", validate_emails, df, source_filter=["predicted"])
+    else:
+        save(df, "pred_validated")  # checkpoint so resume works
 
     # Collapse multi-candidate global-pattern rows back to 1 row per lead,
     # keeping the first ZeroBounce-valid prediction and dropping the rest.

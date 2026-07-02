@@ -398,10 +398,28 @@ APOLLO_API_KEY=your_apollo_key_here
 
 ## Running the Application
 
-### Prerequisites
+### Run the demo (Docker, no VPN required)
+
+The fastest way to see the platform running — no venv, no VPN, no LAN Postgres.
+Spins up a containerized Postgres, builds the app, and seeds it with a handful
+of synthetic companies/signals/contacts/campaign on first boot.
+
+```bash
+docker compose up --build
+```
+
+Open **http://localhost:8000**. Enrichment/scraping features that call external
+APIs (Apollo, ZeroBounce, HubSpot, Anthropic) show a "not configured" state
+until you supply real keys — set them in a `.env` file at the repo root (see
+`.env.example`) and re-run `docker compose up`.
+
+To register the first user, use the signup screen in the UI on first load.
+
+### Prerequisites (native, non-Docker path)
 - Python 3.13+
 - Node.js 18+
-- Access to `10.0.0.0.0` (on-site or VPN)
+- Access to `10.0.0.0.0` (on-site or VPN) — or omit and the app auto-falls-back
+  to a local SQLite database (`oracle_intent.db`) when Postgres is unreachable.
 
 ### Start the full platform
 
