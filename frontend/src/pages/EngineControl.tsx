@@ -65,6 +65,7 @@ const ENGINES = [
 // Sources are split into active (proven signal generators) and experimental (0 signals to date).
 // Experimental sources are hidden by default but can be expanded if needed.
 const ACTIVE_SOURCES = [
+  { id: 'ats',            label: 'ATS Boards',       desc: 'Greenhouse/Lever/Ashby/SmartRecruiters — first-party open job JSON, ~0% block rate, highest signal (company hiring a "NetSuite Admin" = confirmed customer)' },
   { id: 'linkedin',       label: 'LinkedIn Jobs',    desc: '787 signals · 664 companies — primary signal source (ALL Oracle products)' },
   { id: 'oracle_website', label: 'Oracle.com',       desc: '95 signals · 94 companies — customer stories + press releases' },
   { id: 'erp_today',      label: 'ERP News (Multi)', desc: 'ERP Today + Diginomica + Bing RSS — EBS, PeopleSoft, Siebel, Hyperion, JDE go-lives' },
@@ -85,7 +86,7 @@ const EXPERIMENTAL_SOURCES = [
   { id: 'agentic_harvester', label: 'Agentic Harvester',      desc: 'LLM-driven extraction from watch-list URLs — no per-site parser needed, add URLs in config' },
 ]
 
-const DEFAULT_SOURCES = ['linkedin', 'oracle_website', 'erp_today', 'news', 'g2_reviews']
+const DEFAULT_SOURCES = ['ats', 'linkedin', 'oracle_website', 'erp_today', 'news', 'g2_reviews']
 
 const card = { background:'#ffffff', border:'1px solid #e2e8f0', borderRadius:12, padding:20, boxShadow:'0 1px 3px rgba(0,0,0,0.06)' }
 const now  = () => new Date().toLocaleTimeString('en-GB', { hour12: false })

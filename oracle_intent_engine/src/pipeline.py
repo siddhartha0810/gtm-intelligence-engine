@@ -37,6 +37,7 @@ from src.signals.oracle_event_signal import OracleEventSignal
 from src.signals.company_pages_signal import CompanyPagesSignal
 from src.signals.g2_reviews_signal import G2ReviewsSignal
 from src.signals.agentic_harvester_signal import AgenticHarvesterSignal
+from src.signals.ats_signal import ATSSignal
 
 logger = get_logger(__name__)
 
@@ -142,6 +143,7 @@ def run_scan(
             "home_builders":    HomeBuildersSignal(),
             "g2_reviews":       G2ReviewsSignal(),
             "agentic_harvester": AgenticHarvesterSignal(),
+            "ats":              ATSSignal(),
         }
 
         raw_signals: list[dict] = []
@@ -306,6 +308,21 @@ def run_scan(
                 _log(f"✓ G2/CAPTERRA done — {len(results)} confirmed-user signals")
             except Exception as e:
                 _log(f"  [g2_reviews] ERROR: {e}")
+
+        # ATS boards — first-party open job JSON, ~0% block rate, highest signal
+        if "ats" in sources and not _is_stopped():
+            _current_scan["progress"] = "Scanning ATS boards (Greenhouse/Lever/Ashby/SmartRecruiters)..."
+            ats_keywords = campaign_keywords or config.ATS_DEFAULT_INTENT_KEYWORDS
+            _log(f"▶ Starting ATS ({len(config.ATS_BOARDS)} boards, "
+                 f"{len(ats_keywords)} intent keywords)")
+            try:
+                results = scrapers["ats"].fetch(location=location, max_pages=max_pages,
+                                                keywords=ats_keywords)
+                raw_signals.extend(results)
+                _current_scan["raw_signals"] = len(raw_signals)
+                _log(f"✓ ATS done — {len(results)} first-party hiring signals")
+            except Exception as e:
+                _log(f"  [ats] ERROR: {e}")
 
         # agentic harvester — arbitrary watch-list URLs, no dedicated parser needed
         if "agentic_harvester" in sources and not _is_stopped():

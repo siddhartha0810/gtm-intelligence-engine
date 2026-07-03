@@ -98,6 +98,56 @@ AGENTIC_HARVESTER_URLS = [
     u.strip() for u in os.getenv("AGENTIC_HARVESTER_URLS", "").split(",") if u.strip()
 ]
 
+# ── ATS signal board registry (ats_signal.py) ────────────────────────────────
+# Companies publish their own open roles as clean public JSON on these ATS
+# platforms — highest signal-to-noise, ~0% block rate. A company hiring a
+# "Salesforce Developer" is a first-party confirmed-customer signal.
+#
+# Registry format (env override): ATS_BOARDS="greenhouse:stripe,ashby:openai,lever:mistral"
+# Adding a company to watch = one entry here, not a new scraper.
+_DEFAULT_ATS_BOARDS = [
+    # Verified live (Jul 2026). Mix of ATS types so coverage survives any one
+    # platform 404'ing for a given company.
+    {"ats": "greenhouse", "token": "stripe"},
+    {"ats": "greenhouse", "token": "databricks"},
+    {"ats": "greenhouse", "token": "gitlab"},
+    {"ats": "greenhouse", "token": "figma"},
+    {"ats": "greenhouse", "token": "anthropic"},
+    {"ats": "ashby",      "token": "openai"},
+    {"ats": "ashby",      "token": "Ramp"},
+    {"ats": "ashby",      "token": "Notion"},
+    {"ats": "lever",      "token": "mistral"},
+    {"ats": "lever",      "token": "spotify"},
+]
+
+def _parse_ats_boards(env_val: str) -> list[dict]:
+    boards = []
+    for entry in env_val.split(","):
+        entry = entry.strip()
+        if ":" in entry:
+            ats, token = entry.split(":", 1)
+            if ats.strip() and token.strip():
+                boards.append({"ats": ats.strip(), "token": token.strip()})
+    return boards
+
+_ats_env = os.getenv("ATS_BOARDS", "").strip()
+ATS_BOARDS = _parse_ats_boards(_ats_env) if _ats_env else list(_DEFAULT_ATS_BOARDS)
+
+# Default title-match only — a body mention ("CRM hygiene" in an AE post) is
+# mostly noise; a title match ("Salesforce Administrator") is a real operating
+# signal. Live test: 1,982 body matches vs 7 title matches — the 7 were the
+# actual buyers. Flip to include weak body matches at the cost of noise.
+ATS_INCLUDE_BODY_MATCHES = os.getenv("ATS_INCLUDE_BODY_MATCHES", "false").lower() in ("1", "true", "yes")
+ATS_MAX_JOBS_PER_BOARD = int(os.getenv("ATS_MAX_JOBS_PER_BOARD", "300"))
+
+# Intent keywords for a default (non-campaign) Oracle scan — job titles that
+# prove a company OPERATES an Oracle product internally. Campaign scans pass
+# their own campaign_keywords instead.
+ATS_DEFAULT_INTENT_KEYWORDS = [
+    "Oracle", "NetSuite", "JD Edwards", "JDE", "PeopleSoft", "Hyperion",
+    "Oracle Cloud", "Oracle ERP", "Oracle EBS", "E-Business Suite", "Fusion",
+]
+
 # ── Role suffixes used by the auto-generator for new taxonomy products ────────
 # When a product is added to the taxonomy but has no entry in QUERIES_BY_PRODUCT,
 # these suffixes are crossed with the canonical name and multi-word aliases to

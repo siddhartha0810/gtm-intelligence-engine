@@ -3296,6 +3296,104 @@ async def enrich_linkedin_urls(
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
+# ── GTM Agent Team ────────────────────────────────────────────────────────────
+# Narrow specialist agents behind one contract (src/agents/). Agents never
+# raise: failures and LLM-unavailable fallbacks come back as structured
+# results with ok/degraded flags, so the pipeline keeps moving.
+
+@app.get("/api/agents")
+async def list_gtm_agents(
+    current_user: dict = Depends(oracle_auth.require_user),
+):
+    """List registered GTM agents and their input contracts."""
+    from src.agents import list_agents
+    return {"agents": list_agents(), "llm_available": _llm_gateway_status()}
+
+
+def _llm_gateway_status() -> dict:
+    from src import llm_gateway
+    return {
+        "ollama":    llm_gateway.ollama_available(),
+        "anthropic": llm_gateway.anthropic_available(),
+    }
+
+
+@app.post("/api/agents/{agent_name}/run")
+async def run_gtm_agent(
+    agent_name: str,
+    request: Request,
+    current_user: dict = Depends(oracle_auth.require_analyst),
+):
+    """
+    Run one agent with a JSON payload matching its required_fields.
+    Always returns a structured AgentResult — check `ok` and `degraded`.
+    """
+    from src.agents import get_agent
+    agent = get_agent(agent_name)
+    if agent is None:
+        return JSONResponse({"error": f"Unknown agent '{agent_name}'"}, status_code=404)
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    result = agent.run(payload if isinstance(payload, dict) else {})
+    log_audit(current_user, f"agent_run_{agent_name}", "agent",
+              agent_name, new_value={"ok": result.ok, "degraded": result.degraded})
+    return result.as_dict()
+
+
+@app.post("/api/agents/strategist/campaign")
+async def strategist_to_campaign(
+    request: Request,
+    current_user: dict = Depends(oracle_auth.require_analyst),
+):
+    """
+    Prompt → campaign in one call: runs the Strategist agent, then saves the
+    resulting spec as a campaign ready to launch via the existing
+    /api/campaigns/{id}/run flow.
+
+    Body: { "prompt": "find fintechs hiring data engineers in Texas",
+            "location": "" (optional),
+            "dry_run": false (optional — return the spec without saving) }
+    """
+    from src.agents import get_agent
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+
+    result = get_agent("strategist").run(body if isinstance(body, dict) else {})
+    if not result.ok:
+        return JSONResponse(result.as_dict(), status_code=422)
+
+    spec = result.data
+    if body.get("dry_run"):
+        return {**result.as_dict(), "campaign": None}
+
+    # Campaign names are UNIQUE — suffix on collision rather than failing.
+    name = spec["name"]
+    if oracle_db.list_campaigns():
+        existing = {c["name"] for c in oracle_db.list_campaigns()}
+        suffix = 2
+        while name in existing:
+            name = f"{spec['name'][:54]} ({suffix})"
+            suffix += 1
+
+    campaign = oracle_db.create_campaign(
+        name=name,
+        description=(spec.get("icp_hypothesis") or spec.get("description", "")),
+        keywords=spec["keywords"],
+        extra_job_suffixes=spec.get("extra_job_suffixes", []),
+        extra_news_templates=spec.get("extra_news_templates", []),
+        location=spec.get("location", ""),
+        sources=spec.get("sources", []),
+        query_tier=1,
+    )
+    log_audit(current_user, "strategist_create_campaign", "campaign",
+              str(campaign.get("id", "")), new_value=campaign)
+    return {**result.as_dict(), "campaign": campaign}
+
+
 # ── Universal Signal Campaigns ────────────────────────────────────────────────
 # Campaigns let users define intent searches for ANY product or technology,
 # not just Oracle. Each campaign stores keywords + query config and can
