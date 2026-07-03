@@ -664,6 +664,24 @@ CREATE TABLE IF NOT EXISTS review_queue (
     "CREATE INDEX IF NOT EXISTS idx_outcomes_company ON outcomes(company_id)",
     "CREATE INDEX IF NOT EXISTS idx_outcomes_outcome ON outcomes(outcome)",
     "CREATE INDEX IF NOT EXISTS idx_outcomes_created ON outcomes(created_at DESC)",
+
+    # ats_boards registry — auto-discovered company→ATS map (ats_discovery.py).
+    # The ATS signal reads this on top of the config default boards, so the
+    # watch-list grows itself as companies are discovered.
+    """
+    CREATE TABLE IF NOT EXISTS ats_boards (
+        id            BIGSERIAL PRIMARY KEY,
+        company       TEXT NOT NULL DEFAULT '',
+        ats           TEXT NOT NULL,
+        token         TEXT NOT NULL,
+        job_count     INTEGER NOT NULL DEFAULT 0,
+        verified      BOOLEAN NOT NULL DEFAULT FALSE,
+        is_active     BOOLEAN NOT NULL DEFAULT TRUE,
+        discovered_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE (ats, token)
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_ats_boards_active ON ats_boards(is_active)",
 ]
 
 # core context manager
@@ -2365,6 +2383,31 @@ def get_outcome_totals() -> dict:
     with db_cursor(commit=False) as cur:
         cur.execute("SELECT outcome, COUNT(*) AS n FROM outcomes GROUP BY outcome")
         return {r["outcome"]: int(r["n"]) for r in cur.fetchall()}
+
+
+# ── ATS board registry (auto-discovery) ───────────────────────────────────────
+
+def upsert_ats_board(company: str, ats: str, token: str,
+                     job_count: int = 0, verified: bool = False) -> None:
+    with db_cursor() as cur:
+        cur.execute("""
+            INSERT INTO ats_boards (company, ats, token, job_count, verified)
+            VALUES (%s, %s, %s, %s, %s)
+            ON CONFLICT (ats, token) DO UPDATE SET
+                company   = COALESCE(NULLIF(EXCLUDED.company, ''), ats_boards.company),
+                job_count = EXCLUDED.job_count,
+                verified  = ats_boards.verified OR EXCLUDED.verified,
+                is_active = TRUE
+        """, (company.strip(), ats.strip(), token.strip(), int(job_count), bool(verified)))
+
+
+def get_ats_boards(active_only: bool = True) -> list:
+    with db_cursor(commit=False) as cur:
+        if active_only:
+            cur.execute("SELECT * FROM ats_boards WHERE is_active = TRUE ORDER BY job_count DESC")
+        else:
+            cur.execute("SELECT * FROM ats_boards ORDER BY job_count DESC")
+        return [dict(r) for r in cur.fetchall()]
 
 
 # ── SQLite auto-fallback ──────────────────────────────────────────────────────

@@ -545,6 +545,22 @@ _DDL = [
     "CREATE INDEX IF NOT EXISTS idx_outcomes_company ON outcomes(company_id)",
     "CREATE INDEX IF NOT EXISTS idx_outcomes_outcome ON outcomes(outcome)",
     "CREATE INDEX IF NOT EXISTS idx_outcomes_created ON outcomes(created_at DESC)",
+
+    # ats_boards registry — auto-discovered company→ATS map (mirrors database.py)
+    """
+    CREATE TABLE IF NOT EXISTS ats_boards (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        company       TEXT NOT NULL DEFAULT '',
+        ats           TEXT NOT NULL,
+        token         TEXT NOT NULL,
+        job_count     INTEGER NOT NULL DEFAULT 0,
+        verified      INTEGER NOT NULL DEFAULT 0,
+        is_active     INTEGER NOT NULL DEFAULT 1,
+        discovered_at TEXT NOT NULL DEFAULT (datetime('now')),
+        UNIQUE (ats, token)
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_ats_boards_active ON ats_boards(is_active)",
 ]
 
 # ── Public API ────────────────────────────────────────────────────────────────
@@ -1548,3 +1564,28 @@ def get_outcome_totals() -> dict:
     with db_cursor(commit=False) as cur:
         cur.execute("SELECT outcome, COUNT(*) AS n FROM outcomes GROUP BY outcome")
         return {r["outcome"]: int(r["n"]) for r in cur.fetchall()}
+
+
+# ── ATS board registry (auto-discovery) — mirrors database.py ─────────────────
+
+def upsert_ats_board(company: str, ats: str, token: str,
+                     job_count: int = 0, verified: bool = False) -> None:
+    with db_cursor() as cur:
+        cur.execute("""
+            INSERT INTO ats_boards (company, ats, token, job_count, verified)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT (ats, token) DO UPDATE SET
+                company   = CASE WHEN excluded.company != '' THEN excluded.company ELSE ats_boards.company END,
+                job_count = excluded.job_count,
+                verified  = CASE WHEN ats_boards.verified = 1 OR excluded.verified = 1 THEN 1 ELSE 0 END,
+                is_active = 1
+        """, (company.strip(), ats.strip(), token.strip(), int(job_count), 1 if verified else 0))
+
+
+def get_ats_boards(active_only: bool = True) -> list:
+    with db_cursor(commit=False) as cur:
+        if active_only:
+            cur.execute("SELECT * FROM ats_boards WHERE is_active = 1 ORDER BY job_count DESC")
+        else:
+            cur.execute("SELECT * FROM ats_boards ORDER BY job_count DESC")
+        return [dict(r) for r in cur.fetchall()]

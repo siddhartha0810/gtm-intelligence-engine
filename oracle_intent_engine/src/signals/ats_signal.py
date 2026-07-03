@@ -168,6 +168,26 @@ def _evidence_snippet(text: str, keyword: str, span: int = 60) -> str:
     return ("..." if start > 0 else "") + text[start:end].strip() + ("..." if end < len(text) else "")
 
 
+def _merged_boards() -> list[dict]:
+    """Config default boards + auto-discovered registry (database.ats_boards),
+    deduped by ats:token. DB access is best-effort — if it's unavailable
+    (e.g. guided_run with no DB), fall back to config alone."""
+    boards = list(getattr(config, "ATS_BOARDS", []))
+    # Dedup case-insensitively on both ats and token (ATS tokens are
+    # case-insensitive, so "Ramp" and "ramp" are the same board).
+    seen = {f"{b.get('ats','').lower()}:{b.get('token','').lower()}" for b in boards}
+    try:
+        from src import database as db
+        for r in db.get_ats_boards(active_only=True):
+            key = f"{(r.get('ats') or '').lower()}:{(r.get('token') or '').lower()}"
+            if key not in seen and r.get("ats") and r.get("token"):
+                seen.add(key)
+                boards.append({"ats": r["ats"], "token": r["token"]})
+    except Exception as e:
+        logger.debug("[ats] registry unavailable, using config boards only: %s", e)
+    return boards
+
+
 class ATSSignal(BaseSignal):
     source_name = "ats"
 
@@ -178,7 +198,7 @@ class ATSSignal(BaseSignal):
         each posting whose TITLE (or body, if enabled) matches an intent
         keyword. `keywords` comes from the campaign; falls back to [query].
         """
-        boards = getattr(config, "ATS_BOARDS", [])
+        boards = _merged_boards()
         if not boards:
             return []
 

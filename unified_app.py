@@ -3476,6 +3476,54 @@ async def recalibrate_endpoint(
     return {**result.as_dict(), "attribution": attr}
 
 
+# ── ATS Board Auto-Discovery ──────────────────────────────────────────────────
+# The watch-list builds itself: give it company names (or discover boards for
+# companies already detected by other signals), and it finds each company's
+# ATS platform + token so future scans pull first-party hiring signals.
+
+@app.get("/api/ats/boards")
+async def list_ats_boards_endpoint(
+    current_user: dict = Depends(oracle_auth.require_user),
+):
+    return {"boards": oracle_db.get_ats_boards(active_only=False)}
+
+
+@app.post("/api/ats/discover")
+async def discover_ats_boards_endpoint(
+    request: Request,
+    current_user: dict = Depends(oracle_auth.require_analyst),
+):
+    """
+    Discover + persist ATS boards.
+    Body: { "companies": ["Stripe", "Ramp", ...] }         explicit list, OR
+          { "from_companies": true, "limit": 50 }          discover for companies
+                                                           already in the DB
+    """
+    from src import ats_discovery
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+
+    names = [str(n).strip() for n in (body.get("companies") or []) if str(n).strip()]
+    if body.get("from_companies"):
+        limit = int(body.get("limit", 50))
+        with oracle_db.db_cursor(commit=False) as cur:
+            cur.execute("SELECT name FROM companies ORDER BY signal_count DESC LIMIT %s", (limit,))
+            names.extend([r["name"] for r in cur.fetchall()])
+    names = list(dict.fromkeys(names))  # dedupe, preserve order
+    if not names:
+        return JSONResponse({"error": "provide companies[] or from_companies=true"}, status_code=400)
+
+    found = ats_discovery.discover_boards(names)
+    for b in found:
+        oracle_db.upsert_ats_board(company=b["company"], ats=b["ats"], token=b["token"],
+                                   job_count=b["job_count"], verified=b["verified"])
+    log_audit(current_user, "ats_discover", "ats_boards", "batch",
+              new_value={"searched": len(names), "found": len(found)})
+    return {"searched": len(names), "found": len(found), "boards": found}
+
+
 # ── Universal Signal Campaigns ────────────────────────────────────────────────
 # Campaigns let users define intent searches for ANY product or technology,
 # not just Oracle. Each campaign stores keywords + query config and can
