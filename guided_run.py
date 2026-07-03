@@ -56,8 +56,14 @@ TARGET = {
         {"ats": "lever", "token": "mistral"},
         {"ats": "lever", "token": "spotify"},
     ],
-    "max_hooks": 6,   # cap LLM calls — detection is free, drafting costs a little
+    "max_hooks": 6,      # cap LLM calls — detection is free, drafting costs a little
+    "max_enrich": 3,     # cap Apollo reveals — bounds real $ cost when enrichment is ON
 }
+
+# Real decision-maker enrichment (Apollo) is OFF unless you explicitly opt in AND
+# have a key — Apollo charges per email reveal. Enable for a run with:
+#   APOLLO_ENRICH=1 APOLLO_API_KEY=... python guided_run.py
+# Without it, the run stays $0 and uses inferred buyer personas.
 
 # Economic buyer for each system (who owns the budget / feels the pain)
 _BUYER_PERSONA = {
@@ -73,7 +79,30 @@ def _persona_for(matched_keyword: str) -> str:
     return _BUYER_PERSONA.get((matched_keyword or "").lower(), _DEFAULT_PERSONA)
 
 
+def _real_contact(company: str, persona: str, apollo_key: str) -> dict | None:
+    """Find ONE real decision-maker at the company via Apollo. Costs credits
+    (reveals an email) — only called when enrichment is explicitly enabled.
+    Returns a hook-ready contact dict, or None if nothing found."""
+    from src.apollo_enrichment import _apollo_search
+    try:
+        contacts, _pass = _apollo_search(company, apollo_key, max_per=1, role_filters=[persona])
+    except Exception:
+        return None
+    if not contacts:
+        return None
+    c = contacts[0]
+    return {
+        "first_name":   c.get("first_name", "") or "there",
+        "last_name":    c.get("last_name", ""),
+        "title":        c.get("title", "") or persona,
+        "company":      company,
+        "email":        c.get("email", ""),
+        "linkedin_url": c.get("linkedin_url", ""),
+    }
+
+
 def main() -> None:
+    import os
     from src import config, guards, llm_gateway
     from src.signals.ats_signal import ATSSignal
     from src import staffing_filter
@@ -82,6 +111,9 @@ def main() -> None:
     # Make the runner's boards the active registry for this process
     config.ATS_BOARDS = TARGET["boards"]
 
+    apollo_key = os.getenv("APOLLO_API_KEY", "").strip()
+    enrich_on = os.getenv("APOLLO_ENRICH", "").lower() in ("1", "true", "yes") and bool(apollo_key)
+
     print("=" * 70)
     print("GUIDED RUN — real targets, $0, first-party ATS intent")
     print("=" * 70)
@@ -89,6 +121,7 @@ def main() -> None:
     print(f"Intent keywords: {', '.join(TARGET['intent_keywords'])}")
     print(f"Boards: {len(TARGET['boards'])}")
     print(f"LLM providers available: {llm_gateway.active_providers() or '(none — hooks will be skipped)'}")
+    print(f"Apollo enrichment: {'ON (real contacts, costs credits)' if enrich_on else 'OFF (inferred personas, $0)'}")
     print()
 
     # ── DISCOVER + QUALIFY (title-level intent) ───────────────────────────────
@@ -117,10 +150,12 @@ def main() -> None:
     print(f"[3/4] DRAFT — generating grounded hooks for up to {TARGET['max_hooks']} companies…")
     drafted = []
     can_draft = llm_gateway.is_available()
+    enriched_count = 0
     for co, lead in list(leads.items())[: TARGET["max_hooks"]] if can_draft else []:
         primary = lead["signals"][0]
         matched = primary.get("matched_keyword", "")
         evidence = primary.get("evidence") or primary.get("description", "")[:300]
+        persona = _persona_for(matched)
 
         company_research = {
             "name": co,
@@ -130,20 +165,31 @@ def main() -> None:
                 f"Observed signal from their own careers page: {evidence}"
             )},
         }
-        contact = {
-            "first_name": "there",
-            "title": _persona_for(matched),
-            "company": co,
-            "email": "",   # ← enrichment (Apollo) fills this in a real send
-            "linkedin_url": "",
-        }
+
+        # Real decision-maker via Apollo (gated + capped), else inferred persona.
+        contact = None
+        contact_source = "inferred persona"
+        if enrich_on and enriched_count < TARGET["max_enrich"]:
+            real = _real_contact(co, persona, apollo_key)
+            enriched_count += 1
+            if real:
+                contact = real
+                contact_source = "apollo"
+        if contact is None:
+            contact = {"first_name": "there", "title": persona, "company": co,
+                       "email": "", "linkedin_url": ""}
+
         hook = generate_hook(contact, company_research, product_context=TARGET["product_pitch"])
         drafted.append({"company": co, "matched": matched,
                         "signal": primary.get("job_title", ""),
                         "url": primary.get("url", ""), "evidence": evidence,
-                        "persona": contact["title"], "hook": hook})
+                        "persona": contact["title"],
+                        "contact_name": f"{contact.get('first_name','')} {contact.get('last_name','')}".strip(),
+                        "contact_email": contact.get("email", ""),
+                        "contact_source": contact_source, "hook": hook})
         status = "grounded" if hook.get("grounded") else ("ok" if hook.get("ok") else "failed")
-        print(f"      • {co:14} [{status}] {hook.get('subject','')[:50]}")
+        who = drafted[-1]["contact_name"] if contact_source == "apollo" else persona
+        print(f"      • {co:14} [{status}] → {who[:22]:22} | {hook.get('subject','')[:44]}")
 
     if not can_draft:
         print("      (no LLM provider — set GROQ/GEMINI/ANTHROPIC key to draft hooks)")
@@ -190,7 +236,13 @@ def _write_report(leads: dict, drafted: list) -> None:
         lines.append("")
         for d in drafted:
             h = d["hook"]
-            lines.append(f"### {d['company']} — {d['persona']}")
+            who = d.get("contact_name") if d.get("contact_source") == "apollo" else d["persona"]
+            lines.append(f"### {d['company']} — {who}")
+            if d.get("contact_source") == "apollo":
+                em = d.get("contact_email") or "(email not revealed)"
+                lines.append(f"- **Contact:** {d.get('contact_name','')} · {d['persona']} · {em}  _(Apollo)_")
+            else:
+                lines.append(f"- **Contact:** {d['persona']} _(inferred persona — enrich to get the named buyer)_")
             lines.append(f"- **Signal:** hiring *{d['signal']}* (operates {d['matched']})")
             lines.append(f"- **Evidence:** {d['evidence'][:200]}")
             lines.append(f"- **Source:** {d['url']}")
