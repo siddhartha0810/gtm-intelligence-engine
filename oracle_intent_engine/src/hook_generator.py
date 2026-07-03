@@ -248,8 +248,8 @@ def generate_hook(
             "error": str | None,
         }
     """
-    import anthropic
-    import json
+    import re
+    from src import llm_gateway, guards
 
     # ── 6-bucket personalization gate ─────────────────────────────────────────
     bucket = compute_personalization_bucket(contact, company_research)
@@ -264,36 +264,39 @@ def generate_hook(
             "hold_back":              True,
         }
 
-    key = api_key or os.getenv("ANTHROPIC_API_KEY", "").strip()
-    if not key:
-        return _error_result(contact, company_research, "ANTHROPIC_API_KEY not set")
-
-    client = anthropic.Anthropic(api_key=key)
+    if not llm_gateway.is_available():
+        return _error_result(contact, company_research,
+                             "No LLM provider available (set GROQ/GEMINI/ANTHROPIC key or run Ollama)")
 
     user_prompt = _build_user_prompt(contact, company_research, product_context, force_angle)
 
     try:
-        message = client.messages.create(
-            model=model,
-            max_tokens=400,
-            system=_SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": user_prompt}],
-        )
-        raw = message.content[0].text.strip()
-
-        # Parse JSON — strip markdown fences if present
-        if raw.startswith("```"):
-            raw = raw.split("```")[1]
-            if raw.startswith("json"):
-                raw = raw[4:]
-        parsed = json.loads(raw)
+        # Gateway: Groq/Gemini/Ollama/Anthropic + cache + budget. task="copy"
+        # routes to the smart tier. api_key kept only for backwards compat —
+        # gateway resolves providers from env.
+        parsed = llm_gateway.complete_json(user_prompt, system=_SYSTEM_PROMPT,
+                                           task="copy", max_tokens=400)
+        if parsed is None:
+            return _error_result(contact, company_research,
+                                 "LLM returned no parseable hook")
 
         body = parsed.get("body", "")
         # Enforce one sentence — cut at first sentence-ending punctuation
-        import re
         match = re.search(r'[.!?]', body)
         if match:
             body = body[:match.start() + 1].strip()
+
+        # ── Grounding gate ────────────────────────────────────────────────────
+        # An opener must reference a REAL, observed specific — not generic
+        # flattery or a hallucinated fact. Verify the body quotes a distinctive
+        # term from the evidence we actually hold.
+        evidence_sources = [
+            contact.get("company", "") or company_research.get("name", ""),
+            contact.get("title", ""),
+            company_research.get("one_liner", ""),
+            company_research.get("research", {}).get("summary", ""),
+        ]
+        grounded, matched_term = guards.grounding_check(body, evidence_sources)
 
         return {
             "subject":      parsed.get("subject", ""),
@@ -307,6 +310,8 @@ def generate_hook(
             "linkedin_url":           contact.get("linkedin_url", ""),
             "personalization_bucket": bucket,
             "personalization_label":  bucket_label,
+            "grounded":               grounded,
+            "grounded_on":            matched_term,
             "hold_back":              False,
             "ok":                     True,
             "error":                  None,

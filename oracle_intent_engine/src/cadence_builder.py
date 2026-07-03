@@ -78,14 +78,13 @@ def build_sequence(
             "error": str | None,
         }
     """
-    import anthropic
-
-    key = api_key or os.getenv("ANTHROPIC_API_KEY", "").strip()
-    if not key:
-        return _error(hook, "ANTHROPIC_API_KEY not set")
+    from src import llm_gateway
 
     if not hook.get("ok"):
         return _error(hook, "Source hook failed — no content to build sequence from")
+
+    if not llm_gateway.is_available():
+        return _error(hook, "No LLM provider available (set GROQ/GEMINI/ANTHROPIC key or run Ollama)")
 
     first_name   = (hook.get("contact_name") or "").split()[0]
     company      = hook.get("company", "")
@@ -104,19 +103,10 @@ Build touches 2–5 for this contact. Reference what {company} actually does.
 Avoid repeating the {angle} angle — use a different one for touch 3."""
 
     try:
-        client = anthropic.Anthropic(api_key=key)
-        msg = client.messages.create(
-            model=model,
-            max_tokens=600,
-            system=_SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": user_prompt}],
-        )
-        raw = msg.content[0].text.strip()
-        if raw.startswith("```"):
-            raw = raw.split("```")[1]
-            if raw.startswith("json"):
-                raw = raw[4:]
-        parsed = json.loads(raw)
+        parsed = llm_gateway.complete_json(user_prompt, system=_SYSTEM_PROMPT,
+                                           task="copy", max_tokens=600)
+        if parsed is None:
+            return _error(hook, "LLM returned no parseable sequence")
 
         touches = [
             {

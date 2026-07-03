@@ -87,3 +87,47 @@ def quarantine(text: str, source_url: str = "") -> str:
     body = text[:_MAX_DOC_CHARS]
     src = f" source='{source_url}'" if source_url else ""
     return f"<untrusted_content{src}>\n{head}{body}\n</untrusted_content>"
+
+
+# ── Grounding gate ────────────────────────────────────────────────────────────
+# A cold-email opener earns a reply by referencing something REAL about the
+# prospect. A hook that quotes no observed evidence is generic flattery at best,
+# a hallucinated specific at worst ("saw you just raised your Series B" when no
+# such signal exists). grounding_check verifies the copy actually references a
+# distinctive term from the evidence we hold — enforced in code, not hoped for.
+
+_GROUNDING_STOPWORDS = {
+    "the", "and", "for", "with", "your", "you", "our", "that", "this", "have",
+    "has", "are", "was", "were", "will", "from", "they", "their", "team",
+    "company", "help", "just", "about", "into", "using", "used", "work",
+    "working", "make", "made", "want", "need", "like", "more", "most", "some",
+    "than", "then", "them", "what", "when", "where", "which", "while", "who",
+    "how", "why", "can", "could", "would", "should", "been", "being", "here",
+    "there", "role", "hiring", "hire", "job", "jobs", "looking", "based",
+    "noticed", "saw", "see", "seen", "reach", "reaching", "out", "quick",
+    "hey", "hi", "hello", "thanks", "thought", "wanted", "know", "notice",
+}
+
+
+def _distinctive_tokens(text: str) -> set[str]:
+    """Longer, non-stopword tokens (proper nouns, product names, tech terms)
+    that would only appear if the writer actually referenced the evidence."""
+    toks = re.findall(r"[A-Za-z][A-Za-z0-9+.#-]{3,}", (text or "").lower())
+    return {t for t in toks if t not in _GROUNDING_STOPWORDS}
+
+
+def grounding_check(copy: str, evidence_sources: list[str]) -> tuple[bool, str]:
+    """
+    Returns (grounded, matched_term). grounded=True if the copy references at
+    least one distinctive term present in the evidence (company name, product,
+    tech, research specifics). Used to flag or reject ungrounded openers.
+    """
+    if not copy:
+        return False, ""
+    evidence = " ".join(s for s in evidence_sources if s)
+    ev_tokens = _distinctive_tokens(evidence)
+    if not ev_tokens:
+        return True, ""  # no evidence to ground against — don't penalize
+    copy_tokens = _distinctive_tokens(copy)
+    hit = next((t for t in copy_tokens if t in ev_tokens), "")
+    return bool(hit), hit
