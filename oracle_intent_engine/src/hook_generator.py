@@ -18,6 +18,8 @@ import os
 import time
 from typing import Any
 
+from src import guards
+
 logger = logging.getLogger(__name__)
 
 # ── ICP Research Context (grounded in real CTO research) ─────────────────────
@@ -164,6 +166,9 @@ def _build_user_prompt(
     team_size = company_research.get("team_size", "")
     batch = company_research.get("batch", "")
     summary = company_research.get("research", {}).get("summary", "") or company_research.get("one_liner", "")
+    # summary is scraped from the company's website — untrusted. Strip any
+    # prompt-injection before it reaches the copywriting model.
+    summary = guards.neutralize(summary)
 
     team_line = f"Team size: ~{team_size} people" if team_size else ""
     batch_line = f"YC batch: {batch}" if batch else ""

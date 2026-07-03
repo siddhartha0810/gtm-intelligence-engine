@@ -3313,8 +3313,9 @@ async def list_gtm_agents(
 def _llm_gateway_status() -> dict:
     from src import llm_gateway
     return {
-        "ollama":    llm_gateway.ollama_available(),
-        "anthropic": llm_gateway.anthropic_available(),
+        "active_providers": llm_gateway.active_providers(),
+        "available":        llm_gateway.is_available(),
+        "budget":           llm_gateway.get_budget_status(),
     }
 
 
