@@ -3395,6 +3395,87 @@ async def strategist_to_campaign(
     return {**result.as_dict(), "campaign": campaign}
 
 
+# ── Outcomes & Attribution (the learning loop) ────────────────────────────────
+# Log what happened after outreach, measure which signals actually convert,
+# and feed that to the Recalibrator agent to retune targeting.
+
+_VALID_OUTCOMES = {"contacted", "replied", "meeting", "bounced", "bad", "unsubscribed"}
+
+
+@app.post("/api/outcomes")
+async def log_outcome_endpoint(
+    request: Request,
+    current_user: dict = Depends(oracle_auth.require_analyst),
+):
+    """
+    Log a real outreach result.
+    Body: { "outcome": "replied"|"meeting"|"bounced"|"bad"|"contacted"|"unsubscribed",
+            "company": "Acme" (or) "email": "x@acme.com", "notes": "" }
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    outcome = (body.get("outcome") or "").strip().lower()
+    if outcome not in _VALID_OUTCOMES:
+        return JSONResponse({"error": f"outcome must be one of {sorted(_VALID_OUTCOMES)}"},
+                            status_code=400)
+    if not body.get("company") and not body.get("email") and not body.get("contact_id"):
+        return JSONResponse({"error": "provide company, email, or contact_id"}, status_code=400)
+    try:
+        row = oracle_db.log_outcome(
+            outcome=outcome,
+            company=body.get("company", ""),
+            email=body.get("email", ""),
+            contact_id=body.get("contact_id"),
+            campaign_id=body.get("campaign_id"),
+            notes=body.get("notes", ""),
+        )
+        log_audit(current_user, "log_outcome", "outcome", str(row.get("id", "")), new_value={"outcome": outcome})
+        return row
+    except Exception as e:
+        logger.exception("log_outcome failed")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.get("/api/outcomes")
+async def list_outcomes_endpoint(
+    limit: int = 200,
+    current_user: dict = Depends(oracle_auth.require_user),
+):
+    return {"outcomes": oracle_db.get_outcomes(limit=limit)}
+
+
+@app.get("/api/outcomes/attribution")
+async def outcome_attribution_endpoint(
+    current_user: dict = Depends(oracle_auth.require_user),
+):
+    """Which signals actually convert — reply/meeting rate by signal type,
+    product, phase, and source. Powers the Analyst view + Recalibrator."""
+    from src import attribution
+    rows = oracle_db.get_outcome_signal_rows()
+    totals = oracle_db.get_outcome_totals()
+    return attribution.rollup_attribution(rows, totals)
+
+
+@app.post("/api/outcomes/recalibrate")
+async def recalibrate_endpoint(
+    current_user: dict = Depends(oracle_auth.require_analyst),
+):
+    """Run the Recalibrator agent on current attribution — proposes a targeting
+    change (prioritize/drop sources, products, phases). Human-approved before
+    applying. Closes the learning loop."""
+    from src import attribution
+    from src.agents import get_agent
+    rows = oracle_db.get_outcome_signal_rows()
+    totals = oracle_db.get_outcome_totals()
+    attr = attribution.rollup_attribution(rows, totals)
+    result = get_agent("recalibrator").run({"attribution": attr})
+    log_audit(current_user, "recalibrate", "outcome", "batch",
+              new_value={"ok": result.ok, "outcomes": attr.get("headline", {}).get("total_outcomes", 0)})
+    return {**result.as_dict(), "attribution": attr}
+
+
 # ── Universal Signal Campaigns ────────────────────────────────────────────────
 # Campaigns let users define intent searches for ANY product or technology,
 # not just Oracle. Each campaign stores keywords + query config and can

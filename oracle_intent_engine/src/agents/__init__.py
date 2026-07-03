@@ -7,10 +7,12 @@ subclass BaseAgent in its own file and register the instance here.
 
 from src.agents.base_agent import AgentResult, BaseAgent
 from src.agents.strategist_agent import StrategistAgent
+from src.agents.recalibrator_agent import RecalibratorAgent
 
 AGENT_REGISTRY: dict[str, BaseAgent] = {
     a.name: a for a in [
         StrategistAgent(),
+        RecalibratorAgent(),
     ]
 }
 

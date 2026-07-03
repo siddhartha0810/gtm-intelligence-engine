@@ -643,6 +643,27 @@ CREATE TABLE IF NOT EXISTS review_queue (
     """,
     "CREATE INDEX IF NOT EXISTS idx_credit_log_run ON apollo_credit_log(run_id)",
     "CREATE INDEX IF NOT EXISTS idx_credit_log_ts  ON apollo_credit_log(logged_at DESC)",
+
+    # outcomes table — the learning loop. Every logged reply/meeting/bounce ties
+    # a real outreach result back to the company, so attribution can measure
+    # which signals actually convert and the Recalibrator can retune targeting.
+    """
+    CREATE TABLE IF NOT EXISTS outcomes (
+        id          BIGSERIAL PRIMARY KEY,
+        company_id  BIGINT REFERENCES companies(id) ON DELETE SET NULL,
+        contact_id  BIGINT REFERENCES company_contacts(id) ON DELETE SET NULL,
+        campaign_id BIGINT REFERENCES campaigns(id) ON DELETE SET NULL,
+        email       TEXT NOT NULL DEFAULT '',
+        outcome     TEXT NOT NULL
+                        CHECK (outcome IN ('contacted','replied','meeting',
+                                           'bounced','bad','unsubscribed')),
+        notes       TEXT NOT NULL DEFAULT '',
+        created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_outcomes_company ON outcomes(company_id)",
+    "CREATE INDEX IF NOT EXISTS idx_outcomes_outcome ON outcomes(outcome)",
+    "CREATE INDEX IF NOT EXISTS idx_outcomes_created ON outcomes(created_at DESC)",
 ]
 
 # core context manager
@@ -2280,6 +2301,70 @@ def get_audit_logs_list(limit: int = 100, entity_type: str = None) -> list:
                 "SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT %s", (limit,)
             )
         return [dict(r) for r in cur.fetchall()]
+
+
+# ── Outcomes (the learning loop) ──────────────────────────────────────────────
+
+def log_outcome(outcome: str, company: str = "", email: str = "",
+                contact_id: int = None, campaign_id: int = None,
+                notes: str = "") -> dict:
+    """Record a real outreach result. Resolves company_id/contact_id from the
+    company name or email the user knows post-send. Never overwrites — each
+    logged outcome is an event (a contact can be contacted, then reply)."""
+    with db_cursor() as cur:
+        resolved_company_id = None
+        resolved_contact_id = contact_id
+        if company:
+            cur.execute("SELECT id FROM companies WHERE LOWER(name) = LOWER(%s)", (company.strip(),))
+            row = cur.fetchone()
+            if row:
+                resolved_company_id = row["id"]
+        if email and resolved_contact_id is None:
+            cur.execute("SELECT id, company_id FROM company_contacts WHERE LOWER(email) = LOWER(%s) LIMIT 1",
+                        (email.strip(),))
+            row = cur.fetchone()
+            if row:
+                resolved_contact_id = row["id"]
+                if resolved_company_id is None:
+                    resolved_company_id = row["company_id"]
+
+        cur.execute("""
+            INSERT INTO outcomes (company_id, contact_id, campaign_id, email, outcome, notes)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            RETURNING *
+        """, (resolved_company_id, resolved_contact_id, campaign_id,
+              email.strip(), outcome.strip(), notes.strip()))
+        return dict(cur.fetchone())
+
+
+def get_outcomes(limit: int = 200) -> list:
+    with db_cursor(commit=False) as cur:
+        cur.execute("""
+            SELECT o.*, c.name AS company_name
+            FROM outcomes o
+            LEFT JOIN companies c ON c.id = o.company_id
+            ORDER BY o.created_at DESC LIMIT %s
+        """, (limit,))
+        return [dict(r) for r in cur.fetchall()]
+
+
+def get_outcome_signal_rows() -> list:
+    """One row per (outcome, signal) pair — the raw input to attribution
+    rollup. A company with 3 signals and 1 outcome yields 3 rows."""
+    with db_cursor(commit=False) as cur:
+        cur.execute("""
+            SELECT o.id AS outcome_id, o.outcome,
+                   s.signal_type, s.oracle_product, s.phase, s.source
+            FROM outcomes o
+            JOIN oracle_signals s ON s.company_id = o.company_id
+        """)
+        return [dict(r) for r in cur.fetchall()]
+
+
+def get_outcome_totals() -> dict:
+    with db_cursor(commit=False) as cur:
+        cur.execute("SELECT outcome, COUNT(*) AS n FROM outcomes GROUP BY outcome")
+        return {r["outcome"]: int(r["n"]) for r in cur.fetchall()}
 
 
 # ── SQLite auto-fallback ──────────────────────────────────────────────────────
