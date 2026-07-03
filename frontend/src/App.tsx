@@ -22,12 +22,10 @@ const Metrics              = lazy(() => import('./pages/Metrics'))
 const TechnologyProfiles  = lazy(() => import('./pages/TechnologyProfiles'))
 const ListImport          = lazy(() => import('./pages/ListImport'))
 const Events              = lazy(() => import('./pages/Events'))
-const ManufacturerIntel   = lazy(() => import('./pages/ManufacturerIntel'))
 const AuditLogs           = lazy(() => import('./pages/AuditLogs'))
 const UserManagement      = lazy(() => import('./pages/UserManagement'))
 const HubSpotSync         = lazy(() => import('./pages/HubSpotSync'))
 const ProductIntelligence = lazy(() => import('./pages/ProductIntelligence'))
-const Recruitment         = lazy(() => import('./pages/Recruitment'))
 const Profile             = lazy(() => import('./pages/Profile'))
 const PeopleSearch        = lazy(() => import('./pages/PeopleSearch'))
 const CampaignBuilder     = lazy(() => import('./pages/CampaignBuilder'))
@@ -109,7 +107,6 @@ export default function App() {
   const isAdmin    = role === 'admin' || role === 'owner'
   const isAnalyst  = role === 'analyst' || isAdmin
   const isViewer   = role === 'viewer' || isAnalyst
-  const canRecruit = role === 'recruitment' || isAdmin || isOwner
 
   return (
     <BrowserRouter>
@@ -131,8 +128,6 @@ export default function App() {
                   <Route path="/intent"                     element={<IntentData />} />
                   <Route path="/intent-data"                element={<IntentData />} />
                   <Route path="/events"                     element={<Events />} />
-                  <Route path="/manufacturer-intel"         element={<ManufacturerIntel />} />
-                  <Route path="/manufacturer-intelligence"  element={<ManufacturerIntel />} />
                   <Route path="/product-intelligence"       element={<ProductIntelligence />} />
                   <Route path="/profile"                    element={<Profile user={user ?? undefined} />} />
                   <Route path="/people-search"              element={<PeopleSearch />} />
@@ -161,9 +156,6 @@ export default function App() {
 
                 {/* owner only */}
                 {isOwner && <Route path="/user-management" element={<UserManagement />} />}
-
-                {/* recruitment */}
-                {canRecruit && <Route path="/recruitment" element={<Recruitment />} />}
 
                 {/* Catch-all → dashboard */}
                 <Route path="*" element={<Navigate to="/dashboard" replace />} />

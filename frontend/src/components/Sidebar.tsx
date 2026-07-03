@@ -4,8 +4,8 @@ import type { User } from '../types'
 import {
   LayoutDashboard, Building2, Users, Cpu, ClipboardCheck,
   BarChart3, Settings, ChevronLeft, ChevronRight,
-  Zap, Target, Layers, Upload, CalendarDays, Factory,
-  ScrollText, UserCog, Shield, RefreshCw, PackageSearch, Briefcase, Search, Rocket, Crosshair, Activity
+  Zap, Target, Layers, Upload, CalendarDays,
+  ScrollText, UserCog, Shield, RefreshCw, PackageSearch, Search, Rocket, Crosshair, Activity
 } from 'lucide-react'
 
 interface NavItem {
@@ -76,7 +76,6 @@ function buildNavGroups(user?: User): NavGroup[] {
       { to: '/product-intelligence',      icon: PackageSearch, label: 'Product Intel' },
       { to: '/intent-data',               icon: Target,        label: 'Intent Data' },
       { to: '/events',                    icon: CalendarDays,  label: 'Events' },
-      { to: '/manufacturer-intelligence', icon: Factory,       label: 'Manufacturer Intel' },
     ]
     if (is(role, 'owner', 'admin', 'analyst')) {
       dataItems.splice(3, 0, { to: '/list-import', icon: Upload, label: 'List Import' })
@@ -100,11 +99,6 @@ function buildNavGroups(user?: User): NavGroup[] {
   // ADMIN — owner only
   if (is(role, 'owner')) {
     groups.push({ label: 'ADMIN', items: [{ to: '/user-management', icon: UserCog, label: 'User Management' }] })
-  }
-
-  // SENSITIVE — owner, admin, recruitment only
-  if (is(role, 'owner', 'admin', 'recruitment')) {
-    groups.push({ label: 'SENSITIVE', items: [{ to: '/recruitment', icon: Briefcase, label: 'Recruitment' }] })
   }
 
   return groups
