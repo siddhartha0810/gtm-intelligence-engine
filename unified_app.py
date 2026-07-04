@@ -2072,6 +2072,7 @@ def _fetch_dashboard_stats() -> dict:
     """Run all dashboard queries in a SINGLE connection, using fast subqueries."""
     companies_tracked = contacts_enriched = total_signals = 0
     implementing = evaluating = researching = pushed_to_hubspot = 0
+    outreach_ready = 0
     try:
         with oracle_db.db_cursor(commit=False) as cur:
             cur.execute("""
@@ -2086,7 +2087,9 @@ def _fetch_dashboard_stats() -> dict:
                     (SELECT COUNT(DISTINCT CASE WHEN phase='researching'  THEN company_id END)
                      FROM oracle_signals)                                                       AS researching,
                     (SELECT COUNT(*) FROM company_contacts
-                     WHERE status = 'pushed_to_hubspot')                                        AS pushed_to_hubspot
+                     WHERE status = 'pushed_to_hubspot')                                        AS pushed_to_hubspot,
+                    (SELECT COUNT(*) FROM company_contacts
+                     WHERE ready_for_outreach = 1)                                              AS outreach_ready
             """)
             row = cur.fetchone()
             if row:
@@ -2097,6 +2100,7 @@ def _fetch_dashboard_stats() -> dict:
                 evaluating        = int(row["evaluating"]        or 0)
                 researching       = int(row["researching"]       or 0)
                 pushed_to_hubspot = int(row["pushed_to_hubspot"] or 0)
+                outreach_ready    = int(row["outreach_ready"]    or 0)
     except Exception:
         logger.warning("Dashboard query failed — returning zeros", exc_info=True)
     return dict(
@@ -2107,6 +2111,7 @@ def _fetch_dashboard_stats() -> dict:
         evaluating=evaluating,
         researching=researching,
         pushed_to_hubspot=pushed_to_hubspot,
+        outreach_ready=outreach_ready,
     )
 
 @app.get("/api/dashboard")
@@ -2130,6 +2135,7 @@ async def api_dashboard(current_user: dict = Depends(oracle_auth.require_user)):
         "implementing":      stats["implementing"],
         "evaluating":        stats["evaluating"],
         "researching":       stats["researching"],
+        "outreach_ready":    stats["outreach_ready"],
         "scan_status":       _scan_current_status(),
     }
 

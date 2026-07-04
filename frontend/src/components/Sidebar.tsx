@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Building2, Users, Cpu, ClipboardCheck,
   BarChart3, Settings, ChevronLeft, ChevronRight,
   Zap, Target, Layers, Upload, CalendarDays,
-  ScrollText, UserCog, Shield, RefreshCw, PackageSearch, Search, Rocket, Crosshair, Activity
+  ScrollText, UserCog, RefreshCw, PackageSearch, Search, Rocket, Crosshair, Activity
 } from 'lucide-react'
 
 interface NavItem {
@@ -15,9 +15,11 @@ interface NavItem {
   badge?: string
 }
 
+interface NavItemG extends NavItem { min: number }        // min role rank to see
 interface NavGroup {
   label: string
-  items: NavItem[]
+  stage?: number          // workflow stage number (rendered as a chip)
+  items: NavItemG[]
 }
 
 interface SidebarProps {
@@ -26,82 +28,51 @@ interface SidebarProps {
   user?: User
 }
 
-// Role helpers
-const is = (role: string | undefined, ...allowed: string[]) => allowed.includes(role ?? '')
+// Role hierarchy: owner > admin > analyst > viewer/recruitment
+const RANK: Record<string, number> = { owner: 4, admin: 3, analyst: 2, viewer: 1, recruitment: 1 }
+const rankOf = (role?: string) => RANK[role ?? ''] ?? 0
 
+// Workflow-oriented IA: the nav mirrors the GTM funnel — Hunt → Pipeline →
+// Reach → Intelligence — so the sidebar reads as the process, not a module dump.
 function buildNavGroups(user?: User): NavGroup[] {
-  const role = user?.role
-  const groups: NavGroup[] = []
-
-  // OVERVIEW — analyst+ only
-  if (is(role, 'owner', 'admin', 'analyst')) {
-    const overviewItems: NavItem[] = [
-      { to: '/dashboard',    icon: LayoutDashboard, label: 'Control Panel' },
-      { to: '/review-queue', icon: ClipboardCheck,  label: 'Review Queue', badge: '12' },
-    ]
-    if (is(role, 'owner', 'admin')) {
-      overviewItems.push({ to: '/audit-logs', icon: ScrollText, label: 'Audit Logs' })
-    }
-    groups.push({ label: 'OVERVIEW', items: overviewItems })
-  }
-
-  // CONFIGURATION — admin+ only
-  if (is(role, 'owner', 'admin')) {
-    groups.push({
-      label: 'CONFIGURATION',
-      items: [
-        { to: '/technology-profiles', icon: Layers,    label: 'Technology Profiles' },
-        { to: '/hubspot-sync',        icon: RefreshCw, label: 'HubSpot Sync' },
-        { to: '/engine-control',      icon: Cpu,       label: 'Engine Control' },
-      ]
-    })
-  } else if (is(role, 'analyst')) {
-    // Analysts see Technology Profiles only
-    groups.push({
-      label: 'CONFIGURATION',
-      items: [
-        { to: '/technology-profiles', icon: Layers, label: 'Technology Profiles' },
-      ]
-    })
-  }
-
-  // DATA MODULES — viewer+
-  if (is(role, 'owner', 'admin', 'analyst', 'viewer')) {
-    const dataItems: NavItem[] = [
-      { to: '/campaign-builder',           icon: Rocket,        label: 'Campaign Builder' },
-      { to: '/campaigns',                  icon: Crosshair,     label: 'Signal Campaigns' },
-      { to: '/people-search',              icon: Search,        label: 'People Search' },
-      { to: '/companies',                 icon: Building2,     label: 'Companies' },
-      { to: '/contacts',                  icon: Users,         label: 'Contacts' },
-      { to: '/product-intelligence',      icon: PackageSearch, label: 'Product Intel' },
-      { to: '/intent-data',               icon: Target,        label: 'Intent Data' },
-      { to: '/events',                    icon: CalendarDays,  label: 'Events' },
-    ]
-    if (is(role, 'owner', 'admin', 'analyst')) {
-      dataItems.splice(3, 0, { to: '/list-import', icon: Upload, label: 'List Import' })
-    }
-    groups.push({ label: 'DATA MODULES', items: dataItems })
-  }
-
-  // ANALYTICS — analyst+
-  if (is(role, 'owner', 'admin', 'analyst')) {
-    groups.push({ label: 'ANALYTICS', items: [
-      { to: '/reporting', icon: BarChart3, label: 'Reporting' },
-      { to: '/metrics',   icon: Activity,  label: 'System Metrics' },
-    ] })
-  }
-
-  // SYSTEM — admin+ only
-  if (is(role, 'owner', 'admin')) {
-    groups.push({ label: 'SYSTEM', items: [{ to: '/settings', icon: Settings, label: 'Settings & API' }] })
-  }
-
-  // ADMIN — owner only
-  if (is(role, 'owner')) {
-    groups.push({ label: 'ADMIN', items: [{ to: '/user-management', icon: UserCog, label: 'User Management' }] })
-  }
+  const r = rankOf(user?.role)
+  const groups: NavGroup[] = [
+    { label: 'OVERVIEW', items: [
+      { to: '/dashboard', icon: LayoutDashboard, label: 'Command Center', min: 1 },
+    ]},
+    { label: 'HUNT', stage: 1, items: [
+      { to: '/campaign-builder', icon: Rocket,    label: 'Campaign Builder', min: 1 },
+      { to: '/campaigns',        icon: Crosshair, label: 'Signal Campaigns', min: 2 },
+      { to: '/engine-control',   icon: Cpu,       label: 'Engine Control',   min: 3 },
+    ]},
+    { label: 'PIPELINE', stage: 2, items: [
+      { to: '/companies',    icon: Building2,     label: 'Companies',    min: 1 },
+      { to: '/contacts',     icon: Users,         label: 'Contacts',     min: 1 },
+      { to: '/review-queue', icon: ClipboardCheck, label: 'Review Queue', min: 2 },
+    ]},
+    { label: 'REACH', stage: 3, items: [
+      { to: '/people-search', icon: Search,    label: 'People Search', min: 1 },
+      { to: '/list-import',   icon: Upload,    label: 'List Import',   min: 2 },
+      { to: '/hubspot-sync',  icon: RefreshCw, label: 'HubSpot Sync',  min: 3 },
+    ]},
+    { label: 'INTELLIGENCE', items: [
+      { to: '/reporting',            icon: BarChart3,     label: 'Reporting',      min: 2 },
+      { to: '/metrics',              icon: Activity,      label: 'System Metrics', min: 2 },
+      { to: '/product-intelligence', icon: PackageSearch, label: 'Product Intel',  min: 1 },
+      { to: '/intent-data',          icon: Target,        label: 'Intent Data',    min: 1 },
+      { to: '/events',               icon: CalendarDays,  label: 'Events',         min: 1 },
+    ]},
+    { label: 'CONFIGURE', items: [
+      { to: '/technology-profiles', icon: Layers,     label: 'Technology Profiles', min: 2 },
+      { to: '/settings',            icon: Settings,   label: 'Settings & API',      min: 3 },
+      { to: '/audit-logs',          icon: ScrollText, label: 'Audit Logs',          min: 3 },
+      { to: '/user-management',     icon: UserCog,    label: 'User Management',     min: 4 },
+    ]},
+  ]
 
   return groups
+    .map(g => ({ ...g, items: g.items.filter(it => r >= it.min) }))
+    .filter(g => g.items.length > 0)
 }
 
 export default function Sidebar({ collapsed, onToggle, user }: SidebarProps) {
@@ -147,11 +118,19 @@ export default function Sidebar({ collapsed, onToggle, user }: SidebarProps) {
         {groups.map(group => (
           <div key={group.label} style={{ marginBottom: 20 }}>
             {!collapsed && (
-              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: group.label === 'ADMIN' ? '#7c3aed' : group.label === 'SENSITIVE' ? '#dc2626' : '#4a7ab5', padding: '0 8px', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 4 }}>
-                {group.label === 'ADMIN' && <Shield size={9} color="#7c3aed" />}
-                {group.label === 'SENSITIVE' && <Shield size={9} color="#dc2626" />}
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: '#4a7ab5', padding: '0 8px', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+                {group.stage != null && (
+                  <span style={{
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                    width: 14, height: 14, borderRadius: 4, fontSize: 9, fontWeight: 800,
+                    background: 'rgba(59,130,246,0.22)', color: '#93c5fd', flexShrink: 0,
+                  }}>{group.stage}</span>
+                )}
                 {group.label}
               </div>
+            )}
+            {collapsed && group.stage != null && (
+              <div style={{ height: 1, background: '#1a3050', margin: '6px 8px 8px' }} />
             )}
             {group.items.map(item => (
               <NavLink
