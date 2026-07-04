@@ -20,13 +20,24 @@ interface Contact {
   email_source: string
   email_validation_status: string
   email_prediction_pattern: string
+  seniority: string
+  level: string
   created_at: string
   company_name: string
   company_domain: string
 }
 
 const AVATAR_COLORS = ['#3b82f6', '#6366f1', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899']
-const scoreColor = (s: number) => s >= 0.8 ? '#10b981' : s >= 0.5 ? '#f59e0b' : '#ef4444'
+
+// Seniority badge palette — decision-makers (C/VP/Director) read hotter.
+const seniorityStyle = (s: string): { bg: string; color: string } => {
+  const l = (s || '').toLowerCase()
+  if (l.includes('c-level') || l.includes('cxo') || l.includes('chief')) return { bg: 'rgba(139,92,246,0.14)', color: '#8b5cf6' }
+  if (l.includes('vp'))       return { bg: 'rgba(59,130,246,0.12)', color: '#3b82f6' }
+  if (l.includes('director')) return { bg: 'rgba(20,184,166,0.12)', color: '#14b8a6' }
+  if (l.includes('manager') && !l.includes('non')) return { bg: 'rgba(245,158,11,0.12)', color: '#f59e0b' }
+  return { bg: 'rgba(107,114,128,0.1)', color: '#94a3b8' }
+}
 
 const MENU_ITEMS = [
   { icon: Send,         label: 'Push to HubSpot',        color: '#3b82f6' },
@@ -212,16 +223,14 @@ export default function Contacts() {
     toast.success(`Exported ${filtered.length} contacts`)
   }
 
-  const validCount = contacts.filter(c => c.email_validation_status === 'valid').length
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20, width: '100%', minWidth: 0 }}>
       <style>{`@keyframes spin { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }`}</style>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
         <div>
-          <h1 style={{ fontSize: 20, fontWeight: 600, color: '#0f172a', margin: 0 }}>Contacts</h1>
+          <h1 style={{ fontSize: 22, fontWeight: 700, color: '#0f172a', margin: 0, letterSpacing: '-0.01em' }}>Contacts</h1>
           <p style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>
-            {loading ? 'Loading...' : `${total.toLocaleString()} contacts · ${validCount.toLocaleString()} valid emails`}
+            {loading ? 'Loading...' : `${total.toLocaleString()} validated contacts · every one with an email`}
           </p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -277,7 +286,7 @@ export default function Contacts() {
                 <th style={{ padding: '12px 16px', width: 44, textAlign: 'left' }}>
                   <input type="checkbox" checked={allSelected} onChange={() => setSelected(allSelected ? [] : filtered.map(c => c.id))} style={{ accentColor: '#3b82f6', cursor: 'pointer' }} />
                 </th>
-                {['Contact', 'Company', 'Role', 'Confidence', 'Email Status', 'Source', ''].map((h, i) => (
+                {['Contact', 'Company', 'Role', 'Seniority', 'Email Status', 'Source', ''].map((h, i) => (
                   <th key={i} style={{ padding: '12px 16px', textAlign: 'left', fontSize: 12, fontWeight: 600, color: '#475569', whiteSpace: 'nowrap', letterSpacing: '0.02em' }}>{h}</th>
                 ))}
               </tr>
@@ -291,7 +300,7 @@ export default function Contacts() {
               )}
               {!loading && filtered.length === 0 && (
                 <tr><td colSpan={8} style={{ padding: '48px 0', textAlign: 'center', color: '#475569', fontSize: 13 }}>
-                  {contacts.length === 0 ? 'No contacts yet — run an enrichment scan to discover contacts.' : 'No contacts match your search.'}
+                  {contacts.length === 0 ? 'No contacts yet — import a list or enrich companies to populate this view.' : 'No contacts match your search.'}
                 </td></tr>
               )}
               {!loading && filtered.map((c, i) => (
@@ -321,11 +330,12 @@ export default function Contacts() {
                     }
                   </td>
                   <td style={{ padding: '12px 16px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ fontSize: 13, fontWeight: 700, padding: '2px 8px', borderRadius: 6, background: `${scoreColor(c.confidence)}18`, color: scoreColor(c.confidence), minWidth: 32, textAlign: 'center' }}>
-                        {Math.round((c.confidence || 0) * 100)}
-                      </span>
-                    </div>
+                    {c.seniority
+                      ? <span style={{ fontSize: 12, fontWeight: 600, padding: '3px 10px', borderRadius: 999, whiteSpace: 'nowrap', ...seniorityStyle(c.seniority), background: seniorityStyle(c.seniority).bg, color: seniorityStyle(c.seniority).color }}>
+                          {c.seniority}
+                        </span>
+                      : <span style={{ fontSize: 12, color: '#cbd5e1' }}>—</span>
+                    }
                   </td>
                   <td style={{ padding: '12px 16px' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>

@@ -892,9 +892,9 @@ export default function Companies() {
       )}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div>
-          <h1 style={{ fontSize: 20, fontWeight: 700, color: '#0f172a', margin: 0 }}>Companies</h1>
+          <h1 style={{ fontSize: 22, fontWeight: 700, color: '#0f172a', margin: 0, letterSpacing: '-0.01em' }}>Companies</h1>
           <p style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>
-            {loading ? 'Loading…' : `${companies.length} tracked · ${companies.filter(c => c.phase === 'Implementing').length} implementing`}
+            {loading ? 'Loading…' : `${total.toLocaleString()} companies · showing ${companies.length.toLocaleString()}`}
           </p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -1063,7 +1063,7 @@ export default function Companies() {
             )}
             {!loading && filtered.length === 0 && (
               <tr><td colSpan={9} style={{ padding: '48px 0', textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>
-                No companies found. Run the Intent Engine to populate data.
+                No companies match your filters. Import a list or launch a hunt to populate this view.
               </td></tr>
             )}
             {!loading && filtered.map((c) => (

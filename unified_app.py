@@ -2189,6 +2189,7 @@ async def api_contacts(
                            cc.email, cc.linkedin_url, cc.confidence,
                            cc.is_target, cc.source, cc.email_source,
                            cc.email_validation_status, cc.email_prediction_pattern,
+                           cc.seniority, cc.level,
                            cc.fetched_at::text AS created_at,
                            c.name AS company_name, c.domain AS company_domain
                     FROM company_contacts cc
