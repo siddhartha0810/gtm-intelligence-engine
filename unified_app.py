@@ -2089,7 +2089,7 @@ def _fetch_dashboard_stats() -> dict:
                     (SELECT COUNT(*) FROM company_contacts
                      WHERE status = 'pushed_to_hubspot')                                        AS pushed_to_hubspot,
                     (SELECT COUNT(*) FROM company_contacts
-                     WHERE ready_for_outreach = 1)                                              AS outreach_ready
+                     WHERE ready_for_outreach = TRUE)                                           AS outreach_ready
             """)
             row = cur.fetchone()
             if row:
@@ -3249,7 +3249,7 @@ async def metrics_summary(
             try:
                 cur.execute("SELECT COUNT(*) AS total FROM master_leads")
                 leads_row = cur.fetchone() or {}
-                cur.execute("SELECT COUNT(*) AS ready FROM master_leads WHERE ready_for_outreach = 1")
+                cur.execute("SELECT COUNT(*) AS ready FROM master_leads WHERE ready_for_outreach = TRUE")
                 ready_row = cur.fetchone() or {}
             except Exception as e:
                 logger.debug("master_leads unavailable on this backend: %s", e)

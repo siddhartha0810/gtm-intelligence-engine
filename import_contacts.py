@@ -199,7 +199,9 @@ def main() -> None:
             "seniority, source, email_validation_status, ready_for_outreach, unique_key, "
             "domain, phone, mobile_phone, city, state, country, do_not_call, do_not_email, "
             "person_has_moved, job_function, level")
-    sql = f"INSERT INTO company_contacts ({cols}) VALUES ({', '.join(['%s'] * 23)})"
+    # ON CONFLICT DO NOTHING: consolidating aliased domains into one company can
+    # surface the same person (same email/LinkedIn) twice — keep the first.
+    sql = f"INSERT INTO company_contacts ({cols}) VALUES ({', '.join(['%s'] * 23)}) ON CONFLICT DO NOTHING"
 
     inserted = 0
     batch: list[tuple] = []
@@ -210,9 +212,9 @@ def main() -> None:
         full = f"{c['first_name']} {c['last_name']}".strip()
         batch.append((
             cid, c["first_name"], c["last_name"], full, c["title"], c["email"], c["linkedin"],
-            c["seniority"], SOURCE_TAG, "valid", 1, uuid.uuid4().hex,
+            c["seniority"], SOURCE_TAG, "valid", True, uuid.uuid4().hex,
             c["domain"], c["phone"], c["mobile"], c["city"], c["state"], c["country"],
-            1 if c["dnc"] else 0, 1 if c["dne"] else 0, 1 if c["moved"] else 0,
+            bool(c["dnc"]), bool(c["dne"]), bool(c["moved"]),
             c["job_function"], c["seniority"],
         ))
         if len(batch) >= BATCH:
@@ -238,7 +240,10 @@ def main() -> None:
         cur.execute("DELETE FROM companies WHERE contact_count = 0 AND "
                     "id NOT IN (SELECT DISTINCT company_id FROM oracle_signals WHERE company_id IS NOT NULL)")
 
-    print(f"\nDONE — {inserted:,} valid contacts stored.")
+    with db.db_cursor(commit=False) as cur:
+        cur.execute("SELECT COUNT(*) AS n FROM company_contacts WHERE source = %s", (SOURCE_TAG,))
+        actual = cur.fetchone()["n"]
+    print(f"\nDONE — {actual:,} valid contacts stored ({inserted - actual:,} duplicate rows skipped).")
     _sample(db)
 
 

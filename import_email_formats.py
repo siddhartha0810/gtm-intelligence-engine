@@ -106,9 +106,11 @@ def main() -> None:
         chunk = rows[i:i + BATCH]
         with db.db_cursor() as cur:
             cur.executemany(
+                # Weights are deterministic per run (seen dict already took the max
+                # per pair), so EXCLUDED is correct on re-runs — and portable
+                # (SQLite has 2-arg MAX(), Postgres uses GREATEST(); this avoids both).
                 "INSERT INTO email_patterns (domain, pattern, sample_count) VALUES (%s, %s, %s) "
-                "ON CONFLICT (domain, pattern) DO UPDATE SET "
-                "sample_count = MAX(email_patterns.sample_count, EXCLUDED.sample_count)",
+                "ON CONFLICT (domain, pattern) DO UPDATE SET sample_count = EXCLUDED.sample_count",
                 chunk,
             )
         inserted += len(chunk)
