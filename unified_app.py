@@ -2112,7 +2112,56 @@ def _fetch_dashboard_stats() -> dict:
         researching=researching,
         pushed_to_hubspot=pushed_to_hubspot,
         outreach_ready=outreach_ready,
+        last_run=_fetch_last_run_stats(),
     )
+
+
+def _fetch_last_run_stats() -> Optional[dict]:
+    """
+    Numbers for the MOST RECENT scan/hunt run only — never the whole corpus.
+    The 39K+ imported companies and their contacts stay in the database as a
+    background enrichment source; a run's "companies matched" and "contacts
+    available" are pulled from that database for just the companies this run
+    actually touched (existing corpus contacts included, not re-fetched).
+    """
+    try:
+        with oracle_db.db_cursor(commit=False) as cur:
+            cur.execute("""
+                SELECT id, started_at, completed_at, status
+                FROM scan_runs ORDER BY id DESC LIMIT 1
+            """)
+            run = cur.fetchone()
+            if not run:
+                return None
+            run_id = run["id"]
+
+            cur.execute("""
+                SELECT
+                    (SELECT COUNT(*) FROM oracle_signals
+                     WHERE scan_run_id = %s)                                   AS new_signals,
+                    (SELECT COUNT(DISTINCT company_id) FROM oracle_signals
+                     WHERE scan_run_id = %s)                                   AS companies_matched,
+                    (SELECT COUNT(*) FROM companies
+                     WHERE first_scan_run_id = %s)                             AS new_companies,
+                    (SELECT COUNT(*) FROM company_contacts
+                     WHERE company_id IN (
+                         SELECT DISTINCT company_id FROM oracle_signals WHERE scan_run_id = %s
+                     ))                                                        AS contacts_available
+            """, (run_id, run_id, run_id, run_id))
+            agg = cur.fetchone() or {}
+            return {
+                "run_id":             run_id,
+                "started_at":         run["started_at"].isoformat() if hasattr(run["started_at"], "isoformat") else run["started_at"],
+                "completed_at":       run["completed_at"].isoformat() if run["completed_at"] and hasattr(run["completed_at"], "isoformat") else run["completed_at"],
+                "status":             run["status"],
+                "new_signals":        int(agg.get("new_signals") or 0),
+                "companies_matched":  int(agg.get("companies_matched") or 0),
+                "new_companies":      int(agg.get("new_companies") or 0),
+                "contacts_available": int(agg.get("contacts_available") or 0),
+            }
+    except Exception:
+        logger.warning("last_run stats query failed", exc_info=True)
+        return None
 
 @app.get("/api/dashboard")
 async def api_dashboard(current_user: dict = Depends(oracle_auth.require_user)):
@@ -2137,6 +2186,7 @@ async def api_dashboard(current_user: dict = Depends(oracle_auth.require_user)):
         "researching":       stats["researching"],
         "outreach_ready":    stats["outreach_ready"],
         "scan_status":       _scan_current_status(),
+        "last_run":          stats.get("last_run"),
     }
 
 @app.get("/api/contacts")

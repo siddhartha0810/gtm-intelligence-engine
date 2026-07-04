@@ -11,16 +11,20 @@ const authH = () => ({ Authorization: `Bearer ${localStorage.getItem('token') ||
 const ts = () => new Date().toLocaleTimeString('en-GB', { hour12: false })
 const logColor = (l: string) => l === 'SUCCESS' ? '#10b981' : l === 'ERROR' ? '#ef4444' : l === 'WARN' ? '#f59e0b' : '#64748b'
 
+interface LastRun {
+  run_id: number
+  started_at: string
+  completed_at: string | null
+  status: string
+  new_signals: number
+  companies_matched: number
+  new_companies: number
+  contacts_available: number
+}
 interface DashboardStats {
-  companies_tracked: number
-  contacts_enriched: number
-  intent_signals: number
   pushed_to_hubspot: number
-  outreach_ready: number
-  implementing: number
-  evaluating: number
-  researching: number
   scan_status: { status: string; progress?: string }
+  last_run: LastRun | null
 }
 interface ScanLog { t: string; level: string; msg: string }
 type BackendState = 'loading' | 'online' | 'offline'
@@ -112,25 +116,31 @@ export default function Dashboard() {
     } catch { toast.error('Engine action failed') }
   }
 
-  // ── Funnel stages (the GTM pipeline, left → right) ──────────────────────────
+  // ── Last-run funnel — numbers from THIS run only. The full company/contact
+  // corpus lives in the database and is deliberately never surfaced as a
+  // headline count here; a run pulls in only the companies it matched and
+  // whatever contacts the database already has for them. ────────────────────
+  const run = stats?.last_run ?? null
+  const hasRun = !!run
+
   const funnel = [
-    { label: 'Intent Signals', value: stats?.intent_signals, icon: Zap,        color: colors.warning, to: '/intent-data' },
-    { label: 'Companies',      value: stats?.companies_tracked, icon: Building2, color: colors.primary, to: '/companies' },
-    { label: 'Contacts',       value: stats?.contacts_enriched, icon: Users,     color: colors.indigo,  to: '/contacts' },
-    { label: 'Outreach-Ready', value: stats?.outreach_ready, icon: CheckCircle2, color: colors.success, to: '/people-search' },
+    { label: 'New Signals',       value: run?.new_signals, icon: Zap,          color: colors.warning, to: '/intent-data' },
+    { label: 'Companies Matched', value: run?.companies_matched, icon: Building2, color: colors.primary, to: '/companies' },
+    { label: 'Contacts (from DB)', value: run?.contacts_available, icon: Users, color: colors.indigo,  to: '/contacts' },
+    { label: 'New Companies',     value: run?.new_companies, icon: CheckCircle2, color: colors.success, to: '/companies' },
   ]
 
   const stages = [
     { n: 1, label: 'Hunt', icon: Crosshair, color: colors.primary,
-      metric: fmt(stats?.intent_signals), unit: 'signals detected',
+      metric: hasRun ? fmt(run?.new_signals) : '—', unit: 'signals this run',
       desc: 'Turn a prompt or ICP into live intent signals.',
       cta: 'Open Campaign Builder', to: '/campaign-builder' },
     { n: 2, label: 'Pipeline', icon: Target, color: colors.indigo,
-      metric: fmt(stats?.companies_tracked), unit: 'companies in pipeline',
-      desc: 'Review detected companies and their contacts.',
+      metric: hasRun ? fmt(run?.companies_matched) : '—', unit: 'companies matched this run',
+      desc: 'Companies from this run, with contacts pulled from the database.',
       cta: 'View Companies', to: '/companies' },
     { n: 3, label: 'Reach', icon: Send, color: colors.success,
-      metric: fmt(stats?.outreach_ready), unit: 'contacts outreach-ready',
+      metric: hasRun ? fmt(run?.contacts_available) : '—', unit: 'contacts available for this run',
       desc: 'Enrich, validate, and push to sequences or CRM.',
       cta: 'People Search', to: '/people-search' },
   ]
@@ -187,8 +197,24 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Funnel strip */}
+      {/* Last-run funnel strip — deliberately NOT the full database corpus size,
+          just what the most recent hunt/scan actually surfaced. */}
       <div style={{ ...card, padding: '18px 20px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+          <span style={{ fontSize: 12, fontWeight: 600, color: colors.textMute, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+            {hasRun ? `Last run #${run!.run_id}` : 'No runs yet'}
+          </span>
+          {hasRun && (
+            <span style={{ fontSize: 12, color: colors.textMute }}>
+              {run!.status === 'running' ? 'In progress…' : run!.completed_at ? new Date(run!.completed_at).toLocaleString() : ''}
+            </span>
+          )}
+        </div>
+        {!hasRun && (
+          <p style={{ fontSize: 13, color: colors.textMute, margin: '0 0 4px' }}>
+            Launch a hunt above — matched companies and their contacts already in the database will show up here.
+          </p>
+        )}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           {funnel.map((f, i) => (
             <div key={f.label} style={{ display: 'contents' }}>
@@ -205,7 +231,7 @@ export default function Dashboard() {
                   <span style={{ fontSize: 12, color: colors.textMute }}>{f.label}</span>
                 </div>
                 <span style={{ fontSize: 26, fontWeight: 700, color: colors.text, lineHeight: 1 }}>
-                  {stats ? fmt(f.value) : '—'}
+                  {hasRun ? fmt(f.value) : '—'}
                 </span>
               </button>
               {i < funnel.length - 1 && <ArrowRight size={16} color="#cbd5e1" style={{ flexShrink: 0 }} />}

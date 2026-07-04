@@ -230,7 +230,7 @@ export default function Contacts() {
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 700, color: '#0f172a', margin: 0, letterSpacing: '-0.01em' }}>Contacts</h1>
           <p style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>
-            {loading ? 'Loading...' : `${total.toLocaleString()} validated contacts · every one with an email`}
+            Search or filter validated contacts — pulled from the database for companies matched by a run.
           </p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -392,13 +392,13 @@ export default function Contacts() {
           </table>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: '#f8fafc', borderTop: '1px solid #e2e8f0', fontSize: 12, color: '#64748b' }}>
-          <span>Showing {filtered.length} of {total.toLocaleString()} contacts</span>
+          <span>Showing {filtered.length} contacts</span>
           {contacts.length < total && (
             <button
               onClick={loadMore}
               disabled={loadingMore}
               style={{ padding: '5px 16px', borderRadius: 7, border: '1px solid #d1d5db', background: '#fff', color: '#3b82f6', fontSize: 12, fontWeight: 600, cursor: loadingMore ? 'not-allowed' : 'pointer', opacity: loadingMore ? 0.6 : 1 }}>
-              {loadingMore ? 'Loading…' : `Load more (${(total - contacts.length).toLocaleString()} remaining)`}
+              {loadingMore ? 'Loading…' : 'Load more'}
             </button>
           )}
         </div>

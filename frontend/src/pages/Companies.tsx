@@ -894,7 +894,7 @@ export default function Companies() {
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 700, color: '#0f172a', margin: 0, letterSpacing: '-0.01em' }}>Companies</h1>
           <p style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>
-            {loading ? 'Loading…' : `${total.toLocaleString()} companies · showing ${companies.length.toLocaleString()}`}
+            Search or filter the company database — matched from your hunts and enrichment.
           </p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -1224,12 +1224,12 @@ export default function Companies() {
           </tbody>
         </table>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: '#f8fafc', borderTop: '1px solid #e2e8f0', fontSize: 12, color: '#64748b' }}>
-          <span>Showing {filtered.length} of {total.toLocaleString()} companies</span>
+          <span>Showing {filtered.length} companies</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             {companies.length < total && (
               <button onClick={loadMore} disabled={loadingMore}
                 style={{ padding: '5px 16px', borderRadius: 7, border: '1px solid #d1d5db', background: '#fff', color: '#3b82f6', fontSize: 12, fontWeight: 600, cursor: loadingMore ? 'not-allowed' : 'pointer', opacity: loadingMore ? 0.6 : 1 }}>
-                {loadingMore ? 'Loading…' : `Load more (${(total - companies.length).toLocaleString()} remaining)`}
+                {loadingMore ? 'Loading…' : 'Load more'}
               </button>
             )}
             <span style={{ fontSize: 11, color: '#94a3b8' }}>Click the contacts badge on any row to view & manage contacts</span>

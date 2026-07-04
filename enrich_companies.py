@@ -35,7 +35,7 @@ if str(ORACLE) not in sys.path:
     sys.path.insert(0, str(ORACLE))
 
 _UA = "Mozilla/5.0 (compatible; gtm-company-enrichment/1.0)"
-_TIMEOUT = 8
+_TIMEOUT = 5
 
 # Keyword → industry. Matched against name + domain + homepage description.
 # Ordered so more-specific industries win (first match by iteration order).
@@ -152,9 +152,27 @@ def main() -> None:
         """, (limit,))
         rows = [dict(r) for r in cur.fetchall()]
 
-    print(f"Enriching {len(rows)} companies from their own websites ({workers} workers)…")
-    updates = []
-    done = 0
+    print(f"Enriching {len(rows)} companies from their own websites ({workers} workers)…", flush=True)
+
+    def apply_update(u: dict) -> tuple[bool, bool]:
+        """Writes one company's update immediately. Returns (got_industry, got_name)."""
+        sets, vals = ["website = %s"], [u["website"]]
+        got_industry = got_name = False
+        if u["industry"]:
+            sets.append("industry = %s"); vals.append(u["industry"]); got_industry = True
+        if u["name"]:
+            sets.append("name = %s"); vals.append(u["name"]); got_name = True
+        vals.append(u["id"])
+        try:
+            with db.db_cursor() as cur:
+                cur.execute(f"UPDATE companies SET {', '.join(sets)} WHERE id = %s", vals)
+        except Exception:
+            return False, False  # e.g. name collision with an existing company
+        return got_industry, got_name
+
+    done = enriched = with_industry = with_name = 0
+    # Each result is applied to the DB the moment it completes — progress is
+    # real and durable, so killing/resuming this run never loses prior work.
     with ThreadPoolExecutor(max_workers=workers) as pool:
         futs = {pool.submit(enrich_one, r, protect_names): r for r in rows}
         for fut in as_completed(futs):
@@ -164,27 +182,16 @@ def main() -> None:
             except Exception:
                 u = None
             if u:
-                updates.append(u)
-            if done % 50 == 0:
-                print(f"  …{done}/{len(rows)} fetched, {len(updates)} enriched")
-
-    print(f"Applying {len(updates)} updates…")
-    with_industry = with_name = 0
-    for u in updates:
-        sets, vals = ["website = %s"], [u["website"]]
-        if u["industry"]:
-            sets.append("industry = %s"); vals.append(u["industry"]); with_industry += 1
-        if u["name"]:
-            sets.append("name = %s"); vals.append(u["name"]); with_name += 1
-        vals.append(u["id"])
-        try:
-            with db.db_cursor() as cur:
-                cur.execute(f"UPDATE companies SET {', '.join(sets)} WHERE id = %s", vals)
-        except Exception:
-            pass  # e.g. name collision with an existing company — skip that field's row
+                gi, gn = apply_update(u)
+                enriched += 1
+                with_industry += int(gi)
+                with_name += int(gn)
+            if done % 20 == 0 or done == len(rows):
+                print(f"  …{done}/{len(rows)} fetched, {enriched} enriched "
+                      f"({with_industry} industries, {with_name} names)", flush=True)
 
     print(f"\nDONE — {with_industry} industries classified, {with_name} names upgraded, "
-          f"{len(updates)} websites set (of {len(rows)} attempted).")
+          f"{enriched} companies updated (of {len(rows)} attempted).")
     _sample(db)
 
 
