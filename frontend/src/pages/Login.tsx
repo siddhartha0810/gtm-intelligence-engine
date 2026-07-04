@@ -46,7 +46,7 @@ export default function Login({ onLogin }: Props) {
             <Zap size={28} color="#fff" />
           </div>
           <h1 style={{ color: '#0f172a', fontSize: 24, fontWeight: 700, margin: 0 }}>GTM DATA TOOL</h1>
-          <p style={{ color: '#64748b', fontSize: 14, marginTop: 6 }}>Oracle Intelligence Platform</p>
+          <p style={{ color: '#64748b', fontSize: 14, marginTop: 6 }}>GTM Intelligence Platform</p>
         </div>
 
         {/* Card */}

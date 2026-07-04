@@ -435,7 +435,7 @@ const [normalizingProducts, setNormalizingProducts] = useState(false)
             style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid rgba(239,68,68,0.25)', background: 'transparent', color: '#f87171', fontSize: 13, cursor: 'pointer' }}
             onMouseEnter={e => (e.currentTarget.style.background = 'rgba(239,68,68,0.08)')}
             onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-          >Reset Oracle Intent Database</button>
+          >Reset Signal Database</button>
         </div>
       </div>
 

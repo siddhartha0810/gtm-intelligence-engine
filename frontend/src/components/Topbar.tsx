@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom'
 
 const NOTIFICATIONS = [
   { icon: CheckCircle2, color: '#10b981', msg: 'Enrichment complete: Rolls-Royce', time: '2m ago' },
-  { icon: Zap, color: '#f59e0b', msg: 'Oracle scan found 14 new signals', time: '8m ago' },
+  { icon: Zap, color: '#f59e0b', msg: 'Signal scan found 14 new signals', time: '8m ago' },
   { icon: Users, color: '#3b82f6', msg: '23 contacts pushed to HubSpot', time: '15m ago' },
 ]
 

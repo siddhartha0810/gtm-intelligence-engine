@@ -57,7 +57,7 @@ const ALL_ROLES = [...EXACT_ROLES, ...KEYWORD_ROLES]
 // ── Engines + Sources ─────────────────────────────────────────────────────────
 
 const ENGINES = [
-  { id: 'oracle',     label: 'Oracle Intent Engine',   desc: 'Scans job boards, oracle.com, news & case studies for Oracle/JDE signals', color: '#3b82f6', modules: 18 },
+  { id: 'oracle',     label: 'Signal Engine',   desc: 'Scans ATS boards, job boards, news & case studies for buying-intent signals', color: '#3b82f6', modules: 18 },
   { id: 'enrichment', label: 'Lead Enrichment Engine', desc: '7-stage: contacts_master → Apollo → ZeroBounce → prediction → HubSpot',    color: '#6366f1', modules: 7 },
   { id: 'hubspot',    label: 'HubSpot Sync Engine',    desc: 'Pushes approved contacts from Review Queue to CRM',                         color: '#f59e0b', modules: 1 },
 ]
@@ -1131,8 +1131,8 @@ export default function EngineControl() {
       if (!res.ok) { toast.error((await res.json()).error || 'Failed to start scan'); return }
       scanStartedAt.current = Date.now()
       setOracleState('running')
-      addLog('INFO', `Oracle Intent Engine starting... sources: ${selectedSources.join(', ')}${jdeMfg ? ' [JDE Mfg Focus]' : ''}`)
-      toast.success('Oracle Intent scan started')
+      addLog('INFO', `Signal Engine starting... sources: ${selectedSources.join(', ')}${jdeMfg ? ' [JDE Mfg Focus]' : ''}`)
+      toast.success('Signal scan started')
       if (pollRef.current) clearInterval(pollRef.current)
       pollRef.current = setInterval(async () => {
         await fetchLog()
@@ -1141,7 +1141,7 @@ export default function EngineControl() {
         if (s && s.status !== 'running' && elapsed >= STOP_BTN_MIN_MS) {
           setOracleState('idle')
           const companies = s.companies_found ?? 0
-          const msg = companies > 0 ? `Oracle Intent scan completed — ${companies} companies found.` : 'Oracle Intent scan completed (0 companies found — check log for details).'
+          const msg = companies > 0 ? `Signal scan completed — ${companies} companies found.` : 'Signal scan completed (0 companies found — check log for details).'
           addLog(companies > 0 ? 'SUCCESS' : 'WARN', msg)
           if (companies > 0) { toast.success(`Scan completed — ${companies} companies found`) } else { toast.info('Scan done — 0 companies (check Engine Log)') }
           clearInterval(pollRef.current!)
@@ -1178,7 +1178,7 @@ export default function EngineControl() {
       await fetch('/scan/stop', { method: 'POST', headers: authH() })
       setOracleState('stopping')
       addLog('INFO', 'Stop signal sent. Engine winding down...')
-      toast.info('Oracle scan stopping...')
+      toast.info('Signal scan stopping...')
       setTimeout(() => { setOracleState('idle'); addLog('INFO', 'Engine stopped.'); if (pollRef.current) clearInterval(pollRef.current) }, 2000)
     } catch { toast.error('Failed to send stop signal') }
   }
@@ -1211,7 +1211,7 @@ export default function EngineControl() {
                 .then(res => res.json()).catch(() => null)
               if (s && s.status !== 'running') {
                 setOracleState('idle')
-                addLog('SUCCESS', 'Oracle Intent scan completed.')
+                addLog('SUCCESS', 'Signal scan completed.')
                 clearInterval(pollRef.current!)
                 pollRef.current = null
                 fetchEnrichStats()

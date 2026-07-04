@@ -258,7 +258,7 @@ export default function Reporting() {
           </div>
         </div>
         {runs.length === 0
-          ? <div style={{ height: 160, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: 13 }}>No scan runs yet — run an Oracle Intent scan to see history here.</div>
+          ? <div style={{ height: 160, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: 13 }}>No scan runs yet — run a signal scan to see history here.</div>
           : (
             <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, height: 160 }}>
               {[...runs].reverse().map(run => {

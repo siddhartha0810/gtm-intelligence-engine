@@ -117,7 +117,7 @@ export default function IntentData() {
 
         {!error && signals.length === 0 && !loading && (
           <div style={{ padding: 40, textAlign: 'center', color: '#475569', fontSize: 13 }}>
-            No signals yet. Run an Oracle Intent scan to populate this list.
+            No signals yet. Run a signal scan to populate this list.
           </div>
         )}
 
