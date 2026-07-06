@@ -1024,6 +1024,96 @@ async def api_stats(show_all: int = 0, current_user: dict = Depends(oracle_auth.
         "phase_colors":    PHASE_COLORS,
     }
 
+@app.get("/api/decision-intelligence")
+async def api_decision_intelligence(current_user: dict = Depends(oracle_auth.require_user)):
+    """Serves the GTM engine's glass-box artifacts to the Decision Intelligence
+    UI: scored prospects with full decision traces, learned weights (closed
+    loop), the auto-derived ICP, and the dry-run outbox. Reads the JSON/YAML
+    artifacts the pipeline writes; every field is missing-safe."""
+    import json as _json
+    from pathlib import Path as _Path
+    try:
+        import yaml as _yaml
+    except Exception:
+        _yaml = None
+    root = _Path(__file__).parent
+
+    def _load_json(name, default):
+        try:
+            return _json.loads((root / name).read_text())
+        except Exception:
+            return default
+
+    def _load_yaml(rel, default):
+        if not _yaml:
+            return default
+        try:
+            return _yaml.safe_load((root / rel).read_text())
+        except Exception:
+            return default
+
+    prospects = _load_json("inrule_glassbox.json", [])
+    outbox = _load_json("gtm_outbox.json", [])
+    learned = _load_yaml("glassbox_weights_learned.yaml", {}) or {}
+    rules = _load_yaml("glassbox_rules.yaml", {}) or {}
+    icp = _load_yaml("icp_profiles/inrule.yaml", {}) or {}
+    verified = _load_json("inrule_verified_contacts.json", {})
+
+    rule_meta = {r["id"]: {"name": r["name"], "weight": r["weight"]}
+                 for r in (rules.get("rules") or [])}
+
+    tiers: dict = {}
+    for p in prospects:
+        t = (p.get("tier") or "").split("—")[0].strip() or "UNSCORED"
+        tiers[t] = tiers.get(t, 0) + 1
+
+    # Ticker-tolerant name key: "Roadzen Inc. (RDZN, RDZNW)" == "Roadzen Inc."
+    import re as _re
+    def _nk(n: str) -> str:
+        return _re.sub(r"\s*\(.*\)\s*", "", n or "").strip().rstrip(".").lower()
+
+    # Build normalized lookups, then re-key by the PROSPECT name so the UI's
+    # `contacts_by_company[prospect.name]` lookup always matches.
+    contacts_norm = {_nk(co): (entry.get("contacts") or [])
+                     for co, entry in (verified.get("companies") or {}).items()}
+    emails_norm: dict = {}
+    for m in outbox:
+        emails_norm.setdefault(_nk(m.get("company", "")), []).append({
+            "to_name": m.get("to_name", ""), "to": m.get("to", ""),
+            "subject": m.get("subject", ""), "body": m.get("body", ""),
+            "touch": m.get("touch", ""), "send_on": m.get("send_on", ""),
+        })
+
+    contacts_by_company: dict = {}
+    emails_by_company: dict = {}
+    for p in prospects:
+        nk = _nk(p.get("name", ""))
+        if contacts_norm.get(nk):
+            contacts_by_company[p["name"]] = contacts_norm[nk]
+        if emails_norm.get(nk):
+            emails_by_company[p["name"]] = emails_norm[nk]
+
+    return {
+        "target": {"company": (icp.get("meta") or {}).get("company", "InRule"),
+                   "domain": (icp.get("meta") or {}).get("domain", ""),
+                   "category_terms": icp.get("category_terms", []),
+                   "target_industries": icp.get("target_industries", []),
+                   "personas": (icp.get("buyer_personas") or {}).get("all", []),
+                   "exclude_customers": icp.get("exclude_customers", [])},
+        "prospects": prospects,
+        "tier_counts": tiers,
+        "learned": learned.get("learned_weights", {}),
+        "learned_meta": learned.get("meta", {}),
+        "rule_meta": rule_meta,
+        "contacts_by_company": contacts_by_company,
+        "emails_by_company": emails_by_company,
+        "contact_count": sum(len(v) for v in contacts_by_company.values()),
+        "outbox_count": len(outbox),
+        "outbox_sample": outbox[:6],
+        "generated": True,
+    }
+
+
 @app.get("/api/company/{company_id}/signals")
 async def api_company_signals(company_id: int, current_user: dict = Depends(oracle_auth.require_user)):
     return JSONResponse(jsonable_encoder([dict(s) for s in oracle_db.get_signals_for_company(company_id)]))

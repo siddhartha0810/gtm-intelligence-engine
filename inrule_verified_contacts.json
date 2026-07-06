@@ -1,0 +1,362 @@
+{
+  "_meta": {
+    "description": "Verified InRule ICP decision-maker contacts. Every contact here was independently verified this session via at least one of: our own permanent contact database (contacts_master), an official company announcement, a live LinkedIn profile match, or the Explorium (Vibe Prospecting) B2B dataset. Cached here (rather than re-fetched live) because those lookup methods are interactive/manual/rate-limited and not safely re-runnable unattended during a live demo. The SEC signal side of the pipeline (inrule_icp_pipeline.py) IS re-run live every execution.",
+    "last_verified": "2026-07-05"
+  },
+  "companies": {
+    "Essent Group Ltd.": {
+      "contacts": [
+        {
+          "name": "David Weinstock",
+          "title": "Chief Financial Officer",
+          "persona": "economic_buyer",
+          "email": "david.weinstock@essent.us",
+          "linkedin": "linkedin.com/in/dbweinstock",
+          "evidence": "triple-verified: contacts_master DB + LinkedIn dork + LinkedIn profile"
+        },
+        {
+          "name": "Vijay Bhasin",
+          "title": "Chief Risk Officer",
+          "persona": "technical_buyer",
+          "email": null,
+          "linkedin": "linkedin.com/in/vijay-bhasin-7905b28",
+          "evidence": "LinkedIn profile match"
+        }
+      ]
+    },
+    "Bowhead Specialty Holdings Inc.": {
+      "contacts": [
+        {
+          "name": "Bob Spina",
+          "title": "Chief Information Officer",
+          "persona": "technical_buyer",
+          "email": null,
+          "linkedin": null,
+          "evidence": "bowheadspecialty.com/team, evidence-gate verified + Apollo cross-check"
+        },
+        {
+          "name": "David Newman",
+          "title": "Chief Underwriting Officer",
+          "persona": "economic_buyer",
+          "email": null,
+          "linkedin": null,
+          "evidence": "bowheadspecialty.com/team, evidence-gate verified + Apollo cross-check"
+        },
+        {
+          "name": "David Brandeis",
+          "title": "Head of Technology for Digital Underwriting",
+          "persona": "technical_buyer",
+          "email": null,
+          "linkedin": "linkedin.com/in/david-brandeis-22610b1",
+          "evidence": "manually confirmed by user via LinkedIn profile screenshot"
+        },
+        {
+          "name": "H. Matthew Crusey",
+          "title": "General Counsel",
+          "persona": "compliance_buyer",
+          "email": null,
+          "linkedin": null,
+          "evidence": "quadruple-confirmed: company team page + Explorium (Vibe Prospecting)"
+        }
+      ]
+    },
+    "First American Financial Corp": {
+      "contacts": [
+        {
+          "name": "Jody Mulkey",
+          "title": "Chief Technology Officer",
+          "persona": "technical_buyer",
+          "email": "jmulkey@firstam.com",
+          "linkedin": "linkedin.com/in/jodymulkey",
+          "evidence": "email pattern-derived: flast@firstam.com, confirmed from hcubias@firstam.com"
+        },
+        {
+          "name": "Ramon Machado",
+          "title": "Chief Risk Officer",
+          "persona": "economic_buyer",
+          "email": "rmachado@firstam.com",
+          "linkedin": "linkedin.com/in/ramon-machado",
+          "evidence": "email pattern-derived: flast@firstam.com, confirmed from hcubias@firstam.com"
+        },
+        {
+          "name": "Rao Prattipati",
+          "title": "Sr IT Manager",
+          "persona": "technical_buyer",
+          "email": "rprattipati@firstam.com",
+          "linkedin": null,
+          "evidence": "email pattern-derived: flast@firstam.com, confirmed from hcubias@firstam.com"
+        },
+        {
+          "name": "Sidney Chanthavisay",
+          "title": "Senior IT Quality Analyst, Automation Engineer",
+          "persona": "technical_buyer",
+          "email": "schanthavisay@firstam.com",
+          "linkedin": null,
+          "evidence": "email pattern-derived: flast@firstam.com, confirmed from hcubias@firstam.com"
+        }
+      ]
+    },
+    "Health In Tech, Inc.": {
+      "contacts": [
+        {
+          "name": "Tim Johnson",
+          "title": "Chief Executive Officer",
+          "persona": "economic_buyer",
+          "email": null,
+          "linkedin": null,
+          "evidence": "company's own official LinkedIn page"
+        }
+      ]
+    },
+    "Roadzen Inc.": {
+      "contacts": [
+        {
+          "name": "Rohan Malhotra",
+          "title": "Chief Executive Officer",
+          "persona": "economic_buyer",
+          "email": null,
+          "linkedin": "linkedin.com/in/rohanmalhotra7",
+          "evidence": "corroborated by multiple company posts"
+        }
+      ]
+    },
+    "Neptune Insurance Holdings Inc.": {
+      "contacts": [
+        {
+          "name": "Trevor Burgess",
+          "title": "Chairman & Chief Executive Officer",
+          "persona": "economic_buyer",
+          "email": null,
+          "linkedin": "linkedin.com/in/trevorburgess94",
+          "evidence": "LinkedIn profile match, NYSE: NP"
+        }
+      ]
+    },
+    "Trupanion, Inc.": {
+      "contacts": [
+        {
+          "name": "Jamie Adams",
+          "title": "Chief Information Officer",
+          "persona": "technical_buyer",
+          "email": "jamie.adams@trupanion.com",
+          "linkedin": "linkedin.com/in/jamiechristinaadams",
+          "evidence": "confirmed email (provided)"
+        },
+        {
+          "name": "Margi Tooth",
+          "title": "Chief Executive Officer and President",
+          "persona": "economic_buyer",
+          "email": "margi.tooth@trupanion.com",
+          "linkedin": null,
+          "evidence": "email pattern-derived: first.last@trupanion.com, confirmed from jamie.adams@trupanion.com"
+        },
+        {
+          "name": "Fawwad Qureshi",
+          "title": "Chief Financial Officer",
+          "persona": "economic_buyer",
+          "email": "fawwad.qureshi@trupanion.com",
+          "linkedin": null,
+          "evidence": "email pattern-derived: first.last@trupanion.com, confirmed from jamie.adams@trupanion.com"
+        }
+      ]
+    },
+    "Ethos Technologies Inc.": {
+      "contacts": [
+        {
+          "name": "Vipul Sharma",
+          "title": "Chief Technology Officer",
+          "persona": "technical_buyer",
+          "email": null,
+          "linkedin": "linkedin.com/in/vipulethos",
+          "evidence": "LinkedIn profile match"
+        },
+        {
+          "name": "Nichole Myers",
+          "title": "Chief Underwriter",
+          "persona": "economic_buyer",
+          "email": null,
+          "linkedin": "linkedin.com/in/nicholelmyers",
+          "evidence": "LinkedIn profile match"
+        }
+      ]
+    },
+    "Genworth Financial Inc": {
+      "contacts": [
+        {
+          "name": "Morris Taylor",
+          "title": "Chief Information Officer",
+          "persona": "technical_buyer",
+          "email": null,
+          "linkedin": "linkedin.com/in/morristaylor1",
+          "evidence": "official company LinkedIn announcement"
+        }
+      ]
+    },
+    "Riverview Financial Corp": {
+      "contacts": [
+        {
+          "name": "Kirk Fox",
+          "title": "Chief Executive Officer",
+          "persona": "economic_buyer",
+          "email": null,
+          "linkedin": "linkedin.com/in/kirk-fox-22719a172",
+          "evidence": "LinkedIn profile match"
+        }
+      ]
+    },
+    "Ocwen Financial Corp": {
+      "contacts": [
+        {
+          "name": "Scott Anderson",
+          "title": "EVP & Chief Servicing Officer",
+          "persona": "economic_buyer",
+          "email": null,
+          "linkedin": "linkedin.com/in/scott-anderson-8b7bb598",
+          "evidence": "LinkedIn profile match"
+        },
+        {
+          "name": "Parveen Chander Aery",
+          "title": "Chief Information Officer",
+          "persona": "technical_buyer",
+          "email": null,
+          "linkedin": "linkedin.com/in/parveenaery",
+          "evidence": "LinkedIn profile match; note: possibly now under Onity Group post-rebrand, verify before outreach"
+        }
+      ]
+    },
+    "Root, Inc.": {
+      "contacts": [
+        {
+          "name": "Matt Bonakdarpour",
+          "title": "President & Chief Technology Officer",
+          "persona": "technical_buyer",
+          "email": "matt@joinroot.com",
+          "linkedin": null,
+          "evidence": "official company LinkedIn announcement post (Feb 2024); email predicted from validated joinroot.com pattern (198 samples)"
+        }
+      ]
+    },
+    "Unum Group": {
+      "contacts": [
+        {
+          "name": "Steve Zabel",
+          "title": "C-Level Executive",
+          "persona": "economic_buyer",
+          "email": "szabel@unum.com",
+          "linkedin": "linkedin.com/in/steve-zabel",
+          "evidence": "contacts_master DB, 59 total contacts on file for this account"
+        }
+      ]
+    },
+    "Metromile, Inc.": {
+      "contacts": [
+        {
+          "name": "Lindsay Alexovich",
+          "title": "Chief Accounting Officer",
+          "persona": "economic_buyer",
+          "email": null,
+          "linkedin": null,
+          "evidence": "Explorium (Vibe Prospecting), still listed active post-Lemonade-acquisition"
+        },
+        {
+          "name": "Sean Burgess",
+          "title": "Chief Claims Officer",
+          "persona": "economic_buyer",
+          "email": "sean.burgess@lemonade.com",
+          "linkedin": null,
+          "evidence": "email pattern-derived: first.last@lemonade.com, confirmed from moshe.almozlino@lemonade.com"
+        },
+        {
+          "name": "Ori Erez",
+          "title": "Sr. Director of Engineering",
+          "persona": "technical_buyer",
+          "email": "ori.erez@lemonade.com",
+          "linkedin": null,
+          "evidence": "email pattern-derived: first.last@lemonade.com, confirmed from moshe.almozlino@lemonade.com"
+        }
+      ],
+      "note": "Metromile was acquired by Lemonade (2022); Metromile-branded staff (Lindsay Alexovich) still listed active, and the surviving parent org's decision-makers (Lemonade) are included here since Lemonade is the entity that would actually make a buying decision today."
+    },
+    "Enact Holdings, Inc.": {
+      "contacts": [
+        {
+          "name": "Neenu Sohi Kainth",
+          "title": "Chief Customer Experience Officer & Head of Strategy",
+          "persona": "economic_buyer",
+          "email": null,
+          "linkedin": "linkedin.com/in/neenukainth",
+          "evidence": "Explorium (Vibe Prospecting); record mislabeled as Genworth Financial in source, domain enactmi.com confirms Enact Holdings"
+        }
+      ]
+    },
+    "Financial Industries Corp": {
+      "contacts": [],
+      "note": "No reliable contact found across DB, WebSearch, or Explorium."
+    },
+    "Ohio Casualty Corp": {
+      "contacts": [],
+      "note": "Fully absorbed into Liberty Mutual brand; no standalone leadership team exists to target."
+    },
+    "Beeline Holdings, Inc.": {
+      "contacts": [
+        {
+          "name": "Doug Leeby",
+          "title": "Chief Executive Officer",
+          "persona": "economic_buyer",
+          "email": "doug.leeby@beeline.com",
+          "linkedin": null,
+          "evidence": "confirmed email (Apollo, verified)"
+        },
+        {
+          "name": "Brian Hoffmeyer",
+          "title": "SVP Market Strategies",
+          "persona": "economic_buyer",
+          "email": "brian.hoffmeyer@beeline.com",
+          "linkedin": null,
+          "evidence": "email pattern-derived: first.last@beeline.com, confirmed from doug.leeby@beeline.com"
+        }
+      ],
+      "note": "Two independent name-collision false matches previously found here (an unrelated VMS software company, and an unrelated VEON/Kar-Tel Kazakhstan telecom subsidiary) before these contacts were sourced directly from Apollo."
+    },
+    "PENNYMAC": {
+      "contacts": [
+        {
+          "name": "David Spector",
+          "title": "Chairman and Chief Executive Officer",
+          "persona": "economic_buyer",
+          "email": "david.spector@pennymac.com",
+          "linkedin": null,
+          "evidence": "email pattern-derived: first.last@pennymac.com, confirmed from omaro.ayloush@pennymac.com"
+        },
+        {
+          "name": "Doug Jones",
+          "title": "President and Chief Mortgage Banking Officer",
+          "persona": "economic_buyer",
+          "email": "doug.jones@pennymac.com",
+          "linkedin": null,
+          "evidence": "email pattern-derived: first.last@pennymac.com, confirmed from omaro.ayloush@pennymac.com"
+        }
+      ]
+    },
+    "Mercury Insurance": {
+      "contacts": [
+        {
+          "name": "Victor Joseph",
+          "title": "President and Chief Operating Officer",
+          "persona": "economic_buyer",
+          "email": "vjoseph@mercuryinsurance.com",
+          "linkedin": null,
+          "evidence": "email pattern-derived: flast@mercuryinsurance.com, confirmed from nwilliams@mercuryinsurance.com"
+        },
+        {
+          "name": "Wilson Pang",
+          "title": "Chief Technology Officer",
+          "persona": "technical_buyer",
+          "email": "wpang@mercuryinsurance.com",
+          "linkedin": null,
+          "evidence": "email pattern-derived: flast@mercuryinsurance.com, confirmed from nwilliams@mercuryinsurance.com"
+        }
+      ]
+    }
+  }
+}

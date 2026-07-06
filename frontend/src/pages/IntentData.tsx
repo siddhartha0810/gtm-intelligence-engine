@@ -71,7 +71,7 @@ export default function IntentData() {
         <div>
           <h1 style={{ fontSize: 20, fontWeight: 600, color: '#0f172a', margin: 0 }}>Intent Data</h1>
           <p style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>
-            Oracle/JDE buying signals detected across {uniqueCompanies} companies
+            Buying signals detected across {uniqueCompanies} companies
           </p>
         </div>
         <button

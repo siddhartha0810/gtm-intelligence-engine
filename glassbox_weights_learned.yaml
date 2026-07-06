@@ -1,0 +1,13 @@
+meta:
+  n_outcomes: 12
+  baseline_win_rate: 0.42
+  note: "Learned weight = original x (1 + lift), bounded [0.5x, 1.5x]. Rules that fire disproportionately on winners get promoted; the rest decay."
+
+learned_weights:
+  R1: 7.1
+  R2: 18.0
+  R3: 6.0
+  R4: 8.6
+  R5: 10
+  R6: 12.0
+  R7: 4.3

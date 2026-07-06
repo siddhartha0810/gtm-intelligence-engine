@@ -30,6 +30,7 @@ const Profile             = lazy(() => import('./pages/Profile'))
 const PeopleSearch        = lazy(() => import('./pages/PeopleSearch'))
 const CampaignBuilder     = lazy(() => import('./pages/CampaignBuilder'))
 const Campaigns           = lazy(() => import('./pages/Campaigns'))
+const DecisionIntelligence = lazy(() => import('./pages/DecisionIntelligence'))
 
 function PageLoader() {
   return (
@@ -123,6 +124,7 @@ export default function App() {
                 {/* viewer+ */}
                 {isViewer && <>
                   <Route path="/dashboard"                  element={<Dashboard />} />
+                  <Route path="/decision-intelligence"      element={<DecisionIntelligence />} />
                   <Route path="/companies"                  element={<Companies />} />
                   <Route path="/contacts"                   element={<Contacts />} />
                   <Route path="/intent"                     element={<IntentData />} />

@@ -1,0 +1,31 @@
+meta:
+  company: InRule
+  domain: inrule.com
+  status: DRAFT — review before use
+category_terms:
+- Decision Automation
+- Business Rules Engine
+- Process Automation
+- AI-Powered Decisioning
+- Regulated Industry Solutions
+competitor_products:
+- irAuthor Web
+exclude_customers:
+- Cancer Treatment Centers of America
+- Virgin Atlantic Airlines
+target_industries:
+- Financial Services
+- Insurance
+- Healthcare and Life Sciences
+- Retail
+- Government
+buyer_personas:
+  all:
+  - IT Architect
+  - Software Developer Engineer
+  - Business Analyst
+  - Business Leader
+_evidence:
+  customers_verified_on_page: 2
+  competitors_verified_on_page: 1
+  site_chars: 12277

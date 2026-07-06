@@ -37,6 +37,18 @@ if str(ORACLE) not in sys.path:
 _UA = "Mozilla/5.0 (compatible; gtm-company-enrichment/1.0)"
 _TIMEOUT = 5
 
+# Stealth fallback for sites that block a plain requests.get() (Cloudflare /
+# bot-challenge pages return a 200 with near-empty content, not a clean
+# error — which is why this is a fallback, not the first attempt: it's a
+# real headless browser launch, much heavier than a bare HTTP GET, so it
+# only runs for the minority of domains the fast path can't reach).
+_SCRAPLING_AVAILABLE = False
+try:
+    from scrapling.fetchers import StealthyFetcher
+    _SCRAPLING_AVAILABLE = True
+except ImportError:
+    pass
+
 # Keyword → industry. Matched against name + domain + homepage description.
 # Ordered so more-specific industries win (first match by iteration order).
 _INDUSTRY_KEYWORDS: list[tuple[str, list[str]]] = [
@@ -83,23 +95,72 @@ def classify_industry(text: str) -> str:
     return ""
 
 
-def fetch_meta(domain: str) -> tuple[str, str]:
-    """(sitename, description) from the homepage. ('','') on any failure."""
-    import requests
+_THIN_PAGE_BYTES = 2000  # a bot-challenge page returns 200 OK with ~near-empty HTML
+
+
+def _parse_meta(html: str) -> tuple[str, str]:
     import trafilatura
+    meta = trafilatura.extract_metadata(html)
+    sitename = (getattr(meta, "sitename", "") or getattr(meta, "title", "") or "") if meta else ""
+    desc = (getattr(meta, "description", "") or "") if meta else ""
+    return sitename.strip(), desc.strip()
+
+
+def _stealth_fetch(domain: str) -> str:
+    """Real headless-browser fetch — only called when the fast path fails or
+    comes back suspiciously thin (the Cloudflare/bot-challenge signature).
+    Tuned tight: a genuinely dead/slow domain must fail fast (the default
+    30s x however-many-internal-retries is impractical across a 39K-company
+    run), while solve_cloudflare + disable_resources give the actual bot-
+    walled sites their best shot in the time budget."""
+    if not _SCRAPLING_AVAILABLE:
+        return ""
+    for scheme in ("https://", "http://"):
+        try:
+            page = StealthyFetcher.fetch(
+                scheme + domain, headless=True,
+                timeout=8000, disable_resources=True,
+                solve_cloudflare=True, network_idle=False,
+            )
+            # A 403/404/5xx error page still has HTML (and a <title> like
+            # "Access Denied" that would otherwise get stored as the company
+            # name) — only accept genuine 2xx responses.
+            status = getattr(page, "status", 0) or 0
+            if status >= 400:
+                continue
+            html = getattr(page, "html_content", "") or getattr(page, "body", "") or ""
+            if html:
+                return html
+        except Exception:
+            continue
+    return ""
+
+
+def fetch_meta(domain: str) -> tuple[str, str]:
+    """(sitename, description) from the homepage. ('','') on any failure.
+    Fast plain-requests path first; stealth-browser fallback only for sites
+    that block it (Cloudflare et al.) — most domains never need the fallback."""
+    import requests
+    best_html = ""
     for scheme in ("https://", "http://"):
         try:
             resp = requests.get(scheme + domain, headers={"User-Agent": _UA},
                                 timeout=_TIMEOUT, allow_redirects=True)
-            if resp.status_code >= 400 or not resp.text:
-                continue
-            meta = trafilatura.extract_metadata(resp.text)
-            sitename = (getattr(meta, "sitename", "") or getattr(meta, "title", "") or "") if meta else ""
-            desc = (getattr(meta, "description", "") or "") if meta else ""
-            return sitename.strip(), desc.strip()
+            if resp.status_code < 400 and resp.text and len(resp.text) > _THIN_PAGE_BYTES:
+                best_html = resp.text
+                break
         except Exception:
             continue
-    return "", ""
+
+    if not best_html:
+        best_html = _stealth_fetch(domain)
+
+    if not best_html:
+        return "", ""
+    try:
+        return _parse_meta(best_html)
+    except Exception:
+        return "", ""
 
 
 def _clean_sitename(sitename: str, current: str) -> str:
@@ -133,11 +194,19 @@ def enrich_one(row: dict, protect_names: set) -> dict | None:
 
 
 def main() -> None:
+    global _SCRAPLING_AVAILABLE
     limit, workers, include_all = 200, 12, False
     for a in sys.argv[1:]:
         if a.startswith("--limit="):   limit = int(a.split("=", 1)[1])
         elif a.startswith("--workers="): workers = int(a.split("=", 1)[1])
         elif a == "--all":             include_all = True
+        elif a == "--no-stealth":
+            # Bulk sweeps: the stealth-browser fallback trades throughput for
+            # coverage — a dead domain costs several seconds proving it's dead
+            # instead of failing fast like plain requests does. ~20x slower
+            # in practice. Use plain-requests-only for a full-database pass;
+            # drop this flag for smaller, quality-over-speed batches.
+            _SCRAPLING_AVAILABLE = False
 
     from src import database as db, company_reference as ref
     protect_names = {n.lower() for (n, *_rest) in ref.COMPANY_REFERENCE.values()}

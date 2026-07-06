@@ -1,0 +1,56 @@
+meta:
+  name: InRule ICP Scoring Policy
+  version: "1.0"
+
+# condition keys (evaluated by glassbox_scorer.py against each prospect's signals):
+#   category_language     — ICP vocabulary term matched in the company's own SEC filings
+#   displacement          — a competitor decisioning product named in a hiring signal
+#   industry_fit          — SEC SIC classification matches a core InRule vertical
+#   recent_ipo            — company had a qualifying IPO filing in the window
+#   new_officer           — a new decision-maker was appointed (Form 3/8-K)
+#   buying_window_timing  — trigger events cluster into a live "why now" window
+#   decision_maker_found  — a persona-matched contact is on file
+
+rules:
+  - id: R1
+    name: Category buying-language in SEC filings
+    condition: category_language
+    weight: 10
+    rationale: "Uses category language ({term}) in its own SEC filings — actively describing the capability InRule provides."
+
+  - id: R2
+    name: Competitor product in use (displacement window)
+    condition: displacement
+    weight: 12
+    rationale: "Names a competitor decisioning product ({competitor}) — category budget already exists; this is a rip-and-replace opportunity, not a cold category-education sale."
+
+  - id: R3
+    name: Regulated-industry end user
+    condition: industry_fit
+    weight: 6
+    rationale: "SEC industry classification: {sic} — a core InRule vertical (insurance / banking / healthcare / government), a genuine end user rather than a software vendor describing its own product."
+
+  - id: R4
+    name: Recent-IPO governance trigger
+    condition: recent_ipo
+    weight: 8
+    decay_days: 1460           # 4y: an older IPO is a weaker "why now"
+    rationale: "Filed {ipo_form} on {ipo_date} — newly public and newly subject to SOX/audit/board scrutiny, the exact moment rule-governance and auditability become board-level obligations."
+
+  - id: R5
+    name: New decision-maker appointed
+    condition: new_officer
+    weight: 10
+    rationale: "A new officer ({officer}) matching an InRule buyer persona was appointed — the 'new broom' re-evaluation window."
+
+  - id: R6
+    name: Live buying-window timing
+    condition: buying_window_timing
+    weight: 8
+    rationale: "{n} trigger events in the last 270 days (most recent {days} days ago) — signals cluster in time, indicating an active buying motion, not stale interest."
+
+  - id: R7
+    name: Decision-maker identified
+    condition: decision_maker_found
+    weight: 4
+    rationale: "A persona-matched decision-maker is already on file ({contact}) — the account is actionable today, no first-touch enrichment needed."

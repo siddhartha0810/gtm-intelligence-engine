@@ -1,0 +1,1010 @@
+[
+  {
+    "to": "",
+    "to_name": "Rohan Malhotra",
+    "subject": "claims automation at Roadzen Inc. (RDZN",
+    "body": "Rohan \u2014 I saw Roadzen Inc. (RDZN referenced \"claims automation\", so this is likely already on your radar. The pattern we see: rule logic locked in code means every change is a dev cycle, not a business decision \u2014 and the audit trail is only as good as engineering's change log. InRule flips that \u2014 the business owns the rule, fully audit-logged, no engineering bottleneck. Worth 15 minutes?",
+    "touch": "signal_open",
+    "send_on": "Day 1",
+    "company": "Roadzen Inc. (RDZN, RDZNW)"
+  },
+  {
+    "to": "",
+    "to_name": "Rohan Malhotra",
+    "subject": "Re: claims automation at Roadzen Inc. (RDZN",
+    "body": "Rohan \u2014 following up in case this got buried. Given Roadzen Inc. (RDZN's recent signal (\"claims automation\"), the timing seemed right to compare notes on how rule changes get made today vs. business-owned and audited. Open to a quick call this week?",
+    "touch": "bump",
+    "send_on": "Day 5",
+    "company": "Roadzen Inc. (RDZN, RDZNW)"
+  },
+  {
+    "to": "",
+    "to_name": "Rohan Malhotra",
+    "subject": "The audit angle on Roadzen Inc. (RDZN's rule logic",
+    "body": "Rohan \u2014 one more angle worth raising: rule logic locked in code means every change is a dev cycle, not a business decision \u2014 and the audit trail is only as good as engineering's change log. For a team in Roadzen Inc. (RDZN's position, that's not just a dev-velocity problem, it's an audit exposure. InRule makes every rule change traceable to the business user who made it. Happy to show you the trace.",
+    "touch": "compliance_angle",
+    "send_on": "Day 9",
+    "company": "Roadzen Inc. (RDZN, RDZNW)"
+  },
+  {
+    "to": "",
+    "to_name": "Rohan Malhotra",
+    "subject": "Should I close this out?",
+    "body": "Rohan \u2014 I'll stop following up after this one. If rule governance at Roadzen Inc. (RDZN isn't a priority right now, no worries \u2014 feel free to reach out whenever it is. If it is, I'm one reply away.",
+    "touch": "breakup",
+    "send_on": "Day 14",
+    "company": "Roadzen Inc. (RDZN, RDZNW)"
+  },
+  {
+    "to": "",
+    "to_name": "Tim Johnson",
+    "subject": "underwriting automation at Health In Tech",
+    "body": "Tim \u2014 I saw Health In Tech referenced \"underwriting automation\", so this is likely already on your radar. The pattern we see: rule logic locked in code means every change is a dev cycle, not a business decision \u2014 and the audit trail is only as good as engineering's change log. InRule flips that \u2014 the business owns the rule, fully audit-logged, no engineering bottleneck. Worth 15 minutes?",
+    "touch": "signal_open",
+    "send_on": "Day 1",
+    "company": "Health In Tech, Inc."
+  },
+  {
+    "to": "",
+    "to_name": "Tim Johnson",
+    "subject": "Re: underwriting automation at Health In Tech",
+    "body": "Tim \u2014 following up in case this got buried. Given Health In Tech's recent signal (\"underwriting automation\"), the timing seemed right to compare notes on how rule changes get made today vs. business-owned and audited. Open to a quick call this week?",
+    "touch": "bump",
+    "send_on": "Day 5",
+    "company": "Health In Tech, Inc."
+  },
+  {
+    "to": "",
+    "to_name": "Tim Johnson",
+    "subject": "The audit angle on Health In Tech's rule logic",
+    "body": "Tim \u2014 one more angle worth raising: rule logic locked in code means every change is a dev cycle, not a business decision \u2014 and the audit trail is only as good as engineering's change log. For a team in Health In Tech's position, that's not just a dev-velocity problem, it's an audit exposure. InRule makes every rule change traceable to the business user who made it. Happy to show you the trace.",
+    "touch": "compliance_angle",
+    "send_on": "Day 9",
+    "company": "Health In Tech, Inc."
+  },
+  {
+    "to": "",
+    "to_name": "Tim Johnson",
+    "subject": "Should I close this out?",
+    "body": "Tim \u2014 I'll stop following up after this one. If rule governance at Health In Tech isn't a priority right now, no worries \u2014 feel free to reach out whenever it is. If it is, I'm one reply away.",
+    "touch": "breakup",
+    "send_on": "Day 14",
+    "company": "Health In Tech, Inc."
+  },
+  {
+    "to": "",
+    "to_name": "Bob Spina",
+    "subject": "digital underwriting at Bowhead Specialty Holdings Inc",
+    "body": "Bob \u2014 I saw Bowhead Specialty Holdings Inc referenced \"digital underwriting\", so this is likely already on your radar. The pattern we see: rule logic locked in code means every change is a dev cycle, not a business decision \u2014 and the audit trail is only as good as engineering's change log. InRule flips that \u2014 the business owns the rule, fully audit-logged, no engineering bottleneck. Worth 15 minutes?",
+    "touch": "signal_open",
+    "send_on": "Day 1",
+    "company": "Bowhead Specialty Holdings Inc."
+  },
+  {
+    "to": "",
+    "to_name": "Bob Spina",
+    "subject": "Re: digital underwriting at Bowhead Specialty Holdings Inc",
+    "body": "Bob \u2014 following up in case this got buried. Given Bowhead Specialty Holdings Inc's recent signal (\"digital underwriting\"), the timing seemed right to compare notes on how rule changes get made today vs. business-owned and audited. Open to a quick call this week?",
+    "touch": "bump",
+    "send_on": "Day 5",
+    "company": "Bowhead Specialty Holdings Inc."
+  },
+  {
+    "to": "",
+    "to_name": "Bob Spina",
+    "subject": "The audit angle on Bowhead Specialty Holdings Inc's rule logic",
+    "body": "Bob \u2014 one more angle worth raising: rule logic locked in code means every change is a dev cycle, not a business decision \u2014 and the audit trail is only as good as engineering's change log. For a team in Bowhead Specialty Holdings Inc's position, that's not just a dev-velocity problem, it's an audit exposure. InRule makes every rule change traceable to the business user who made it. Happy to show you the trace.",
+    "touch": "compliance_angle",
+    "send_on": "Day 9",
+    "company": "Bowhead Specialty Holdings Inc."
+  },
+  {
+    "to": "",
+    "to_name": "Bob Spina",
+    "subject": "Should I close this out?",
+    "body": "Bob \u2014 I'll stop following up after this one. If rule governance at Bowhead Specialty Holdings Inc isn't a priority right now, no worries \u2014 feel free to reach out whenever it is. If it is, I'm one reply away.",
+    "touch": "breakup",
+    "send_on": "Day 14",
+    "company": "Bowhead Specialty Holdings Inc."
+  },
+  {
+    "to": "",
+    "to_name": "David Newman",
+    "subject": "digital underwriting at Bowhead Specialty Holdings Inc",
+    "body": "David \u2014 I saw Bowhead Specialty Holdings Inc referenced \"digital underwriting\", so this is likely already on your radar. The pattern we see: claims/underwriting rules live in code, so every policy or workflow change waits on engineering instead of the team that actually owns the decision. InRule flips that \u2014 the business owns the rule, fully audit-logged, no engineering bottleneck. Worth 15 minutes?",
+    "touch": "signal_open",
+    "send_on": "Day 1",
+    "company": "Bowhead Specialty Holdings Inc."
+  },
+  {
+    "to": "",
+    "to_name": "David Newman",
+    "subject": "Re: digital underwriting at Bowhead Specialty Holdings Inc",
+    "body": "David \u2014 following up in case this got buried. Given Bowhead Specialty Holdings Inc's recent signal (\"digital underwriting\"), the timing seemed right to compare notes on how rule changes get made today vs. business-owned and audited. Open to a quick call this week?",
+    "touch": "bump",
+    "send_on": "Day 5",
+    "company": "Bowhead Specialty Holdings Inc."
+  },
+  {
+    "to": "",
+    "to_name": "David Newman",
+    "subject": "The audit angle on Bowhead Specialty Holdings Inc's rule logic",
+    "body": "David \u2014 one more angle worth raising: claims/underwriting rules live in code, so every policy or workflow change waits on engineering instead of the team that actually owns the decision. For a team in Bowhead Specialty Holdings Inc's position, that's not just a dev-velocity problem, it's an audit exposure. InRule makes every rule change traceable to the business user who made it. Happy to show you the trace.",
+    "touch": "compliance_angle",
+    "send_on": "Day 9",
+    "company": "Bowhead Specialty Holdings Inc."
+  },
+  {
+    "to": "",
+    "to_name": "David Newman",
+    "subject": "Should I close this out?",
+    "body": "David \u2014 I'll stop following up after this one. If rule governance at Bowhead Specialty Holdings Inc isn't a priority right now, no worries \u2014 feel free to reach out whenever it is. If it is, I'm one reply away.",
+    "touch": "breakup",
+    "send_on": "Day 14",
+    "company": "Bowhead Specialty Holdings Inc."
+  },
+  {
+    "to": "doug.leeby@beeline.com",
+    "to_name": "Doug Leeby",
+    "subject": "underwriting automation at Beeline Holdings",
+    "body": "Doug \u2014 I saw Beeline Holdings referenced \"underwriting automation\", so this is likely already on your radar. The pattern we see: rule logic locked in code means every change is a dev cycle, not a business decision \u2014 and the audit trail is only as good as engineering's change log. InRule flips that \u2014 the business owns the rule, fully audit-logged, no engineering bottleneck. Worth 15 minutes?",
+    "touch": "signal_open",
+    "send_on": "Day 1",
+    "company": "Beeline Holdings, Inc."
+  },
+  {
+    "to": "doug.leeby@beeline.com",
+    "to_name": "Doug Leeby",
+    "subject": "Re: underwriting automation at Beeline Holdings",
+    "body": "Doug \u2014 following up in case this got buried. Given Beeline Holdings's recent signal (\"underwriting automation\"), the timing seemed right to compare notes on how rule changes get made today vs. business-owned and audited. Open to a quick call this week?",
+    "touch": "bump",
+    "send_on": "Day 5",
+    "company": "Beeline Holdings, Inc."
+  },
+  {
+    "to": "doug.leeby@beeline.com",
+    "to_name": "Doug Leeby",
+    "subject": "The audit angle on Beeline Holdings's rule logic",
+    "body": "Doug \u2014 one more angle worth raising: rule logic locked in code means every change is a dev cycle, not a business decision \u2014 and the audit trail is only as good as engineering's change log. For a team in Beeline Holdings's position, that's not just a dev-velocity problem, it's an audit exposure. InRule makes every rule change traceable to the business user who made it. Happy to show you the trace.",
+    "touch": "compliance_angle",
+    "send_on": "Day 9",
+    "company": "Beeline Holdings, Inc."
+  },
+  {
+    "to": "doug.leeby@beeline.com",
+    "to_name": "Doug Leeby",
+    "subject": "Should I close this out?",
+    "body": "Doug \u2014 I'll stop following up after this one. If rule governance at Beeline Holdings isn't a priority right now, no worries \u2014 feel free to reach out whenever it is. If it is, I'm one reply away.",
+    "touch": "breakup",
+    "send_on": "Day 14",
+    "company": "Beeline Holdings, Inc."
+  },
+  {
+    "to": "brian.hoffmeyer@beeline.com",
+    "to_name": "Brian Hoffmeyer",
+    "subject": "underwriting automation at Beeline Holdings",
+    "body": "Brian \u2014 I saw Beeline Holdings referenced \"underwriting automation\", so this is likely already on your radar. The pattern we see: rule logic locked in code means every change is a dev cycle, not a business decision \u2014 and the audit trail is only as good as engineering's change log. InRule flips that \u2014 the business owns the rule, fully audit-logged, no engineering bottleneck. Worth 15 minutes?",
+    "touch": "signal_open",
+    "send_on": "Day 1",
+    "company": "Beeline Holdings, Inc."
+  },
+  {
+    "to": "brian.hoffmeyer@beeline.com",
+    "to_name": "Brian Hoffmeyer",
+    "subject": "Re: underwriting automation at Beeline Holdings",
+    "body": "Brian \u2014 following up in case this got buried. Given Beeline Holdings's recent signal (\"underwriting automation\"), the timing seemed right to compare notes on how rule changes get made today vs. business-owned and audited. Open to a quick call this week?",
+    "touch": "bump",
+    "send_on": "Day 5",
+    "company": "Beeline Holdings, Inc."
+  },
+  {
+    "to": "brian.hoffmeyer@beeline.com",
+    "to_name": "Brian Hoffmeyer",
+    "subject": "The audit angle on Beeline Holdings's rule logic",
+    "body": "Brian \u2014 one more angle worth raising: rule logic locked in code means every change is a dev cycle, not a business decision \u2014 and the audit trail is only as good as engineering's change log. For a team in Beeline Holdings's position, that's not just a dev-velocity problem, it's an audit exposure. InRule makes every rule change traceable to the business user who made it. Happy to show you the trace.",
+    "touch": "compliance_angle",
+    "send_on": "Day 9",
+    "company": "Beeline Holdings, Inc."
+  },
+  {
+    "to": "brian.hoffmeyer@beeline.com",
+    "to_name": "Brian Hoffmeyer",
+    "subject": "Should I close this out?",
+    "body": "Brian \u2014 I'll stop following up after this one. If rule governance at Beeline Holdings isn't a priority right now, no worries \u2014 feel free to reach out whenever it is. If it is, I'm one reply away.",
+    "touch": "breakup",
+    "send_on": "Day 14",
+    "company": "Beeline Holdings, Inc."
+  },
+  {
+    "to": "",
+    "to_name": "Vipul Sharma",
+    "subject": "digital underwriting at Ethos Technologies Inc",
+    "body": "Vipul \u2014 I saw Ethos Technologies Inc referenced \"digital underwriting\", so this is likely already on your radar. The pattern we see: rule logic locked in code means every change is a dev cycle, not a business decision \u2014 and the audit trail is only as good as engineering's change log. InRule flips that \u2014 the business owns the rule, fully audit-logged, no engineering bottleneck. Worth 15 minutes?",
+    "touch": "signal_open",
+    "send_on": "Day 1",
+    "company": "Ethos Technologies Inc."
+  },
+  {
+    "to": "",
+    "to_name": "Vipul Sharma",
+    "subject": "Re: digital underwriting at Ethos Technologies Inc",
+    "body": "Vipul \u2014 following up in case this got buried. Given Ethos Technologies Inc's recent signal (\"digital underwriting\"), the timing seemed right to compare notes on how rule changes get made today vs. business-owned and audited. Open to a quick call this week?",
+    "touch": "bump",
+    "send_on": "Day 5",
+    "company": "Ethos Technologies Inc."
+  },
+  {
+    "to": "",
+    "to_name": "Vipul Sharma",
+    "subject": "The audit angle on Ethos Technologies Inc's rule logic",
+    "body": "Vipul \u2014 one more angle worth raising: rule logic locked in code means every change is a dev cycle, not a business decision \u2014 and the audit trail is only as good as engineering's change log. For a team in Ethos Technologies Inc's position, that's not just a dev-velocity problem, it's an audit exposure. InRule makes every rule change traceable to the business user who made it. Happy to show you the trace.",
+    "touch": "compliance_angle",
+    "send_on": "Day 9",
+    "company": "Ethos Technologies Inc."
+  },
+  {
+    "to": "",
+    "to_name": "Vipul Sharma",
+    "subject": "Should I close this out?",
+    "body": "Vipul \u2014 I'll stop following up after this one. If rule governance at Ethos Technologies Inc isn't a priority right now, no worries \u2014 feel free to reach out whenever it is. If it is, I'm one reply away.",
+    "touch": "breakup",
+    "send_on": "Day 14",
+    "company": "Ethos Technologies Inc."
+  },
+  {
+    "to": "",
+    "to_name": "Nichole Myers",
+    "subject": "digital underwriting at Ethos Technologies Inc",
+    "body": "Nichole \u2014 I saw Ethos Technologies Inc referenced \"digital underwriting\", so this is likely already on your radar. The pattern we see: claims/underwriting rules live in code, so every policy or workflow change waits on engineering instead of the team that actually owns the decision. InRule flips that \u2014 the business owns the rule, fully audit-logged, no engineering bottleneck. Worth 15 minutes?",
+    "touch": "signal_open",
+    "send_on": "Day 1",
+    "company": "Ethos Technologies Inc."
+  },
+  {
+    "to": "",
+    "to_name": "Nichole Myers",
+    "subject": "Re: digital underwriting at Ethos Technologies Inc",
+    "body": "Nichole \u2014 following up in case this got buried. Given Ethos Technologies Inc's recent signal (\"digital underwriting\"), the timing seemed right to compare notes on how rule changes get made today vs. business-owned and audited. Open to a quick call this week?",
+    "touch": "bump",
+    "send_on": "Day 5",
+    "company": "Ethos Technologies Inc."
+  },
+  {
+    "to": "",
+    "to_name": "Nichole Myers",
+    "subject": "The audit angle on Ethos Technologies Inc's rule logic",
+    "body": "Nichole \u2014 one more angle worth raising: claims/underwriting rules live in code, so every policy or workflow change waits on engineering instead of the team that actually owns the decision. For a team in Ethos Technologies Inc's position, that's not just a dev-velocity problem, it's an audit exposure. InRule makes every rule change traceable to the business user who made it. Happy to show you the trace.",
+    "touch": "compliance_angle",
+    "send_on": "Day 9",
+    "company": "Ethos Technologies Inc."
+  },
+  {
+    "to": "",
+    "to_name": "Nichole Myers",
+    "subject": "Should I close this out?",
+    "body": "Nichole \u2014 I'll stop following up after this one. If rule governance at Ethos Technologies Inc isn't a priority right now, no worries \u2014 feel free to reach out whenever it is. If it is, I'm one reply away.",
+    "touch": "breakup",
+    "send_on": "Day 14",
+    "company": "Ethos Technologies Inc."
+  },
+  {
+    "to": "",
+    "to_name": "Trevor Burgess",
+    "subject": "digital underwriting at Neptune Insurance Holdings Inc",
+    "body": "Trevor \u2014 I saw Neptune Insurance Holdings Inc referenced \"digital underwriting\", so this is likely already on your radar. The pattern we see: rule logic locked in code means every change is a dev cycle, not a business decision \u2014 and the audit trail is only as good as engineering's change log. InRule flips that \u2014 the business owns the rule, fully audit-logged, no engineering bottleneck. Worth 15 minutes?",
+    "touch": "signal_open",
+    "send_on": "Day 1",
+    "company": "Neptune Insurance Holdings Inc."
+  },
+  {
+    "to": "",
+    "to_name": "Trevor Burgess",
+    "subject": "Re: digital underwriting at Neptune Insurance Holdings Inc",
+    "body": "Trevor \u2014 following up in case this got buried. Given Neptune Insurance Holdings Inc's recent signal (\"digital underwriting\"), the timing seemed right to compare notes on how rule changes get made today vs. business-owned and audited. Open to a quick call this week?",
+    "touch": "bump",
+    "send_on": "Day 5",
+    "company": "Neptune Insurance Holdings Inc."
+  },
+  {
+    "to": "",
+    "to_name": "Trevor Burgess",
+    "subject": "The audit angle on Neptune Insurance Holdings Inc's rule logic",
+    "body": "Trevor \u2014 one more angle worth raising: rule logic locked in code means every change is a dev cycle, not a business decision \u2014 and the audit trail is only as good as engineering's change log. For a team in Neptune Insurance Holdings Inc's position, that's not just a dev-velocity problem, it's an audit exposure. InRule makes every rule change traceable to the business user who made it. Happy to show you the trace.",
+    "touch": "compliance_angle",
+    "send_on": "Day 9",
+    "company": "Neptune Insurance Holdings Inc."
+  },
+  {
+    "to": "",
+    "to_name": "Trevor Burgess",
+    "subject": "Should I close this out?",
+    "body": "Trevor \u2014 I'll stop following up after this one. If rule governance at Neptune Insurance Holdings Inc isn't a priority right now, no worries \u2014 feel free to reach out whenever it is. If it is, I'm one reply away.",
+    "touch": "breakup",
+    "send_on": "Day 14",
+    "company": "Neptune Insurance Holdings Inc."
+  },
+  {
+    "to": "david.weinstock@essent.us",
+    "to_name": "David Weinstock",
+    "subject": "business rules engine at Essent Group Ltd",
+    "body": "David \u2014 I saw Essent Group Ltd referenced \"business rules engine\", so this is likely already on your radar. The pattern we see: rule logic that only engineering can change is also a control only engineering can attest to \u2014 which is a cost and an audit exposure at the same time. InRule flips that \u2014 the business owns the rule, fully audit-logged, no engineering bottleneck. Worth 15 minutes?",
+    "touch": "signal_open",
+    "send_on": "Day 1",
+    "company": "Essent Group Ltd."
+  },
+  {
+    "to": "david.weinstock@essent.us",
+    "to_name": "David Weinstock",
+    "subject": "Re: business rules engine at Essent Group Ltd",
+    "body": "David \u2014 following up in case this got buried. Given Essent Group Ltd's recent signal (\"business rules engine\"), the timing seemed right to compare notes on how rule changes get made today vs. business-owned and audited. Open to a quick call this week?",
+    "touch": "bump",
+    "send_on": "Day 5",
+    "company": "Essent Group Ltd."
+  },
+  {
+    "to": "david.weinstock@essent.us",
+    "to_name": "David Weinstock",
+    "subject": "The audit angle on Essent Group Ltd's rule logic",
+    "body": "David \u2014 one more angle worth raising: rule logic that only engineering can change is also a control only engineering can attest to \u2014 which is a cost and an audit exposure at the same time. For a team in Essent Group Ltd's position, that's not just a dev-velocity problem, it's an audit exposure. InRule makes every rule change traceable to the business user who made it. Happy to show you the trace.",
+    "touch": "compliance_angle",
+    "send_on": "Day 9",
+    "company": "Essent Group Ltd."
+  },
+  {
+    "to": "david.weinstock@essent.us",
+    "to_name": "David Weinstock",
+    "subject": "Should I close this out?",
+    "body": "David \u2014 I'll stop following up after this one. If rule governance at Essent Group Ltd isn't a priority right now, no worries \u2014 feel free to reach out whenever it is. If it is, I'm one reply away.",
+    "touch": "breakup",
+    "send_on": "Day 14",
+    "company": "Essent Group Ltd."
+  },
+  {
+    "to": "",
+    "to_name": "Vijay Bhasin",
+    "subject": "business rules engine at Essent Group Ltd",
+    "body": "Vijay \u2014 I saw Essent Group Ltd referenced \"business rules engine\", so this is likely already on your radar. The pattern we see: every rule that lives in code is a control your auditors have to take engineering's word for, rather than something the business can show, rule by rule. InRule flips that \u2014 the business owns the rule, fully audit-logged, no engineering bottleneck. Worth 15 minutes?",
+    "touch": "signal_open",
+    "send_on": "Day 1",
+    "company": "Essent Group Ltd."
+  },
+  {
+    "to": "",
+    "to_name": "Vijay Bhasin",
+    "subject": "Re: business rules engine at Essent Group Ltd",
+    "body": "Vijay \u2014 following up in case this got buried. Given Essent Group Ltd's recent signal (\"business rules engine\"), the timing seemed right to compare notes on how rule changes get made today vs. business-owned and audited. Open to a quick call this week?",
+    "touch": "bump",
+    "send_on": "Day 5",
+    "company": "Essent Group Ltd."
+  },
+  {
+    "to": "",
+    "to_name": "Vijay Bhasin",
+    "subject": "The audit angle on Essent Group Ltd's rule logic",
+    "body": "Vijay \u2014 one more angle worth raising: every rule that lives in code is a control your auditors have to take engineering's word for, rather than something the business can show, rule by rule. For a team in Essent Group Ltd's position, that's not just a dev-velocity problem, it's an audit exposure. InRule makes every rule change traceable to the business user who made it. Happy to show you the trace.",
+    "touch": "compliance_angle",
+    "send_on": "Day 9",
+    "company": "Essent Group Ltd."
+  },
+  {
+    "to": "",
+    "to_name": "Vijay Bhasin",
+    "subject": "Should I close this out?",
+    "body": "Vijay \u2014 I'll stop following up after this one. If rule governance at Essent Group Ltd isn't a priority right now, no worries \u2014 feel free to reach out whenever it is. If it is, I'm one reply away.",
+    "touch": "breakup",
+    "send_on": "Day 14",
+    "company": "Essent Group Ltd."
+  },
+  {
+    "to": "",
+    "to_name": "Lindsay Alexovich",
+    "subject": "claims automation at Metromile",
+    "body": "Lindsay \u2014 I saw Metromile referenced \"claims automation\", so this is likely already on your radar. The pattern we see: rule logic that only engineering can change is also a control only engineering can attest to \u2014 which is a cost and an audit exposure at the same time. InRule flips that \u2014 the business owns the rule, fully audit-logged, no engineering bottleneck. Worth 15 minutes?",
+    "touch": "signal_open",
+    "send_on": "Day 1",
+    "company": "Metromile, Inc."
+  },
+  {
+    "to": "",
+    "to_name": "Lindsay Alexovich",
+    "subject": "Re: claims automation at Metromile",
+    "body": "Lindsay \u2014 following up in case this got buried. Given Metromile's recent signal (\"claims automation\"), the timing seemed right to compare notes on how rule changes get made today vs. business-owned and audited. Open to a quick call this week?",
+    "touch": "bump",
+    "send_on": "Day 5",
+    "company": "Metromile, Inc."
+  },
+  {
+    "to": "",
+    "to_name": "Lindsay Alexovich",
+    "subject": "The audit angle on Metromile's rule logic",
+    "body": "Lindsay \u2014 one more angle worth raising: rule logic that only engineering can change is also a control only engineering can attest to \u2014 which is a cost and an audit exposure at the same time. For a team in Metromile's position, that's not just a dev-velocity problem, it's an audit exposure. InRule makes every rule change traceable to the business user who made it. Happy to show you the trace.",
+    "touch": "compliance_angle",
+    "send_on": "Day 9",
+    "company": "Metromile, Inc."
+  },
+  {
+    "to": "",
+    "to_name": "Lindsay Alexovich",
+    "subject": "Should I close this out?",
+    "body": "Lindsay \u2014 I'll stop following up after this one. If rule governance at Metromile isn't a priority right now, no worries \u2014 feel free to reach out whenever it is. If it is, I'm one reply away.",
+    "touch": "breakup",
+    "send_on": "Day 14",
+    "company": "Metromile, Inc."
+  },
+  {
+    "to": "sean.burgess@lemonade.com",
+    "to_name": "Sean Burgess",
+    "subject": "claims automation at Metromile",
+    "body": "Sean \u2014 I saw Metromile referenced \"claims automation\", so this is likely already on your radar. The pattern we see: claims/underwriting rules live in code, so every policy or workflow change waits on engineering instead of the team that actually owns the decision. InRule flips that \u2014 the business owns the rule, fully audit-logged, no engineering bottleneck. Worth 15 minutes?",
+    "touch": "signal_open",
+    "send_on": "Day 1",
+    "company": "Metromile, Inc."
+  },
+  {
+    "to": "sean.burgess@lemonade.com",
+    "to_name": "Sean Burgess",
+    "subject": "Re: claims automation at Metromile",
+    "body": "Sean \u2014 following up in case this got buried. Given Metromile's recent signal (\"claims automation\"), the timing seemed right to compare notes on how rule changes get made today vs. business-owned and audited. Open to a quick call this week?",
+    "touch": "bump",
+    "send_on": "Day 5",
+    "company": "Metromile, Inc."
+  },
+  {
+    "to": "sean.burgess@lemonade.com",
+    "to_name": "Sean Burgess",
+    "subject": "The audit angle on Metromile's rule logic",
+    "body": "Sean \u2014 one more angle worth raising: claims/underwriting rules live in code, so every policy or workflow change waits on engineering instead of the team that actually owns the decision. For a team in Metromile's position, that's not just a dev-velocity problem, it's an audit exposure. InRule makes every rule change traceable to the business user who made it. Happy to show you the trace.",
+    "touch": "compliance_angle",
+    "send_on": "Day 9",
+    "company": "Metromile, Inc."
+  },
+  {
+    "to": "sean.burgess@lemonade.com",
+    "to_name": "Sean Burgess",
+    "subject": "Should I close this out?",
+    "body": "Sean \u2014 I'll stop following up after this one. If rule governance at Metromile isn't a priority right now, no worries \u2014 feel free to reach out whenever it is. If it is, I'm one reply away.",
+    "touch": "breakup",
+    "send_on": "Day 14",
+    "company": "Metromile, Inc."
+  },
+  {
+    "to": "jmulkey@firstam.com",
+    "to_name": "Jody Mulkey",
+    "subject": "underwriting automation at First American Financial Corp",
+    "body": "Jody \u2014 I saw First American Financial Corp referenced \"underwriting automation\", so this is likely already on your radar. The pattern we see: rule logic locked in code means every change is a dev cycle, not a business decision \u2014 and the audit trail is only as good as engineering's change log. InRule flips that \u2014 the business owns the rule, fully audit-logged, no engineering bottleneck. Worth 15 minutes?",
+    "touch": "signal_open",
+    "send_on": "Day 1",
+    "company": "First American Financial Corp"
+  },
+  {
+    "to": "jmulkey@firstam.com",
+    "to_name": "Jody Mulkey",
+    "subject": "Re: underwriting automation at First American Financial Corp",
+    "body": "Jody \u2014 following up in case this got buried. Given First American Financial Corp's recent signal (\"underwriting automation\"), the timing seemed right to compare notes on how rule changes get made today vs. business-owned and audited. Open to a quick call this week?",
+    "touch": "bump",
+    "send_on": "Day 5",
+    "company": "First American Financial Corp"
+  },
+  {
+    "to": "jmulkey@firstam.com",
+    "to_name": "Jody Mulkey",
+    "subject": "The audit angle on First American Financial Corp's rule logic",
+    "body": "Jody \u2014 one more angle worth raising: rule logic locked in code means every change is a dev cycle, not a business decision \u2014 and the audit trail is only as good as engineering's change log. For a team in First American Financial Corp's position, that's not just a dev-velocity problem, it's an audit exposure. InRule makes every rule change traceable to the business user who made it. Happy to show you the trace.",
+    "touch": "compliance_angle",
+    "send_on": "Day 9",
+    "company": "First American Financial Corp"
+  },
+  {
+    "to": "jmulkey@firstam.com",
+    "to_name": "Jody Mulkey",
+    "subject": "Should I close this out?",
+    "body": "Jody \u2014 I'll stop following up after this one. If rule governance at First American Financial Corp isn't a priority right now, no worries \u2014 feel free to reach out whenever it is. If it is, I'm one reply away.",
+    "touch": "breakup",
+    "send_on": "Day 14",
+    "company": "First American Financial Corp"
+  },
+  {
+    "to": "rmachado@firstam.com",
+    "to_name": "Ramon Machado",
+    "subject": "underwriting automation at First American Financial Corp",
+    "body": "Ramon \u2014 I saw First American Financial Corp referenced \"underwriting automation\", so this is likely already on your radar. The pattern we see: every rule that lives in code is a control your auditors have to take engineering's word for, rather than something the business can show, rule by rule. InRule flips that \u2014 the business owns the rule, fully audit-logged, no engineering bottleneck. Worth 15 minutes?",
+    "touch": "signal_open",
+    "send_on": "Day 1",
+    "company": "First American Financial Corp"
+  },
+  {
+    "to": "rmachado@firstam.com",
+    "to_name": "Ramon Machado",
+    "subject": "Re: underwriting automation at First American Financial Corp",
+    "body": "Ramon \u2014 following up in case this got buried. Given First American Financial Corp's recent signal (\"underwriting automation\"), the timing seemed right to compare notes on how rule changes get made today vs. business-owned and audited. Open to a quick call this week?",
+    "touch": "bump",
+    "send_on": "Day 5",
+    "company": "First American Financial Corp"
+  },
+  {
+    "to": "rmachado@firstam.com",
+    "to_name": "Ramon Machado",
+    "subject": "The audit angle on First American Financial Corp's rule logic",
+    "body": "Ramon \u2014 one more angle worth raising: every rule that lives in code is a control your auditors have to take engineering's word for, rather than something the business can show, rule by rule. For a team in First American Financial Corp's position, that's not just a dev-velocity problem, it's an audit exposure. InRule makes every rule change traceable to the business user who made it. Happy to show you the trace.",
+    "touch": "compliance_angle",
+    "send_on": "Day 9",
+    "company": "First American Financial Corp"
+  },
+  {
+    "to": "rmachado@firstam.com",
+    "to_name": "Ramon Machado",
+    "subject": "Should I close this out?",
+    "body": "Ramon \u2014 I'll stop following up after this one. If rule governance at First American Financial Corp isn't a priority right now, no worries \u2014 feel free to reach out whenever it is. If it is, I'm one reply away.",
+    "touch": "breakup",
+    "send_on": "Day 14",
+    "company": "First American Financial Corp"
+  },
+  {
+    "to": "jamie.adams@trupanion.com",
+    "to_name": "Jamie Adams",
+    "subject": "claims automation at Trupanion",
+    "body": "Jamie \u2014 I saw Trupanion referenced \"claims automation\", so this is likely already on your radar. The pattern we see: rule logic locked in code means every change is a dev cycle, not a business decision \u2014 and the audit trail is only as good as engineering's change log. InRule flips that \u2014 the business owns the rule, fully audit-logged, no engineering bottleneck. Worth 15 minutes?",
+    "touch": "signal_open",
+    "send_on": "Day 1",
+    "company": "Trupanion, Inc."
+  },
+  {
+    "to": "jamie.adams@trupanion.com",
+    "to_name": "Jamie Adams",
+    "subject": "Re: claims automation at Trupanion",
+    "body": "Jamie \u2014 following up in case this got buried. Given Trupanion's recent signal (\"claims automation\"), the timing seemed right to compare notes on how rule changes get made today vs. business-owned and audited. Open to a quick call this week?",
+    "touch": "bump",
+    "send_on": "Day 5",
+    "company": "Trupanion, Inc."
+  },
+  {
+    "to": "jamie.adams@trupanion.com",
+    "to_name": "Jamie Adams",
+    "subject": "The audit angle on Trupanion's rule logic",
+    "body": "Jamie \u2014 one more angle worth raising: rule logic locked in code means every change is a dev cycle, not a business decision \u2014 and the audit trail is only as good as engineering's change log. For a team in Trupanion's position, that's not just a dev-velocity problem, it's an audit exposure. InRule makes every rule change traceable to the business user who made it. Happy to show you the trace.",
+    "touch": "compliance_angle",
+    "send_on": "Day 9",
+    "company": "Trupanion, Inc."
+  },
+  {
+    "to": "jamie.adams@trupanion.com",
+    "to_name": "Jamie Adams",
+    "subject": "Should I close this out?",
+    "body": "Jamie \u2014 I'll stop following up after this one. If rule governance at Trupanion isn't a priority right now, no worries \u2014 feel free to reach out whenever it is. If it is, I'm one reply away.",
+    "touch": "breakup",
+    "send_on": "Day 14",
+    "company": "Trupanion, Inc."
+  },
+  {
+    "to": "margi.tooth@trupanion.com",
+    "to_name": "Margi Tooth",
+    "subject": "claims automation at Trupanion",
+    "body": "Margi \u2014 I saw Trupanion referenced \"claims automation\", so this is likely already on your radar. The pattern we see: rule logic locked in code means every change is a dev cycle, not a business decision \u2014 and the audit trail is only as good as engineering's change log. InRule flips that \u2014 the business owns the rule, fully audit-logged, no engineering bottleneck. Worth 15 minutes?",
+    "touch": "signal_open",
+    "send_on": "Day 1",
+    "company": "Trupanion, Inc."
+  },
+  {
+    "to": "margi.tooth@trupanion.com",
+    "to_name": "Margi Tooth",
+    "subject": "Re: claims automation at Trupanion",
+    "body": "Margi \u2014 following up in case this got buried. Given Trupanion's recent signal (\"claims automation\"), the timing seemed right to compare notes on how rule changes get made today vs. business-owned and audited. Open to a quick call this week?",
+    "touch": "bump",
+    "send_on": "Day 5",
+    "company": "Trupanion, Inc."
+  },
+  {
+    "to": "margi.tooth@trupanion.com",
+    "to_name": "Margi Tooth",
+    "subject": "The audit angle on Trupanion's rule logic",
+    "body": "Margi \u2014 one more angle worth raising: rule logic locked in code means every change is a dev cycle, not a business decision \u2014 and the audit trail is only as good as engineering's change log. For a team in Trupanion's position, that's not just a dev-velocity problem, it's an audit exposure. InRule makes every rule change traceable to the business user who made it. Happy to show you the trace.",
+    "touch": "compliance_angle",
+    "send_on": "Day 9",
+    "company": "Trupanion, Inc."
+  },
+  {
+    "to": "margi.tooth@trupanion.com",
+    "to_name": "Margi Tooth",
+    "subject": "Should I close this out?",
+    "body": "Margi \u2014 I'll stop following up after this one. If rule governance at Trupanion isn't a priority right now, no worries \u2014 feel free to reach out whenever it is. If it is, I'm one reply away.",
+    "touch": "breakup",
+    "send_on": "Day 14",
+    "company": "Trupanion, Inc."
+  },
+  {
+    "to": "",
+    "to_name": "Neenu Sohi Kainth",
+    "subject": "business rules engine at Enact Holdings",
+    "body": "Neenu \u2014 I saw Enact Holdings referenced \"business rules engine\", so this is likely already on your radar. The pattern we see: claims/underwriting rules live in code, so every policy or workflow change waits on engineering instead of the team that actually owns the decision. InRule flips that \u2014 the business owns the rule, fully audit-logged, no engineering bottleneck. Worth 15 minutes?",
+    "touch": "signal_open",
+    "send_on": "Day 1",
+    "company": "Enact Holdings, Inc."
+  },
+  {
+    "to": "",
+    "to_name": "Neenu Sohi Kainth",
+    "subject": "Re: business rules engine at Enact Holdings",
+    "body": "Neenu \u2014 following up in case this got buried. Given Enact Holdings's recent signal (\"business rules engine\"), the timing seemed right to compare notes on how rule changes get made today vs. business-owned and audited. Open to a quick call this week?",
+    "touch": "bump",
+    "send_on": "Day 5",
+    "company": "Enact Holdings, Inc."
+  },
+  {
+    "to": "",
+    "to_name": "Neenu Sohi Kainth",
+    "subject": "The audit angle on Enact Holdings's rule logic",
+    "body": "Neenu \u2014 one more angle worth raising: claims/underwriting rules live in code, so every policy or workflow change waits on engineering instead of the team that actually owns the decision. For a team in Enact Holdings's position, that's not just a dev-velocity problem, it's an audit exposure. InRule makes every rule change traceable to the business user who made it. Happy to show you the trace.",
+    "touch": "compliance_angle",
+    "send_on": "Day 9",
+    "company": "Enact Holdings, Inc."
+  },
+  {
+    "to": "",
+    "to_name": "Neenu Sohi Kainth",
+    "subject": "Should I close this out?",
+    "body": "Neenu \u2014 I'll stop following up after this one. If rule governance at Enact Holdings isn't a priority right now, no worries \u2014 feel free to reach out whenever it is. If it is, I'm one reply away.",
+    "touch": "breakup",
+    "send_on": "Day 14",
+    "company": "Enact Holdings, Inc."
+  },
+  {
+    "to": "",
+    "to_name": "Kirk Fox",
+    "subject": "underwriting automation at Riverview Financial Corp",
+    "body": "Kirk \u2014 I saw Riverview Financial Corp referenced \"underwriting automation\", so this is likely already on your radar. The pattern we see: rule logic locked in code means every change is a dev cycle, not a business decision \u2014 and the audit trail is only as good as engineering's change log. InRule flips that \u2014 the business owns the rule, fully audit-logged, no engineering bottleneck. Worth 15 minutes?",
+    "touch": "signal_open",
+    "send_on": "Day 1",
+    "company": "Riverview Financial Corp"
+  },
+  {
+    "to": "",
+    "to_name": "Kirk Fox",
+    "subject": "Re: underwriting automation at Riverview Financial Corp",
+    "body": "Kirk \u2014 following up in case this got buried. Given Riverview Financial Corp's recent signal (\"underwriting automation\"), the timing seemed right to compare notes on how rule changes get made today vs. business-owned and audited. Open to a quick call this week?",
+    "touch": "bump",
+    "send_on": "Day 5",
+    "company": "Riverview Financial Corp"
+  },
+  {
+    "to": "",
+    "to_name": "Kirk Fox",
+    "subject": "The audit angle on Riverview Financial Corp's rule logic",
+    "body": "Kirk \u2014 one more angle worth raising: rule logic locked in code means every change is a dev cycle, not a business decision \u2014 and the audit trail is only as good as engineering's change log. For a team in Riverview Financial Corp's position, that's not just a dev-velocity problem, it's an audit exposure. InRule makes every rule change traceable to the business user who made it. Happy to show you the trace.",
+    "touch": "compliance_angle",
+    "send_on": "Day 9",
+    "company": "Riverview Financial Corp"
+  },
+  {
+    "to": "",
+    "to_name": "Kirk Fox",
+    "subject": "Should I close this out?",
+    "body": "Kirk \u2014 I'll stop following up after this one. If rule governance at Riverview Financial Corp isn't a priority right now, no worries \u2014 feel free to reach out whenever it is. If it is, I'm one reply away.",
+    "touch": "breakup",
+    "send_on": "Day 14",
+    "company": "Riverview Financial Corp"
+  },
+  {
+    "to": "",
+    "to_name": "Scott Anderson",
+    "subject": "underwriting automation at Ocwen Financial Corp",
+    "body": "Scott \u2014 I saw Ocwen Financial Corp referenced \"underwriting automation\", so this is likely already on your radar. The pattern we see: rule logic locked in code means every change is a dev cycle, not a business decision \u2014 and the audit trail is only as good as engineering's change log. InRule flips that \u2014 the business owns the rule, fully audit-logged, no engineering bottleneck. Worth 15 minutes?",
+    "touch": "signal_open",
+    "send_on": "Day 1",
+    "company": "Ocwen Financial Corp"
+  },
+  {
+    "to": "",
+    "to_name": "Scott Anderson",
+    "subject": "Re: underwriting automation at Ocwen Financial Corp",
+    "body": "Scott \u2014 following up in case this got buried. Given Ocwen Financial Corp's recent signal (\"underwriting automation\"), the timing seemed right to compare notes on how rule changes get made today vs. business-owned and audited. Open to a quick call this week?",
+    "touch": "bump",
+    "send_on": "Day 5",
+    "company": "Ocwen Financial Corp"
+  },
+  {
+    "to": "",
+    "to_name": "Scott Anderson",
+    "subject": "The audit angle on Ocwen Financial Corp's rule logic",
+    "body": "Scott \u2014 one more angle worth raising: rule logic locked in code means every change is a dev cycle, not a business decision \u2014 and the audit trail is only as good as engineering's change log. For a team in Ocwen Financial Corp's position, that's not just a dev-velocity problem, it's an audit exposure. InRule makes every rule change traceable to the business user who made it. Happy to show you the trace.",
+    "touch": "compliance_angle",
+    "send_on": "Day 9",
+    "company": "Ocwen Financial Corp"
+  },
+  {
+    "to": "",
+    "to_name": "Scott Anderson",
+    "subject": "Should I close this out?",
+    "body": "Scott \u2014 I'll stop following up after this one. If rule governance at Ocwen Financial Corp isn't a priority right now, no worries \u2014 feel free to reach out whenever it is. If it is, I'm one reply away.",
+    "touch": "breakup",
+    "send_on": "Day 14",
+    "company": "Ocwen Financial Corp"
+  },
+  {
+    "to": "",
+    "to_name": "Parveen Chander Aery",
+    "subject": "underwriting automation at Ocwen Financial Corp",
+    "body": "Parveen \u2014 I saw Ocwen Financial Corp referenced \"underwriting automation\", so this is likely already on your radar. The pattern we see: rule logic locked in code means every change is a dev cycle, not a business decision \u2014 and the audit trail is only as good as engineering's change log. InRule flips that \u2014 the business owns the rule, fully audit-logged, no engineering bottleneck. Worth 15 minutes?",
+    "touch": "signal_open",
+    "send_on": "Day 1",
+    "company": "Ocwen Financial Corp"
+  },
+  {
+    "to": "",
+    "to_name": "Parveen Chander Aery",
+    "subject": "Re: underwriting automation at Ocwen Financial Corp",
+    "body": "Parveen \u2014 following up in case this got buried. Given Ocwen Financial Corp's recent signal (\"underwriting automation\"), the timing seemed right to compare notes on how rule changes get made today vs. business-owned and audited. Open to a quick call this week?",
+    "touch": "bump",
+    "send_on": "Day 5",
+    "company": "Ocwen Financial Corp"
+  },
+  {
+    "to": "",
+    "to_name": "Parveen Chander Aery",
+    "subject": "The audit angle on Ocwen Financial Corp's rule logic",
+    "body": "Parveen \u2014 one more angle worth raising: rule logic locked in code means every change is a dev cycle, not a business decision \u2014 and the audit trail is only as good as engineering's change log. For a team in Ocwen Financial Corp's position, that's not just a dev-velocity problem, it's an audit exposure. InRule makes every rule change traceable to the business user who made it. Happy to show you the trace.",
+    "touch": "compliance_angle",
+    "send_on": "Day 9",
+    "company": "Ocwen Financial Corp"
+  },
+  {
+    "to": "",
+    "to_name": "Parveen Chander Aery",
+    "subject": "Should I close this out?",
+    "body": "Parveen \u2014 I'll stop following up after this one. If rule governance at Ocwen Financial Corp isn't a priority right now, no worries \u2014 feel free to reach out whenever it is. If it is, I'm one reply away.",
+    "touch": "breakup",
+    "send_on": "Day 14",
+    "company": "Ocwen Financial Corp"
+  },
+  {
+    "to": "matt@joinroot.com",
+    "to_name": "Matt Bonakdarpour",
+    "subject": "claims automation at Root",
+    "body": "Matt \u2014 I saw Root referenced \"claims automation\", so this is likely already on your radar. The pattern we see: rule logic locked in code means every change is a dev cycle, not a business decision \u2014 and the audit trail is only as good as engineering's change log. InRule flips that \u2014 the business owns the rule, fully audit-logged, no engineering bottleneck. Worth 15 minutes?",
+    "touch": "signal_open",
+    "send_on": "Day 1",
+    "company": "Root, Inc."
+  },
+  {
+    "to": "matt@joinroot.com",
+    "to_name": "Matt Bonakdarpour",
+    "subject": "Re: claims automation at Root",
+    "body": "Matt \u2014 following up in case this got buried. Given Root's recent signal (\"claims automation\"), the timing seemed right to compare notes on how rule changes get made today vs. business-owned and audited. Open to a quick call this week?",
+    "touch": "bump",
+    "send_on": "Day 5",
+    "company": "Root, Inc."
+  },
+  {
+    "to": "matt@joinroot.com",
+    "to_name": "Matt Bonakdarpour",
+    "subject": "The audit angle on Root's rule logic",
+    "body": "Matt \u2014 one more angle worth raising: rule logic locked in code means every change is a dev cycle, not a business decision \u2014 and the audit trail is only as good as engineering's change log. For a team in Root's position, that's not just a dev-velocity problem, it's an audit exposure. InRule makes every rule change traceable to the business user who made it. Happy to show you the trace.",
+    "touch": "compliance_angle",
+    "send_on": "Day 9",
+    "company": "Root, Inc."
+  },
+  {
+    "to": "matt@joinroot.com",
+    "to_name": "Matt Bonakdarpour",
+    "subject": "Should I close this out?",
+    "body": "Matt \u2014 I'll stop following up after this one. If rule governance at Root isn't a priority right now, no worries \u2014 feel free to reach out whenever it is. If it is, I'm one reply away.",
+    "touch": "breakup",
+    "send_on": "Day 14",
+    "company": "Root, Inc."
+  },
+  {
+    "to": "david.spector@pennymac.com",
+    "to_name": "David Spector",
+    "subject": "hiring for Drools at PENNYMAC",
+    "body": "David \u2014 I saw PENNYMAC referenced \"hiring for Drools\", so this is likely already on your radar. The pattern we see: rule logic locked in code means every change is a dev cycle, not a business decision \u2014 and the audit trail is only as good as engineering's change log. InRule flips that \u2014 the business owns the rule, fully audit-logged, no engineering bottleneck. Worth 15 minutes?",
+    "touch": "signal_open",
+    "send_on": "Day 1",
+    "company": "PENNYMAC"
+  },
+  {
+    "to": "david.spector@pennymac.com",
+    "to_name": "David Spector",
+    "subject": "Re: hiring for Drools at PENNYMAC",
+    "body": "David \u2014 following up in case this got buried. Given PENNYMAC's recent signal (\"hiring for Drools\"), the timing seemed right to compare notes on how rule changes get made today vs. business-owned and audited. Open to a quick call this week?",
+    "touch": "bump",
+    "send_on": "Day 5",
+    "company": "PENNYMAC"
+  },
+  {
+    "to": "david.spector@pennymac.com",
+    "to_name": "David Spector",
+    "subject": "The audit angle on PENNYMAC's rule logic",
+    "body": "David \u2014 one more angle worth raising: rule logic locked in code means every change is a dev cycle, not a business decision \u2014 and the audit trail is only as good as engineering's change log. For a team in PENNYMAC's position, that's not just a dev-velocity problem, it's an audit exposure. InRule makes every rule change traceable to the business user who made it. Happy to show you the trace.",
+    "touch": "compliance_angle",
+    "send_on": "Day 9",
+    "company": "PENNYMAC"
+  },
+  {
+    "to": "david.spector@pennymac.com",
+    "to_name": "David Spector",
+    "subject": "Should I close this out?",
+    "body": "David \u2014 I'll stop following up after this one. If rule governance at PENNYMAC isn't a priority right now, no worries \u2014 feel free to reach out whenever it is. If it is, I'm one reply away.",
+    "touch": "breakup",
+    "send_on": "Day 14",
+    "company": "PENNYMAC"
+  },
+  {
+    "to": "doug.jones@pennymac.com",
+    "to_name": "Doug Jones",
+    "subject": "hiring for Drools at PENNYMAC",
+    "body": "Doug \u2014 I saw PENNYMAC referenced \"hiring for Drools\", so this is likely already on your radar. The pattern we see: rule logic locked in code means every change is a dev cycle, not a business decision \u2014 and the audit trail is only as good as engineering's change log. InRule flips that \u2014 the business owns the rule, fully audit-logged, no engineering bottleneck. Worth 15 minutes?",
+    "touch": "signal_open",
+    "send_on": "Day 1",
+    "company": "PENNYMAC"
+  },
+  {
+    "to": "doug.jones@pennymac.com",
+    "to_name": "Doug Jones",
+    "subject": "Re: hiring for Drools at PENNYMAC",
+    "body": "Doug \u2014 following up in case this got buried. Given PENNYMAC's recent signal (\"hiring for Drools\"), the timing seemed right to compare notes on how rule changes get made today vs. business-owned and audited. Open to a quick call this week?",
+    "touch": "bump",
+    "send_on": "Day 5",
+    "company": "PENNYMAC"
+  },
+  {
+    "to": "doug.jones@pennymac.com",
+    "to_name": "Doug Jones",
+    "subject": "The audit angle on PENNYMAC's rule logic",
+    "body": "Doug \u2014 one more angle worth raising: rule logic locked in code means every change is a dev cycle, not a business decision \u2014 and the audit trail is only as good as engineering's change log. For a team in PENNYMAC's position, that's not just a dev-velocity problem, it's an audit exposure. InRule makes every rule change traceable to the business user who made it. Happy to show you the trace.",
+    "touch": "compliance_angle",
+    "send_on": "Day 9",
+    "company": "PENNYMAC"
+  },
+  {
+    "to": "doug.jones@pennymac.com",
+    "to_name": "Doug Jones",
+    "subject": "Should I close this out?",
+    "body": "Doug \u2014 I'll stop following up after this one. If rule governance at PENNYMAC isn't a priority right now, no worries \u2014 feel free to reach out whenever it is. If it is, I'm one reply away.",
+    "touch": "breakup",
+    "send_on": "Day 14",
+    "company": "PENNYMAC"
+  },
+  {
+    "to": "vjoseph@mercuryinsurance.com",
+    "to_name": "Victor Joseph",
+    "subject": "hiring for Drools at Mercury Insurance",
+    "body": "Victor \u2014 I saw Mercury Insurance referenced \"hiring for Drools\", so this is likely already on your radar. The pattern we see: rule logic locked in code means every change is a dev cycle, not a business decision \u2014 and the audit trail is only as good as engineering's change log. InRule flips that \u2014 the business owns the rule, fully audit-logged, no engineering bottleneck. Worth 15 minutes?",
+    "touch": "signal_open",
+    "send_on": "Day 1",
+    "company": "Mercury Insurance"
+  },
+  {
+    "to": "vjoseph@mercuryinsurance.com",
+    "to_name": "Victor Joseph",
+    "subject": "Re: hiring for Drools at Mercury Insurance",
+    "body": "Victor \u2014 following up in case this got buried. Given Mercury Insurance's recent signal (\"hiring for Drools\"), the timing seemed right to compare notes on how rule changes get made today vs. business-owned and audited. Open to a quick call this week?",
+    "touch": "bump",
+    "send_on": "Day 5",
+    "company": "Mercury Insurance"
+  },
+  {
+    "to": "vjoseph@mercuryinsurance.com",
+    "to_name": "Victor Joseph",
+    "subject": "The audit angle on Mercury Insurance's rule logic",
+    "body": "Victor \u2014 one more angle worth raising: rule logic locked in code means every change is a dev cycle, not a business decision \u2014 and the audit trail is only as good as engineering's change log. For a team in Mercury Insurance's position, that's not just a dev-velocity problem, it's an audit exposure. InRule makes every rule change traceable to the business user who made it. Happy to show you the trace.",
+    "touch": "compliance_angle",
+    "send_on": "Day 9",
+    "company": "Mercury Insurance"
+  },
+  {
+    "to": "vjoseph@mercuryinsurance.com",
+    "to_name": "Victor Joseph",
+    "subject": "Should I close this out?",
+    "body": "Victor \u2014 I'll stop following up after this one. If rule governance at Mercury Insurance isn't a priority right now, no worries \u2014 feel free to reach out whenever it is. If it is, I'm one reply away.",
+    "touch": "breakup",
+    "send_on": "Day 14",
+    "company": "Mercury Insurance"
+  },
+  {
+    "to": "wpang@mercuryinsurance.com",
+    "to_name": "Wilson Pang",
+    "subject": "hiring for Drools at Mercury Insurance",
+    "body": "Wilson \u2014 I saw Mercury Insurance referenced \"hiring for Drools\", so this is likely already on your radar. The pattern we see: rule logic locked in code means every change is a dev cycle, not a business decision \u2014 and the audit trail is only as good as engineering's change log. InRule flips that \u2014 the business owns the rule, fully audit-logged, no engineering bottleneck. Worth 15 minutes?",
+    "touch": "signal_open",
+    "send_on": "Day 1",
+    "company": "Mercury Insurance"
+  },
+  {
+    "to": "wpang@mercuryinsurance.com",
+    "to_name": "Wilson Pang",
+    "subject": "Re: hiring for Drools at Mercury Insurance",
+    "body": "Wilson \u2014 following up in case this got buried. Given Mercury Insurance's recent signal (\"hiring for Drools\"), the timing seemed right to compare notes on how rule changes get made today vs. business-owned and audited. Open to a quick call this week?",
+    "touch": "bump",
+    "send_on": "Day 5",
+    "company": "Mercury Insurance"
+  },
+  {
+    "to": "wpang@mercuryinsurance.com",
+    "to_name": "Wilson Pang",
+    "subject": "The audit angle on Mercury Insurance's rule logic",
+    "body": "Wilson \u2014 one more angle worth raising: rule logic locked in code means every change is a dev cycle, not a business decision \u2014 and the audit trail is only as good as engineering's change log. For a team in Mercury Insurance's position, that's not just a dev-velocity problem, it's an audit exposure. InRule makes every rule change traceable to the business user who made it. Happy to show you the trace.",
+    "touch": "compliance_angle",
+    "send_on": "Day 9",
+    "company": "Mercury Insurance"
+  },
+  {
+    "to": "wpang@mercuryinsurance.com",
+    "to_name": "Wilson Pang",
+    "subject": "Should I close this out?",
+    "body": "Wilson \u2014 I'll stop following up after this one. If rule governance at Mercury Insurance isn't a priority right now, no worries \u2014 feel free to reach out whenever it is. If it is, I'm one reply away.",
+    "touch": "breakup",
+    "send_on": "Day 14",
+    "company": "Mercury Insurance"
+  },
+  {
+    "to": "szabel@unum.com",
+    "to_name": "Steve Zabel",
+    "subject": "claims automation at Unum Group (UNM",
+    "body": "Steve \u2014 I saw Unum Group (UNM referenced \"claims automation\", so this is likely already on your radar. The pattern we see: rule logic locked in code means every change is a dev cycle, not a business decision \u2014 and the audit trail is only as good as engineering's change log. InRule flips that \u2014 the business owns the rule, fully audit-logged, no engineering bottleneck. Worth 15 minutes?",
+    "touch": "signal_open",
+    "send_on": "Day 1",
+    "company": "Unum Group (UNM, UNMA)"
+  },
+  {
+    "to": "szabel@unum.com",
+    "to_name": "Steve Zabel",
+    "subject": "Re: claims automation at Unum Group (UNM",
+    "body": "Steve \u2014 following up in case this got buried. Given Unum Group (UNM's recent signal (\"claims automation\"), the timing seemed right to compare notes on how rule changes get made today vs. business-owned and audited. Open to a quick call this week?",
+    "touch": "bump",
+    "send_on": "Day 5",
+    "company": "Unum Group (UNM, UNMA)"
+  },
+  {
+    "to": "szabel@unum.com",
+    "to_name": "Steve Zabel",
+    "subject": "The audit angle on Unum Group (UNM's rule logic",
+    "body": "Steve \u2014 one more angle worth raising: rule logic locked in code means every change is a dev cycle, not a business decision \u2014 and the audit trail is only as good as engineering's change log. For a team in Unum Group (UNM's position, that's not just a dev-velocity problem, it's an audit exposure. InRule makes every rule change traceable to the business user who made it. Happy to show you the trace.",
+    "touch": "compliance_angle",
+    "send_on": "Day 9",
+    "company": "Unum Group (UNM, UNMA)"
+  },
+  {
+    "to": "szabel@unum.com",
+    "to_name": "Steve Zabel",
+    "subject": "Should I close this out?",
+    "body": "Steve \u2014 I'll stop following up after this one. If rule governance at Unum Group (UNM isn't a priority right now, no worries \u2014 feel free to reach out whenever it is. If it is, I'm one reply away.",
+    "touch": "breakup",
+    "send_on": "Day 14",
+    "company": "Unum Group (UNM, UNMA)"
+  },
+  {
+    "to": "",
+    "to_name": "Morris Taylor",
+    "subject": "digital underwriting at Genworth Financial Inc",
+    "body": "Morris \u2014 I saw Genworth Financial Inc referenced \"digital underwriting\", so this is likely already on your radar. The pattern we see: rule logic locked in code means every change is a dev cycle, not a business decision \u2014 and the audit trail is only as good as engineering's change log. InRule flips that \u2014 the business owns the rule, fully audit-logged, no engineering bottleneck. Worth 15 minutes?",
+    "touch": "signal_open",
+    "send_on": "Day 1",
+    "company": "Genworth Financial Inc"
+  },
+  {
+    "to": "",
+    "to_name": "Morris Taylor",
+    "subject": "Re: digital underwriting at Genworth Financial Inc",
+    "body": "Morris \u2014 following up in case this got buried. Given Genworth Financial Inc's recent signal (\"digital underwriting\"), the timing seemed right to compare notes on how rule changes get made today vs. business-owned and audited. Open to a quick call this week?",
+    "touch": "bump",
+    "send_on": "Day 5",
+    "company": "Genworth Financial Inc"
+  },
+  {
+    "to": "",
+    "to_name": "Morris Taylor",
+    "subject": "The audit angle on Genworth Financial Inc's rule logic",
+    "body": "Morris \u2014 one more angle worth raising: rule logic locked in code means every change is a dev cycle, not a business decision \u2014 and the audit trail is only as good as engineering's change log. For a team in Genworth Financial Inc's position, that's not just a dev-velocity problem, it's an audit exposure. InRule makes every rule change traceable to the business user who made it. Happy to show you the trace.",
+    "touch": "compliance_angle",
+    "send_on": "Day 9",
+    "company": "Genworth Financial Inc"
+  },
+  {
+    "to": "",
+    "to_name": "Morris Taylor",
+    "subject": "Should I close this out?",
+    "body": "Morris \u2014 I'll stop following up after this one. If rule governance at Genworth Financial Inc isn't a priority right now, no worries \u2014 feel free to reach out whenever it is. If it is, I'm one reply away.",
+    "touch": "breakup",
+    "send_on": "Day 14",
+    "company": "Genworth Financial Inc"
+  }
+]

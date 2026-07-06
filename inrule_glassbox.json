@@ -1,0 +1,1333 @@
+[
+  {
+    "name": "Roadzen Inc. (RDZN, RDZNW)",
+    "total": 28,
+    "tier": "TIER 1 \u2014 PRIORITY",
+    "fired": 4,
+    "of": 7,
+    "top_signal": "claims automation",
+    "trace": [
+      {
+        "id": "R1",
+        "name": "Category buying-language in SEC filings",
+        "fired": true,
+        "points": 10,
+        "why": "Uses category language (claims automation) in its own SEC filings \u2014 actively describing the capability InRule provides.",
+        "source_url": "https://www.sec.gov/Archives/edgar/data/1868640/000149315226019249/0001493152-26-019249-index.htm"
+      },
+      {
+        "id": "R2",
+        "name": "Competitor product in use (displacement window)",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R3",
+        "name": "Regulated-industry end user",
+        "fired": true,
+        "points": 6,
+        "why": "SEC industry classification: Insurance Agents, Brokers & Service \u2014 a core InRule vertical (insurance / banking / healthcare / government), a genuine end user rather than a software vendor describing its own product."
+      },
+      {
+        "id": "R4",
+        "name": "Recent-IPO governance trigger",
+        "fired": true,
+        "points": 8,
+        "why": "Filed S-1 on 2024-04-16 \u2014 newly public and newly subject to SOX/audit/board scrutiny, the exact moment rule-governance and auditability become board-level obligations."
+      },
+      {
+        "id": "R5",
+        "name": "New decision-maker appointed",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R6",
+        "name": "Live buying-window timing",
+        "fired": true,
+        "points": 4,
+        "why": "2 trigger events in the last 270 days (most recent 69 days ago) \u2014 signals cluster in time, indicating an active buying motion, not stale interest."
+      },
+      {
+        "id": "R7",
+        "name": "Decision-maker identified",
+        "fired": false,
+        "points": 0
+      }
+    ]
+  },
+  {
+    "name": "Health In Tech, Inc.",
+    "total": 28,
+    "tier": "TIER 1 \u2014 PRIORITY",
+    "fired": 4,
+    "of": 7,
+    "top_signal": "underwriting automation",
+    "trace": [
+      {
+        "id": "R1",
+        "name": "Category buying-language in SEC filings",
+        "fired": true,
+        "points": 10,
+        "why": "Uses category language (underwriting automation) in its own SEC filings \u2014 actively describing the capability InRule provides.",
+        "source_url": "https://www.sec.gov/Archives/edgar/data/2019505/000121390025116958/0001213900-25-116958-index.htm"
+      },
+      {
+        "id": "R2",
+        "name": "Competitor product in use (displacement window)",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R3",
+        "name": "Regulated-industry end user",
+        "fired": true,
+        "points": 6,
+        "why": "SEC industry classification: Insurance Agents, Brokers & Service \u2014 a core InRule vertical (insurance / banking / healthcare / government), a genuine end user rather than a software vendor describing its own product."
+      },
+      {
+        "id": "R4",
+        "name": "Recent-IPO governance trigger",
+        "fired": true,
+        "points": 8,
+        "why": "Filed 424B4 on 2024-12-23 \u2014 newly public and newly subject to SOX/audit/board scrutiny, the exact moment rule-governance and auditability become board-level obligations."
+      },
+      {
+        "id": "R5",
+        "name": "New decision-maker appointed",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R6",
+        "name": "Live buying-window timing",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R7",
+        "name": "Decision-maker identified",
+        "fired": true,
+        "points": 4,
+        "why": "A persona-matched decision-maker is already on file (Tim Johnson, Chief Executive Officer) \u2014 the account is actionable today, no first-touch enrichment needed."
+      }
+    ]
+  },
+  {
+    "name": "Bowhead Specialty Holdings Inc.",
+    "total": 26,
+    "tier": "TIER 1 \u2014 PRIORITY",
+    "fired": 4,
+    "of": 7,
+    "top_signal": "digital underwriting",
+    "trace": [
+      {
+        "id": "R1",
+        "name": "Category buying-language in SEC filings",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R2",
+        "name": "Competitor product in use (displacement window)",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R3",
+        "name": "Regulated-industry end user",
+        "fired": true,
+        "points": 6,
+        "why": "SEC industry classification: Fire, Marine & Casualty Insurance \u2014 a core InRule vertical (insurance / banking / healthcare / government), a genuine end user rather than a software vendor describing its own product.",
+        "source_url": "https://www.sec.gov/Archives/edgar/data/2002473/000162828026011089/0001628280-26-011089-index.htm"
+      },
+      {
+        "id": "R4",
+        "name": "Recent-IPO governance trigger",
+        "fired": true,
+        "points": 8,
+        "why": "Filed 424B4 on 2024-10-24 \u2014 newly public and newly subject to SOX/audit/board scrutiny, the exact moment rule-governance and auditability become board-level obligations."
+      },
+      {
+        "id": "R5",
+        "name": "New decision-maker appointed",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R6",
+        "name": "Live buying-window timing",
+        "fired": true,
+        "points": 8,
+        "why": "3 trigger events in the last 270 days (most recent 62 days ago) \u2014 signals cluster in time, indicating an active buying motion, not stale interest."
+      },
+      {
+        "id": "R7",
+        "name": "Decision-maker identified",
+        "fired": true,
+        "points": 4,
+        "why": "A persona-matched decision-maker is already on file (Bob Spina, Chief Information Officer) \u2014 the account is actionable today, no first-touch enrichment needed."
+      }
+    ]
+  },
+  {
+    "name": "Beeline Holdings, Inc.",
+    "total": 24,
+    "tier": "TIER 2 \u2014 QUALIFIED",
+    "fired": 3,
+    "of": 7,
+    "top_signal": "underwriting automation",
+    "trace": [
+      {
+        "id": "R1",
+        "name": "Category buying-language in SEC filings",
+        "fired": true,
+        "points": 10,
+        "why": "Uses category language (underwriting automation) in its own SEC filings \u2014 actively describing the capability InRule provides.",
+        "source_url": "https://www.sec.gov/Archives/edgar/data/1534708/000164117225004798/0001641172-25-004798-index.htm"
+      },
+      {
+        "id": "R2",
+        "name": "Competitor product in use (displacement window)",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R3",
+        "name": "Regulated-industry end user",
+        "fired": true,
+        "points": 6,
+        "why": "SEC industry classification: Mortgage Bankers & Loan Correspondents \u2014 a core InRule vertical (insurance / banking / healthcare / government), a genuine end user rather than a software vendor describing its own product."
+      },
+      {
+        "id": "R4",
+        "name": "Recent-IPO governance trigger",
+        "fired": true,
+        "points": 8,
+        "why": "Filed S-1 on 2025-10-21 \u2014 newly public and newly subject to SOX/audit/board scrutiny, the exact moment rule-governance and auditability become board-level obligations."
+      },
+      {
+        "id": "R5",
+        "name": "New decision-maker appointed",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R6",
+        "name": "Live buying-window timing",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R7",
+        "name": "Decision-maker identified",
+        "fired": false,
+        "points": 0
+      }
+    ]
+  },
+  {
+    "name": "Ethos Technologies Inc.",
+    "total": 22,
+    "tier": "TIER 2 \u2014 QUALIFIED",
+    "fired": 4,
+    "of": 7,
+    "top_signal": "digital underwriting",
+    "trace": [
+      {
+        "id": "R1",
+        "name": "Category buying-language in SEC filings",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R2",
+        "name": "Competitor product in use (displacement window)",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R3",
+        "name": "Regulated-industry end user",
+        "fired": true,
+        "points": 6,
+        "why": "SEC industry classification: Insurance Agents, Brokers & Service \u2014 a core InRule vertical (insurance / banking / healthcare / government), a genuine end user rather than a software vendor describing its own product.",
+        "source_url": "https://www.sec.gov/Archives/edgar/data/1788451/000119312526108887/0001193125-26-108887-index.htm"
+      },
+      {
+        "id": "R4",
+        "name": "Recent-IPO governance trigger",
+        "fired": true,
+        "points": 8,
+        "why": "Filed 424B4 on 2026-01-30 \u2014 newly public and newly subject to SOX/audit/board scrutiny, the exact moment rule-governance and auditability become board-level obligations."
+      },
+      {
+        "id": "R5",
+        "name": "New decision-maker appointed",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R6",
+        "name": "Live buying-window timing",
+        "fired": true,
+        "points": 4,
+        "why": "2 trigger events in the last 270 days (most recent 111 days ago) \u2014 signals cluster in time, indicating an active buying motion, not stale interest."
+      },
+      {
+        "id": "R7",
+        "name": "Decision-maker identified",
+        "fired": true,
+        "points": 4,
+        "why": "A persona-matched decision-maker is already on file (Vipul Sharma, Chief Technology Officer) \u2014 the account is actionable today, no first-touch enrichment needed."
+      }
+    ]
+  },
+  {
+    "name": "Neptune Insurance Holdings Inc.",
+    "total": 22,
+    "tier": "TIER 2 \u2014 QUALIFIED",
+    "fired": 4,
+    "of": 7,
+    "top_signal": "digital underwriting",
+    "trace": [
+      {
+        "id": "R1",
+        "name": "Category buying-language in SEC filings",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R2",
+        "name": "Competitor product in use (displacement window)",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R3",
+        "name": "Regulated-industry end user",
+        "fired": true,
+        "points": 6,
+        "why": "SEC industry classification: Insurance Agents, Brokers & Service \u2014 a core InRule vertical (insurance / banking / healthcare / government), a genuine end user rather than a software vendor describing its own product.",
+        "source_url": "https://www.sec.gov/Archives/edgar/data/2067129/000206712926000007/0002067129-26-000007-index.htm"
+      },
+      {
+        "id": "R4",
+        "name": "Recent-IPO governance trigger",
+        "fired": true,
+        "points": 8,
+        "why": "Filed 424B4 on 2026-05-14 \u2014 newly public and newly subject to SOX/audit/board scrutiny, the exact moment rule-governance and auditability become board-level obligations."
+      },
+      {
+        "id": "R5",
+        "name": "New decision-maker appointed",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R6",
+        "name": "Live buying-window timing",
+        "fired": true,
+        "points": 4,
+        "why": "2 trigger events in the last 270 days (most recent 53 days ago) \u2014 signals cluster in time, indicating an active buying motion, not stale interest."
+      },
+      {
+        "id": "R7",
+        "name": "Decision-maker identified",
+        "fired": true,
+        "points": 4,
+        "why": "A persona-matched decision-maker is already on file (Trevor Burgess, Chairman & Chief Executive Officer) \u2014 the account is actionable today, no first-touch enrichment needed."
+      }
+    ]
+  },
+  {
+    "name": "Essent Group Ltd.",
+    "total": 20,
+    "tier": "TIER 2 \u2014 QUALIFIED",
+    "fired": 3,
+    "of": 7,
+    "top_signal": "business rules engine",
+    "trace": [
+      {
+        "id": "R1",
+        "name": "Category buying-language in SEC filings",
+        "fired": true,
+        "points": 10,
+        "why": "Uses category language (business rules engine) in its own SEC filings \u2014 actively describing the capability InRule provides.",
+        "source_url": "https://www.sec.gov/Archives/edgar/data/1448893/000162828016011882/0001628280-16-011882-index.htm"
+      },
+      {
+        "id": "R2",
+        "name": "Competitor product in use (displacement window)",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R3",
+        "name": "Regulated-industry end user",
+        "fired": true,
+        "points": 6,
+        "why": "SEC industry classification: Surety Insurance \u2014 a core InRule vertical (insurance / banking / healthcare / government), a genuine end user rather than a software vendor describing its own product."
+      },
+      {
+        "id": "R4",
+        "name": "Recent-IPO governance trigger",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R5",
+        "name": "New decision-maker appointed",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R6",
+        "name": "Live buying-window timing",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R7",
+        "name": "Decision-maker identified",
+        "fired": true,
+        "points": 4,
+        "why": "A persona-matched decision-maker is already on file (David Weinstock, Chief Financial Officer) \u2014 the account is actionable today, no first-touch enrichment needed."
+      }
+    ]
+  },
+  {
+    "name": "Metromile, Inc.",
+    "total": 20,
+    "tier": "TIER 2 \u2014 QUALIFIED",
+    "fired": 3,
+    "of": 7,
+    "top_signal": "claims automation",
+    "trace": [
+      {
+        "id": "R1",
+        "name": "Category buying-language in SEC filings",
+        "fired": true,
+        "points": 10,
+        "why": "Uses category language (claims automation) in its own SEC filings \u2014 actively describing the capability InRule provides.",
+        "source_url": "https://www.sec.gov/Archives/edgar/data/1819035/000121390021019209/0001213900-21-019209-index.htm"
+      },
+      {
+        "id": "R2",
+        "name": "Competitor product in use (displacement window)",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R3",
+        "name": "Regulated-industry end user",
+        "fired": true,
+        "points": 6,
+        "why": "SEC industry classification: Fire, Marine & Casualty Insurance \u2014 a core InRule vertical (insurance / banking / healthcare / government), a genuine end user rather than a software vendor describing its own product."
+      },
+      {
+        "id": "R4",
+        "name": "Recent-IPO governance trigger",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R5",
+        "name": "New decision-maker appointed",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R6",
+        "name": "Live buying-window timing",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R7",
+        "name": "Decision-maker identified",
+        "fired": true,
+        "points": 4,
+        "why": "A persona-matched decision-maker is already on file (Lindsay Alexovich, Chief Accounting Officer) \u2014 the account is actionable today, no first-touch enrichment needed."
+      }
+    ]
+  },
+  {
+    "name": "First American Financial Corp",
+    "total": 20,
+    "tier": "TIER 2 \u2014 QUALIFIED",
+    "fired": 3,
+    "of": 7,
+    "top_signal": "underwriting automation",
+    "trace": [
+      {
+        "id": "R1",
+        "name": "Category buying-language in SEC filings",
+        "fired": true,
+        "points": 10,
+        "why": "Uses category language (underwriting automation) in its own SEC filings \u2014 actively describing the capability InRule provides.",
+        "source_url": "https://www.sec.gov/Archives/edgar/data/1472787/000095017023002816/0000950170-23-002816-index.htm"
+      },
+      {
+        "id": "R2",
+        "name": "Competitor product in use (displacement window)",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R3",
+        "name": "Regulated-industry end user",
+        "fired": true,
+        "points": 6,
+        "why": "SEC industry classification: Title Insurance \u2014 a core InRule vertical (insurance / banking / healthcare / government), a genuine end user rather than a software vendor describing its own product."
+      },
+      {
+        "id": "R4",
+        "name": "Recent-IPO governance trigger",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R5",
+        "name": "New decision-maker appointed",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R6",
+        "name": "Live buying-window timing",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R7",
+        "name": "Decision-maker identified",
+        "fired": true,
+        "points": 4,
+        "why": "A persona-matched decision-maker is already on file (Jody Mulkey, Chief Technology Officer) \u2014 the account is actionable today, no first-touch enrichment needed."
+      }
+    ]
+  },
+  {
+    "name": "Trupanion, Inc.",
+    "total": 20,
+    "tier": "TIER 2 \u2014 QUALIFIED",
+    "fired": 3,
+    "of": 7,
+    "top_signal": "claims automation",
+    "trace": [
+      {
+        "id": "R1",
+        "name": "Category buying-language in SEC filings",
+        "fired": true,
+        "points": 10,
+        "why": "Uses category language (claims automation) in its own SEC filings \u2014 actively describing the capability InRule provides.",
+        "source_url": "https://www.sec.gov/Archives/edgar/data/1371285/000137128522000048/0001371285-22-000048-index.htm"
+      },
+      {
+        "id": "R2",
+        "name": "Competitor product in use (displacement window)",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R3",
+        "name": "Regulated-industry end user",
+        "fired": true,
+        "points": 6,
+        "why": "SEC industry classification: Hospital & Medical Service Plans \u2014 a core InRule vertical (insurance / banking / healthcare / government), a genuine end user rather than a software vendor describing its own product."
+      },
+      {
+        "id": "R4",
+        "name": "Recent-IPO governance trigger",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R5",
+        "name": "New decision-maker appointed",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R6",
+        "name": "Live buying-window timing",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R7",
+        "name": "Decision-maker identified",
+        "fired": true,
+        "points": 4,
+        "why": "A persona-matched decision-maker is already on file (Jamie Adams, Chief Information Officer) \u2014 the account is actionable today, no first-touch enrichment needed."
+      }
+    ]
+  },
+  {
+    "name": "Enact Holdings, Inc.",
+    "total": 20,
+    "tier": "TIER 2 \u2014 QUALIFIED",
+    "fired": 3,
+    "of": 7,
+    "top_signal": "business rules engine",
+    "trace": [
+      {
+        "id": "R1",
+        "name": "Category buying-language in SEC filings",
+        "fired": true,
+        "points": 10,
+        "why": "Uses category language (business rules engine) in its own SEC filings \u2014 actively describing the capability InRule provides.",
+        "source_url": "https://www.sec.gov/Archives/edgar/data/1823529/000182352923000035/0001823529-23-000035-index.htm"
+      },
+      {
+        "id": "R2",
+        "name": "Competitor product in use (displacement window)",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R3",
+        "name": "Regulated-industry end user",
+        "fired": true,
+        "points": 6,
+        "why": "SEC industry classification: Insurance Agents, Brokers & Service \u2014 a core InRule vertical (insurance / banking / healthcare / government), a genuine end user rather than a software vendor describing its own product."
+      },
+      {
+        "id": "R4",
+        "name": "Recent-IPO governance trigger",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R5",
+        "name": "New decision-maker appointed",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R6",
+        "name": "Live buying-window timing",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R7",
+        "name": "Decision-maker identified",
+        "fired": true,
+        "points": 4,
+        "why": "A persona-matched decision-maker is already on file (Neenu Sohi Kainth, Chief Customer Experience Officer & Head of Strategy) \u2014 the account is actionable today, no first-touch enrichment needed."
+      }
+    ]
+  },
+  {
+    "name": "Riverview Financial Corp",
+    "total": 20,
+    "tier": "TIER 2 \u2014 QUALIFIED",
+    "fired": 3,
+    "of": 7,
+    "top_signal": "underwriting automation",
+    "trace": [
+      {
+        "id": "R1",
+        "name": "Category buying-language in SEC filings",
+        "fired": true,
+        "points": 10,
+        "why": "Uses category language (underwriting automation) in its own SEC filings \u2014 actively describing the capability InRule provides.",
+        "source_url": "https://www.sec.gov/Archives/edgar/data/1590799/000119312520166294/0001193125-20-166294-index.htm"
+      },
+      {
+        "id": "R2",
+        "name": "Competitor product in use (displacement window)",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R3",
+        "name": "Regulated-industry end user",
+        "fired": true,
+        "points": 6,
+        "why": "SEC industry classification: National Commercial Banks \u2014 a core InRule vertical (insurance / banking / healthcare / government), a genuine end user rather than a software vendor describing its own product."
+      },
+      {
+        "id": "R4",
+        "name": "Recent-IPO governance trigger",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R5",
+        "name": "New decision-maker appointed",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R6",
+        "name": "Live buying-window timing",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R7",
+        "name": "Decision-maker identified",
+        "fired": true,
+        "points": 4,
+        "why": "A persona-matched decision-maker is already on file (Kirk Fox, Chief Executive Officer) \u2014 the account is actionable today, no first-touch enrichment needed."
+      }
+    ]
+  },
+  {
+    "name": "Ocwen Financial Corp",
+    "total": 20,
+    "tier": "TIER 2 \u2014 QUALIFIED",
+    "fired": 3,
+    "of": 7,
+    "top_signal": "underwriting automation",
+    "trace": [
+      {
+        "id": "R1",
+        "name": "Category buying-language in SEC filings",
+        "fired": true,
+        "points": 10,
+        "why": "Uses category language (underwriting automation) in its own SEC filings \u2014 actively describing the capability InRule provides.",
+        "source_url": "https://www.sec.gov/Archives/edgar/data/873860/000101905613001322/0001019056-13-001322-index.htm"
+      },
+      {
+        "id": "R2",
+        "name": "Competitor product in use (displacement window)",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R3",
+        "name": "Regulated-industry end user",
+        "fired": true,
+        "points": 6,
+        "why": "SEC industry classification: Mortgage Bankers & Loan Correspondents \u2014 a core InRule vertical (insurance / banking / healthcare / government), a genuine end user rather than a software vendor describing its own product."
+      },
+      {
+        "id": "R4",
+        "name": "Recent-IPO governance trigger",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R5",
+        "name": "New decision-maker appointed",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R6",
+        "name": "Live buying-window timing",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R7",
+        "name": "Decision-maker identified",
+        "fired": true,
+        "points": 4,
+        "why": "A persona-matched decision-maker is already on file (Scott Anderson, EVP & Chief Servicing Officer) \u2014 the account is actionable today, no first-touch enrichment needed."
+      }
+    ]
+  },
+  {
+    "name": "Root, Inc.",
+    "total": 20,
+    "tier": "TIER 2 \u2014 QUALIFIED",
+    "fired": 3,
+    "of": 7,
+    "top_signal": "claims automation",
+    "trace": [
+      {
+        "id": "R1",
+        "name": "Category buying-language in SEC filings",
+        "fired": true,
+        "points": 10,
+        "why": "Uses category language (claims automation) in its own SEC filings \u2014 actively describing the capability InRule provides.",
+        "source_url": "https://www.sec.gov/Archives/edgar/data/1788882/000178888221000008/0001788882-21-000008-index.htm"
+      },
+      {
+        "id": "R2",
+        "name": "Competitor product in use (displacement window)",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R3",
+        "name": "Regulated-industry end user",
+        "fired": true,
+        "points": 6,
+        "why": "SEC industry classification: Fire, Marine & Casualty Insurance \u2014 a core InRule vertical (insurance / banking / healthcare / government), a genuine end user rather than a software vendor describing its own product."
+      },
+      {
+        "id": "R4",
+        "name": "Recent-IPO governance trigger",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R5",
+        "name": "New decision-maker appointed",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R6",
+        "name": "Live buying-window timing",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R7",
+        "name": "Decision-maker identified",
+        "fired": true,
+        "points": 4,
+        "why": "A persona-matched decision-maker is already on file (Matt Bonakdarpour, President & Chief Technology Officer) \u2014 the account is actionable today, no first-touch enrichment needed."
+      }
+    ]
+  },
+  {
+    "name": "PENNYMAC",
+    "total": 18,
+    "tier": "TIER 2 \u2014 QUALIFIED",
+    "fired": 2,
+    "of": 7,
+    "top_signal": "hiring for Drools",
+    "trace": [
+      {
+        "id": "R1",
+        "name": "Category buying-language in SEC filings",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R2",
+        "name": "Competitor product in use (displacement window)",
+        "fired": true,
+        "points": 12,
+        "why": "Names a competitor decisioning product (Drools (actively hiring for it)) \u2014 category budget already exists; this is a rip-and-replace opportunity, not a cold category-education sale."
+      },
+      {
+        "id": "R3",
+        "name": "Regulated-industry end user",
+        "fired": true,
+        "points": 6,
+        "why": "Confirmed end-user via displacement detection (sourced from a live job posting; staffing/consulting firms filtered out) \u2014 a core InRule vertical (insurance / banking / healthcare / government), a genuine end user rather than a software vendor describing its own product."
+      },
+      {
+        "id": "R4",
+        "name": "Recent-IPO governance trigger",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R5",
+        "name": "New decision-maker appointed",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R6",
+        "name": "Live buying-window timing",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R7",
+        "name": "Decision-maker identified",
+        "fired": false,
+        "points": 0
+      }
+    ]
+  },
+  {
+    "name": "Mercury Insurance",
+    "total": 18,
+    "tier": "TIER 2 \u2014 QUALIFIED",
+    "fired": 2,
+    "of": 7,
+    "top_signal": "hiring for Drools",
+    "trace": [
+      {
+        "id": "R1",
+        "name": "Category buying-language in SEC filings",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R2",
+        "name": "Competitor product in use (displacement window)",
+        "fired": true,
+        "points": 12,
+        "why": "Names a competitor decisioning product (Drools (actively hiring for it)) \u2014 category budget already exists; this is a rip-and-replace opportunity, not a cold category-education sale."
+      },
+      {
+        "id": "R3",
+        "name": "Regulated-industry end user",
+        "fired": true,
+        "points": 6,
+        "why": "Confirmed end-user via displacement detection (sourced from a live job posting; staffing/consulting firms filtered out) \u2014 a core InRule vertical (insurance / banking / healthcare / government), a genuine end user rather than a software vendor describing its own product."
+      },
+      {
+        "id": "R4",
+        "name": "Recent-IPO governance trigger",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R5",
+        "name": "New decision-maker appointed",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R6",
+        "name": "Live buying-window timing",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R7",
+        "name": "Decision-maker identified",
+        "fired": false,
+        "points": 0
+      }
+    ]
+  },
+  {
+    "name": "Financial Industries Corp",
+    "total": 16,
+    "tier": "TIER 2 \u2014 QUALIFIED",
+    "fired": 2,
+    "of": 7,
+    "top_signal": "underwriting automation",
+    "trace": [
+      {
+        "id": "R1",
+        "name": "Category buying-language in SEC filings",
+        "fired": true,
+        "points": 10,
+        "why": "Uses category language (underwriting automation) in its own SEC filings \u2014 actively describing the capability InRule provides.",
+        "source_url": "https://www.sec.gov/Archives/edgar/data/35733/000003573303000033/0000035733-03-000033-index.htm"
+      },
+      {
+        "id": "R2",
+        "name": "Competitor product in use (displacement window)",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R3",
+        "name": "Regulated-industry end user",
+        "fired": true,
+        "points": 6,
+        "why": "SEC industry classification: Life Insurance \u2014 a core InRule vertical (insurance / banking / healthcare / government), a genuine end user rather than a software vendor describing its own product."
+      },
+      {
+        "id": "R4",
+        "name": "Recent-IPO governance trigger",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R5",
+        "name": "New decision-maker appointed",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R6",
+        "name": "Live buying-window timing",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R7",
+        "name": "Decision-maker identified",
+        "fired": false,
+        "points": 0
+      }
+    ]
+  },
+  {
+    "name": "Ohio Casualty Corp",
+    "total": 16,
+    "tier": "TIER 2 \u2014 QUALIFIED",
+    "fired": 2,
+    "of": 7,
+    "top_signal": "underwriting automation",
+    "trace": [
+      {
+        "id": "R1",
+        "name": "Category buying-language in SEC filings",
+        "fired": true,
+        "points": 10,
+        "why": "Uses category language (underwriting automation) in its own SEC filings \u2014 actively describing the capability InRule provides.",
+        "source_url": "https://www.sec.gov/Archives/edgar/data/73952/000095015203008203/0000950152-03-008203-index.htm"
+      },
+      {
+        "id": "R2",
+        "name": "Competitor product in use (displacement window)",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R3",
+        "name": "Regulated-industry end user",
+        "fired": true,
+        "points": 6,
+        "why": "SEC industry classification: Fire, Marine & Casualty Insurance \u2014 a core InRule vertical (insurance / banking / healthcare / government), a genuine end user rather than a software vendor describing its own product."
+      },
+      {
+        "id": "R4",
+        "name": "Recent-IPO governance trigger",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R5",
+        "name": "New decision-maker appointed",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R6",
+        "name": "Live buying-window timing",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R7",
+        "name": "Decision-maker identified",
+        "fired": false,
+        "points": 0
+      }
+    ]
+  },
+  {
+    "name": "Unum Group (UNM, UNMA)",
+    "total": 16,
+    "tier": "TIER 2 \u2014 QUALIFIED",
+    "fired": 2,
+    "of": 7,
+    "top_signal": "claims automation",
+    "trace": [
+      {
+        "id": "R1",
+        "name": "Category buying-language in SEC filings",
+        "fired": true,
+        "points": 10,
+        "why": "Uses category language (claims automation) in its own SEC filings \u2014 actively describing the capability InRule provides.",
+        "source_url": "https://www.sec.gov/Archives/edgar/data/5513/000000551319000138/0000005513-19-000138-index.htm"
+      },
+      {
+        "id": "R2",
+        "name": "Competitor product in use (displacement window)",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R3",
+        "name": "Regulated-industry end user",
+        "fired": true,
+        "points": 6,
+        "why": "SEC industry classification: Accident & Health Insurance \u2014 a core InRule vertical (insurance / banking / healthcare / government), a genuine end user rather than a software vendor describing its own product."
+      },
+      {
+        "id": "R4",
+        "name": "Recent-IPO governance trigger",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R5",
+        "name": "New decision-maker appointed",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R6",
+        "name": "Live buying-window timing",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R7",
+        "name": "Decision-maker identified",
+        "fired": false,
+        "points": 0
+      }
+    ]
+  },
+  {
+    "name": "Sierra Health Services Inc",
+    "total": 16,
+    "tier": "TIER 2 \u2014 QUALIFIED",
+    "fired": 2,
+    "of": 7,
+    "top_signal": "business rules engine",
+    "trace": [
+      {
+        "id": "R1",
+        "name": "Category buying-language in SEC filings",
+        "fired": true,
+        "points": 10,
+        "why": "Uses category language (business rules engine) in its own SEC filings \u2014 actively describing the capability InRule provides."
+      },
+      {
+        "id": "R2",
+        "name": "Competitor product in use (displacement window)",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R3",
+        "name": "Regulated-industry end user",
+        "fired": true,
+        "points": 6,
+        "why": "SEC industry classification: Hospital & Medical Service Plans \u2014 a core InRule vertical (insurance / banking / healthcare / government), a genuine end user rather than a software vendor describing its own product."
+      },
+      {
+        "id": "R4",
+        "name": "Recent-IPO governance trigger",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R5",
+        "name": "New decision-maker appointed",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R6",
+        "name": "Live buying-window timing",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R7",
+        "name": "Decision-maker identified",
+        "fired": false,
+        "points": 0
+      }
+    ]
+  },
+  {
+    "name": "Mercury General Corp",
+    "total": 16,
+    "tier": "TIER 2 \u2014 QUALIFIED",
+    "fired": 2,
+    "of": 7,
+    "top_signal": "business rules engine",
+    "trace": [
+      {
+        "id": "R1",
+        "name": "Category buying-language in SEC filings",
+        "fired": true,
+        "points": 10,
+        "why": "Uses category language (business rules engine) in its own SEC filings \u2014 actively describing the capability InRule provides."
+      },
+      {
+        "id": "R2",
+        "name": "Competitor product in use (displacement window)",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R3",
+        "name": "Regulated-industry end user",
+        "fired": true,
+        "points": 6,
+        "why": "SEC industry classification: Fire, Marine & Casualty Insurance \u2014 a core InRule vertical (insurance / banking / healthcare / government), a genuine end user rather than a software vendor describing its own product."
+      },
+      {
+        "id": "R4",
+        "name": "Recent-IPO governance trigger",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R5",
+        "name": "New decision-maker appointed",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R6",
+        "name": "Live buying-window timing",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R7",
+        "name": "Decision-maker identified",
+        "fired": false,
+        "points": 0
+      }
+    ]
+  },
+  {
+    "name": "Genworth Financial Inc",
+    "total": 10,
+    "tier": "TIER 3 \u2014 NURTURE",
+    "fired": 2,
+    "of": 7,
+    "top_signal": "digital underwriting",
+    "trace": [
+      {
+        "id": "R1",
+        "name": "Category buying-language in SEC filings",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R2",
+        "name": "Competitor product in use (displacement window)",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R3",
+        "name": "Regulated-industry end user",
+        "fired": true,
+        "points": 6,
+        "why": "SEC industry classification: Life Insurance \u2014 a core InRule vertical (insurance / banking / healthcare / government), a genuine end user rather than a software vendor describing its own product.",
+        "source_url": "https://www.sec.gov/Archives/edgar/data/1276520/000119312507042851/0001193125-07-042851-index.htm"
+      },
+      {
+        "id": "R4",
+        "name": "Recent-IPO governance trigger",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R5",
+        "name": "New decision-maker appointed",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R6",
+        "name": "Live buying-window timing",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R7",
+        "name": "Decision-maker identified",
+        "fired": true,
+        "points": 4,
+        "why": "A persona-matched decision-maker is already on file (Morris Taylor, Chief Information Officer) \u2014 the account is actionable today, no first-touch enrichment needed."
+      }
+    ]
+  },
+  {
+    "name": "Ge Financial Assurances Holdings Inc",
+    "total": 6,
+    "tier": "TIER 4 \u2014 MONITOR",
+    "fired": 1,
+    "of": 7,
+    "top_signal": "digital underwriting",
+    "trace": [
+      {
+        "id": "R1",
+        "name": "Category buying-language in SEC filings",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R2",
+        "name": "Competitor product in use (displacement window)",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R3",
+        "name": "Regulated-industry end user",
+        "fired": true,
+        "points": 6,
+        "why": "SEC industry classification: Life Insurance \u2014 a core InRule vertical (insurance / banking / healthcare / government), a genuine end user rather than a software vendor describing its own product."
+      },
+      {
+        "id": "R4",
+        "name": "Recent-IPO governance trigger",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R5",
+        "name": "New decision-maker appointed",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R6",
+        "name": "Live buying-window timing",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R7",
+        "name": "Decision-maker identified",
+        "fired": false,
+        "points": 0
+      }
+    ]
+  },
+  {
+    "name": "United Insurance Holdings Corp.",
+    "total": 6,
+    "tier": "TIER 4 \u2014 MONITOR",
+    "fired": 1,
+    "of": 7,
+    "top_signal": "underwriting automation",
+    "trace": [
+      {
+        "id": "R1",
+        "name": "Category buying-language in SEC filings",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R2",
+        "name": "Competitor product in use (displacement window)",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R3",
+        "name": "Regulated-industry end user",
+        "fired": true,
+        "points": 6,
+        "why": "SEC industry classification: Fire, Marine & Casualty Insurance \u2014 a core InRule vertical (insurance / banking / healthcare / government), a genuine end user rather than a software vendor describing its own product."
+      },
+      {
+        "id": "R4",
+        "name": "Recent-IPO governance trigger",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R5",
+        "name": "New decision-maker appointed",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R6",
+        "name": "Live buying-window timing",
+        "fired": false,
+        "points": 0
+      },
+      {
+        "id": "R7",
+        "name": "Decision-maker identified",
+        "fired": false,
+        "points": 0
+      }
+    ]
+  }
+]
