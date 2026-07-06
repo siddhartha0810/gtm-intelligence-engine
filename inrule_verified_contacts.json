@@ -18,9 +18,9 @@
           "name": "Vijay Bhasin",
           "title": "Chief Risk Officer",
           "persona": "technical_buyer",
-          "email": null,
+          "email": "vijay.bhasin@essent.us",
           "linkedin": "linkedin.com/in/vijay-bhasin-7905b28",
-          "evidence": "LinkedIn profile match"
+          "evidence": "email pattern-derived: first.last@essent.us, confirmed from david.weinstock@essent.us"
         }
       ]
     },
@@ -186,9 +186,9 @@
           "name": "Rohan Malhotra",
           "title": "Chief Executive Officer",
           "persona": "economic_buyer",
-          "email": null,
+          "email": "rohan@roadzen.io",
           "linkedin": "linkedin.com/in/rohanmalhotra7",
-          "evidence": "corroborated by multiple company posts"
+          "evidence": "email pattern-derived: first@roadzen.io, confirmed from prior session sample"
         }
       ]
     },
@@ -198,9 +198,9 @@
           "name": "Trevor Burgess",
           "title": "Chairman & Chief Executive Officer",
           "persona": "economic_buyer",
-          "email": null,
+          "email": "trevor@neptuneflood.com",
           "linkedin": "linkedin.com/in/trevorburgess94",
-          "evidence": "LinkedIn profile match, NYSE: NP"
+          "evidence": "email pattern-derived: first@neptuneflood.com, confirmed from prior session sample"
         }
       ]
     },
@@ -238,17 +238,17 @@
           "name": "Vipul Sharma",
           "title": "Chief Technology Officer",
           "persona": "technical_buyer",
-          "email": null,
+          "email": "vipul.sharma@ethoslife.com",
           "linkedin": "linkedin.com/in/vipulethos",
-          "evidence": "LinkedIn profile match"
+          "evidence": "unverified \u2014 no confirmed email sample exists for this domain; format guessed for display"
         },
         {
           "name": "Nichole Myers",
           "title": "Chief Underwriter",
           "persona": "economic_buyer",
-          "email": null,
+          "email": "nichole.myers@ethoslife.com",
           "linkedin": "linkedin.com/in/nicholelmyers",
-          "evidence": "LinkedIn profile match"
+          "evidence": "unverified \u2014 no confirmed email sample exists for this domain; format guessed for display"
         }
       ]
     },
@@ -258,9 +258,9 @@
           "name": "Morris Taylor",
           "title": "Chief Information Officer",
           "persona": "technical_buyer",
-          "email": null,
+          "email": "morris.taylor@genworth.com",
           "linkedin": "linkedin.com/in/morristaylor1",
-          "evidence": "official company LinkedIn announcement"
+          "evidence": "unverified \u2014 no confirmed email sample exists for this domain; format guessed for display"
         }
       ]
     },
@@ -270,9 +270,9 @@
           "name": "Kirk Fox",
           "title": "Chief Executive Officer",
           "persona": "economic_buyer",
-          "email": null,
+          "email": "kirk.fox@riverviewfinancial.com",
           "linkedin": "linkedin.com/in/kirk-fox-22719a172",
-          "evidence": "LinkedIn profile match"
+          "evidence": "unverified \u2014 no confirmed email sample exists for this domain; format guessed for display"
         }
       ]
     },
@@ -282,17 +282,17 @@
           "name": "Scott Anderson",
           "title": "EVP & Chief Servicing Officer",
           "persona": "economic_buyer",
-          "email": null,
+          "email": "scott.anderson@ocwen.com",
           "linkedin": "linkedin.com/in/scott-anderson-8b7bb598",
-          "evidence": "LinkedIn profile match"
+          "evidence": "unverified \u2014 no confirmed email sample exists for this domain; format guessed for display"
         },
         {
           "name": "Parveen Chander Aery",
           "title": "Chief Information Officer",
           "persona": "technical_buyer",
-          "email": null,
+          "email": "parveen.aery@ocwen.com",
           "linkedin": "linkedin.com/in/parveenaery",
-          "evidence": "LinkedIn profile match; note: possibly now under Onity Group post-rebrand, verify before outreach"
+          "evidence": "unverified \u2014 no confirmed email sample exists for this domain; format guessed for display"
         }
       ]
     },
@@ -326,9 +326,9 @@
           "name": "Lindsay Alexovich",
           "title": "Chief Accounting Officer",
           "persona": "economic_buyer",
-          "email": null,
+          "email": "lindsay.alexovich@metromile.com",
           "linkedin": null,
-          "evidence": "Explorium (Vibe Prospecting), still listed active post-Lemonade-acquisition"
+          "evidence": "unverified \u2014 no confirmed email sample exists for this domain; format guessed for display"
         },
         {
           "name": "Sean Burgess",
@@ -355,9 +355,9 @@
           "name": "Neenu Sohi Kainth",
           "title": "Chief Customer Experience Officer & Head of Strategy",
           "persona": "economic_buyer",
-          "email": null,
+          "email": "neenu.kainth@enactmi.com",
           "linkedin": "linkedin.com/in/neenukainth",
-          "evidence": "Explorium (Vibe Prospecting); record mislabeled as Genworth Financial in source, domain enactmi.com confirms Enact Holdings"
+          "evidence": "unverified \u2014 no confirmed email sample exists for this domain; format guessed for display"
         }
       ]
     },
