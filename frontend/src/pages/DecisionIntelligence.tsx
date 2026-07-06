@@ -166,7 +166,8 @@ function ContactCard({ c }: { c: Contact }) {
       </div>
       {c.evidence
         && !c.evidence.startsWith('email pattern-derived')
-        && !c.evidence.toLowerCase().startsWith('confirmed email (leadiq') && (
+        && !c.evidence.toLowerCase().startsWith('confirmed email (leadiq')
+        && !c.evidence.toLowerCase().startsWith('unverified') && (
         <p style={{ margin: '8px 0 0 28px', fontSize: 11.5, color: C.textFaint, fontStyle: 'italic' }}>
           {c.evidence}</p>
       )}
