@@ -36,7 +36,7 @@
     "company": "Roadzen Inc. (RDZN, RDZNW)"
   },
   {
-    "to": "",
+    "to": "tjohnson@healthintech.com",
     "to_name": "Tim Johnson",
     "subject": "underwriting automation at Health In Tech",
     "body": "Tim \u2014 I saw Health In Tech referenced \"underwriting automation\", so this is likely already on your radar. The pattern we see: rule logic locked in code means every change is a dev cycle, not a business decision \u2014 and the audit trail is only as good as engineering's change log. InRule flips that \u2014 the business owns the rule, fully audit-logged, no engineering bottleneck. Worth 15 minutes?",
@@ -45,7 +45,7 @@
     "company": "Health In Tech, Inc."
   },
   {
-    "to": "",
+    "to": "tjohnson@healthintech.com",
     "to_name": "Tim Johnson",
     "subject": "Re: underwriting automation at Health In Tech",
     "body": "Tim \u2014 following up in case this got buried. Given Health In Tech's recent signal (\"underwriting automation\"), the timing seemed right to compare notes on how rule changes get made today vs. business-owned and audited. Open to a quick call this week?",
@@ -54,7 +54,7 @@
     "company": "Health In Tech, Inc."
   },
   {
-    "to": "",
+    "to": "tjohnson@healthintech.com",
     "to_name": "Tim Johnson",
     "subject": "The audit angle on Health In Tech's rule logic",
     "body": "Tim \u2014 one more angle worth raising: rule logic locked in code means every change is a dev cycle, not a business decision \u2014 and the audit trail is only as good as engineering's change log. For a team in Health In Tech's position, that's not just a dev-velocity problem, it's an audit exposure. InRule makes every rule change traceable to the business user who made it. Happy to show you the trace.",
@@ -63,7 +63,7 @@
     "company": "Health In Tech, Inc."
   },
   {
-    "to": "",
+    "to": "tjohnson@healthintech.com",
     "to_name": "Tim Johnson",
     "subject": "Should I close this out?",
     "body": "Tim \u2014 I'll stop following up after this one. If rule governance at Health In Tech isn't a priority right now, no worries \u2014 feel free to reach out whenever it is. If it is, I'm one reply away.",
@@ -72,73 +72,109 @@
     "company": "Health In Tech, Inc."
   },
   {
-    "to": "",
-    "to_name": "Bob Spina",
+    "to": "zhasan@healthintech.com",
+    "to_name": "Zain Hasan",
+    "subject": "underwriting automation at Health In Tech",
+    "body": "Zain \u2014 I saw Health In Tech referenced \"underwriting automation\", so this is likely already on your radar. The pattern we see: rule logic locked in code means every change is a dev cycle, not a business decision \u2014 and the audit trail is only as good as engineering's change log. InRule flips that \u2014 the business owns the rule, fully audit-logged, no engineering bottleneck. Worth 15 minutes?",
+    "touch": "signal_open",
+    "send_on": "Day 1",
+    "company": "Health In Tech, Inc."
+  },
+  {
+    "to": "zhasan@healthintech.com",
+    "to_name": "Zain Hasan",
+    "subject": "Re: underwriting automation at Health In Tech",
+    "body": "Zain \u2014 following up in case this got buried. Given Health In Tech's recent signal (\"underwriting automation\"), the timing seemed right to compare notes on how rule changes get made today vs. business-owned and audited. Open to a quick call this week?",
+    "touch": "bump",
+    "send_on": "Day 5",
+    "company": "Health In Tech, Inc."
+  },
+  {
+    "to": "zhasan@healthintech.com",
+    "to_name": "Zain Hasan",
+    "subject": "The audit angle on Health In Tech's rule logic",
+    "body": "Zain \u2014 one more angle worth raising: rule logic locked in code means every change is a dev cycle, not a business decision \u2014 and the audit trail is only as good as engineering's change log. For a team in Health In Tech's position, that's not just a dev-velocity problem, it's an audit exposure. InRule makes every rule change traceable to the business user who made it. Happy to show you the trace.",
+    "touch": "compliance_angle",
+    "send_on": "Day 9",
+    "company": "Health In Tech, Inc."
+  },
+  {
+    "to": "zhasan@healthintech.com",
+    "to_name": "Zain Hasan",
+    "subject": "Should I close this out?",
+    "body": "Zain \u2014 I'll stop following up after this one. If rule governance at Health In Tech isn't a priority right now, no worries \u2014 feel free to reach out whenever it is. If it is, I'm one reply away.",
+    "touch": "breakup",
+    "send_on": "Day 14",
+    "company": "Health In Tech, Inc."
+  },
+  {
+    "to": "ssills@bowheadspecialty.com",
+    "to_name": "Stephen Sills",
     "subject": "digital underwriting at Bowhead Specialty Holdings Inc",
-    "body": "Bob \u2014 I saw Bowhead Specialty Holdings Inc referenced \"digital underwriting\", so this is likely already on your radar. The pattern we see: rule logic locked in code means every change is a dev cycle, not a business decision \u2014 and the audit trail is only as good as engineering's change log. InRule flips that \u2014 the business owns the rule, fully audit-logged, no engineering bottleneck. Worth 15 minutes?",
+    "body": "Stephen \u2014 I saw Bowhead Specialty Holdings Inc referenced \"digital underwriting\", so this is likely already on your radar. The pattern we see: rule logic locked in code means every change is a dev cycle, not a business decision \u2014 and the audit trail is only as good as engineering's change log. InRule flips that \u2014 the business owns the rule, fully audit-logged, no engineering bottleneck. Worth 15 minutes?",
     "touch": "signal_open",
     "send_on": "Day 1",
     "company": "Bowhead Specialty Holdings Inc."
   },
   {
-    "to": "",
-    "to_name": "Bob Spina",
+    "to": "ssills@bowheadspecialty.com",
+    "to_name": "Stephen Sills",
     "subject": "Re: digital underwriting at Bowhead Specialty Holdings Inc",
-    "body": "Bob \u2014 following up in case this got buried. Given Bowhead Specialty Holdings Inc's recent signal (\"digital underwriting\"), the timing seemed right to compare notes on how rule changes get made today vs. business-owned and audited. Open to a quick call this week?",
+    "body": "Stephen \u2014 following up in case this got buried. Given Bowhead Specialty Holdings Inc's recent signal (\"digital underwriting\"), the timing seemed right to compare notes on how rule changes get made today vs. business-owned and audited. Open to a quick call this week?",
     "touch": "bump",
     "send_on": "Day 5",
     "company": "Bowhead Specialty Holdings Inc."
   },
   {
-    "to": "",
-    "to_name": "Bob Spina",
+    "to": "ssills@bowheadspecialty.com",
+    "to_name": "Stephen Sills",
     "subject": "The audit angle on Bowhead Specialty Holdings Inc's rule logic",
-    "body": "Bob \u2014 one more angle worth raising: rule logic locked in code means every change is a dev cycle, not a business decision \u2014 and the audit trail is only as good as engineering's change log. For a team in Bowhead Specialty Holdings Inc's position, that's not just a dev-velocity problem, it's an audit exposure. InRule makes every rule change traceable to the business user who made it. Happy to show you the trace.",
+    "body": "Stephen \u2014 one more angle worth raising: rule logic locked in code means every change is a dev cycle, not a business decision \u2014 and the audit trail is only as good as engineering's change log. For a team in Bowhead Specialty Holdings Inc's position, that's not just a dev-velocity problem, it's an audit exposure. InRule makes every rule change traceable to the business user who made it. Happy to show you the trace.",
     "touch": "compliance_angle",
     "send_on": "Day 9",
     "company": "Bowhead Specialty Holdings Inc."
   },
   {
-    "to": "",
-    "to_name": "Bob Spina",
+    "to": "ssills@bowheadspecialty.com",
+    "to_name": "Stephen Sills",
     "subject": "Should I close this out?",
-    "body": "Bob \u2014 I'll stop following up after this one. If rule governance at Bowhead Specialty Holdings Inc isn't a priority right now, no worries \u2014 feel free to reach out whenever it is. If it is, I'm one reply away.",
+    "body": "Stephen \u2014 I'll stop following up after this one. If rule governance at Bowhead Specialty Holdings Inc isn't a priority right now, no worries \u2014 feel free to reach out whenever it is. If it is, I'm one reply away.",
     "touch": "breakup",
     "send_on": "Day 14",
     "company": "Bowhead Specialty Holdings Inc."
   },
   {
-    "to": "",
-    "to_name": "David Newman",
+    "to": "sfeltner@bowheadspecialty.com",
+    "to_name": "Steven Feltner",
     "subject": "digital underwriting at Bowhead Specialty Holdings Inc",
-    "body": "David \u2014 I saw Bowhead Specialty Holdings Inc referenced \"digital underwriting\", so this is likely already on your radar. The pattern we see: claims/underwriting rules live in code, so every policy or workflow change waits on engineering instead of the team that actually owns the decision. InRule flips that \u2014 the business owns the rule, fully audit-logged, no engineering bottleneck. Worth 15 minutes?",
+    "body": "Steven \u2014 I saw Bowhead Specialty Holdings Inc referenced \"digital underwriting\", so this is likely already on your radar. The pattern we see: rule logic locked in code means every change is a dev cycle, not a business decision \u2014 and the audit trail is only as good as engineering's change log. InRule flips that \u2014 the business owns the rule, fully audit-logged, no engineering bottleneck. Worth 15 minutes?",
     "touch": "signal_open",
     "send_on": "Day 1",
     "company": "Bowhead Specialty Holdings Inc."
   },
   {
-    "to": "",
-    "to_name": "David Newman",
+    "to": "sfeltner@bowheadspecialty.com",
+    "to_name": "Steven Feltner",
     "subject": "Re: digital underwriting at Bowhead Specialty Holdings Inc",
-    "body": "David \u2014 following up in case this got buried. Given Bowhead Specialty Holdings Inc's recent signal (\"digital underwriting\"), the timing seemed right to compare notes on how rule changes get made today vs. business-owned and audited. Open to a quick call this week?",
+    "body": "Steven \u2014 following up in case this got buried. Given Bowhead Specialty Holdings Inc's recent signal (\"digital underwriting\"), the timing seemed right to compare notes on how rule changes get made today vs. business-owned and audited. Open to a quick call this week?",
     "touch": "bump",
     "send_on": "Day 5",
     "company": "Bowhead Specialty Holdings Inc."
   },
   {
-    "to": "",
-    "to_name": "David Newman",
+    "to": "sfeltner@bowheadspecialty.com",
+    "to_name": "Steven Feltner",
     "subject": "The audit angle on Bowhead Specialty Holdings Inc's rule logic",
-    "body": "David \u2014 one more angle worth raising: claims/underwriting rules live in code, so every policy or workflow change waits on engineering instead of the team that actually owns the decision. For a team in Bowhead Specialty Holdings Inc's position, that's not just a dev-velocity problem, it's an audit exposure. InRule makes every rule change traceable to the business user who made it. Happy to show you the trace.",
+    "body": "Steven \u2014 one more angle worth raising: rule logic locked in code means every change is a dev cycle, not a business decision \u2014 and the audit trail is only as good as engineering's change log. For a team in Bowhead Specialty Holdings Inc's position, that's not just a dev-velocity problem, it's an audit exposure. InRule makes every rule change traceable to the business user who made it. Happy to show you the trace.",
     "touch": "compliance_angle",
     "send_on": "Day 9",
     "company": "Bowhead Specialty Holdings Inc."
   },
   {
-    "to": "",
-    "to_name": "David Newman",
+    "to": "sfeltner@bowheadspecialty.com",
+    "to_name": "Steven Feltner",
     "subject": "Should I close this out?",
-    "body": "David \u2014 I'll stop following up after this one. If rule governance at Bowhead Specialty Holdings Inc isn't a priority right now, no worries \u2014 feel free to reach out whenever it is. If it is, I'm one reply away.",
+    "body": "Steven \u2014 I'll stop following up after this one. If rule governance at Bowhead Specialty Holdings Inc isn't a priority right now, no worries \u2014 feel free to reach out whenever it is. If it is, I'm one reply away.",
     "touch": "breakup",
     "send_on": "Day 14",
     "company": "Bowhead Specialty Holdings Inc."

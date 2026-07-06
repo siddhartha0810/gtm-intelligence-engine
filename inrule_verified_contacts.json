@@ -27,36 +27,92 @@
     "Bowhead Specialty Holdings Inc.": {
       "contacts": [
         {
+          "name": "Stephen Sills",
+          "title": "Chief Executive Officer",
+          "persona": "economic_buyer",
+          "email": "ssills@bowheadspecialty.com",
+          "linkedin": null,
+          "evidence": "confirmed email (provided)"
+        },
+        {
+          "name": "Steven Feltner",
+          "title": "Chief Operating Officer",
+          "persona": "economic_buyer",
+          "email": "sfeltner@bowheadspecialty.com",
+          "linkedin": null,
+          "evidence": "confirmed email (provided)"
+        },
+        {
+          "name": "Chris Bradley",
+          "title": "Chief Risk Officer",
+          "persona": "economic_buyer",
+          "email": "cbradley@bowheadspecialty.com",
+          "linkedin": null,
+          "evidence": "email pattern-derived: {first-initial}{last}@bowheadspecialty.com, confirmed from ssills@/sfeltner@"
+        },
+        {
+          "name": "Brad Mulcahey",
+          "title": "Chief Financial Officer",
+          "persona": "economic_buyer",
+          "email": "bmulcahey@bowheadspecialty.com",
+          "linkedin": null,
+          "evidence": "email pattern-derived: {first-initial}{last}@bowheadspecialty.com, confirmed from ssills@/sfeltner@"
+        },
+        {
+          "name": "Shirley Yap",
+          "title": "Chief Accounting Officer & Head of Investor Relations",
+          "persona": "economic_buyer",
+          "email": "syap@bowheadspecialty.com",
+          "linkedin": null,
+          "evidence": "email pattern-derived: {first-initial}{last}@bowheadspecialty.com, confirmed from ssills@/sfeltner@"
+        },
+        {
+          "name": "Brandon Mezick",
+          "title": "Head of Digital Underwriting",
+          "persona": "technical_buyer",
+          "email": "bmezick@bowheadspecialty.com",
+          "linkedin": null,
+          "evidence": "email pattern-derived: {first-initial}{last}@bowheadspecialty.com, confirmed from ssills@/sfeltner@"
+        },
+        {
+          "name": "Jared Rosenberg",
+          "title": "Head of Internal Audit",
+          "persona": "compliance_buyer",
+          "email": "jrosenberg@bowheadspecialty.com",
+          "linkedin": null,
+          "evidence": "email pattern-derived: {first-initial}{last}@bowheadspecialty.com, confirmed from ssills@/sfeltner@"
+        },
+        {
           "name": "Bob Spina",
           "title": "Chief Information Officer",
           "persona": "technical_buyer",
-          "email": null,
+          "email": "bspina@bowheadspecialty.com",
           "linkedin": null,
-          "evidence": "bowheadspecialty.com/team, evidence-gate verified + Apollo cross-check"
+          "evidence": "email pattern-derived: {first-initial}{last}@bowheadspecialty.com, confirmed from ssills@/sfeltner@"
         },
         {
           "name": "David Newman",
           "title": "Chief Underwriting Officer",
           "persona": "economic_buyer",
-          "email": null,
+          "email": "dnewman@bowheadspecialty.com",
           "linkedin": null,
-          "evidence": "bowheadspecialty.com/team, evidence-gate verified + Apollo cross-check"
+          "evidence": "email pattern-derived: {first-initial}{last}@bowheadspecialty.com, confirmed from ssills@/sfeltner@"
         },
         {
           "name": "David Brandeis",
           "title": "Head of Technology for Digital Underwriting",
           "persona": "technical_buyer",
-          "email": null,
+          "email": "dbrandeis@bowheadspecialty.com",
           "linkedin": "linkedin.com/in/david-brandeis-22610b1",
-          "evidence": "manually confirmed by user via LinkedIn profile screenshot"
+          "evidence": "email pattern-derived: {first-initial}{last}@bowheadspecialty.com, confirmed from ssills@/sfeltner@"
         },
         {
           "name": "H. Matthew Crusey",
           "title": "General Counsel",
           "persona": "compliance_buyer",
-          "email": null,
+          "email": "hcrusey@bowheadspecialty.com",
           "linkedin": null,
-          "evidence": "quadruple-confirmed: company team page + Explorium (Vibe Prospecting)"
+          "evidence": "email pattern-derived: {first-initial}{last}@bowheadspecialty.com, confirmed from ssills@/sfeltner@"
         }
       ]
     },
@@ -102,9 +158,25 @@
           "name": "Tim Johnson",
           "title": "Chief Executive Officer",
           "persona": "economic_buyer",
-          "email": null,
+          "email": "tjohnson@healthintech.com",
           "linkedin": null,
-          "evidence": "company's own official LinkedIn page"
+          "evidence": "email pattern-derived: {first-initial}{last}@healthintech.com, confirmed from zhasan@healthintech.com"
+        },
+        {
+          "name": "Zain Hasan",
+          "title": "Chief Growth Officer",
+          "persona": "economic_buyer",
+          "email": "zhasan@healthintech.com",
+          "linkedin": null,
+          "evidence": "confirmed email (LeadIQ, verified)"
+        },
+        {
+          "name": "Sri Rajagopalan",
+          "title": "Chief Technology Officer",
+          "persona": "technical_buyer",
+          "email": "srajagopalan@healthintech.com",
+          "linkedin": null,
+          "evidence": "email pattern-derived: {first-initial}{last}@healthintech.com, confirmed from zhasan@healthintech.com"
         }
       ]
     },
