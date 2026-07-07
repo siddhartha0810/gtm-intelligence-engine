@@ -1250,6 +1250,9 @@ def upsert_company_email_formats(rows: list) -> int:
 
 
 def search_company_email_formats(query: str, limit: int = 20) -> list:
+    # contacts_280k = 0 means a stray validated-email match with no real
+    # corpus presence — noise, not a company. See the Postgres version's
+    # docstring in database.py for the concrete example.
     q = f"%{(query or '').strip().lower()}%"
     if not q.strip("%"):
         return []
@@ -1260,6 +1263,7 @@ def search_company_email_formats(query: str, limit: int = 20) -> list:
                    is_predictable
             FROM company_email_formats
             WHERE format_rank = 1
+              AND contacts_280k > 0
               AND (LOWER(company_name) LIKE ? OR LOWER(domain) LIKE ?)
             ORDER BY contacts_280k DESC, validated_emails DESC
             LIMIT ?
@@ -1281,16 +1285,18 @@ def get_company_email_formats(domain: str) -> list:
 
 
 def company_email_formats_stats() -> dict:
+    # Scoped to evidence-backed domains (contacts_280k > 0) to match search.
     with db_cursor(commit=False) as cur:
         cur.execute("""
             SELECT COUNT(*) AS total_rows,
                    COUNT(DISTINCT domain) AS domains
             FROM company_email_formats
+            WHERE contacts_280k > 0
         """)
         row = dict(cur.fetchone())
         cur.execute("""
             SELECT COUNT(DISTINCT domain) AS n FROM company_email_formats
-            WHERE is_predictable = 1 AND format_rank = 1
+            WHERE is_predictable = 1 AND format_rank = 1 AND contacts_280k > 0
         """)
         row["predictable_domains"] = cur.fetchone()["n"]
     return row

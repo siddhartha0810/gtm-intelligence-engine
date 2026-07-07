@@ -2016,6 +2016,11 @@ def search_company_email_formats(query: str, limit: int = 20) -> list:
     Search the reference guide by company name or domain (case-insensitive
     substring). Returns one row per matching domain — its primary
     (format_rank = 1) format — ordered by corpus evidence.
+
+    contacts_280k = 0 means the row is a stray validated-email match with no
+    real presence in the corpus (e.g. "Co19 Oracle" / co19.oracle.com — 1
+    validated email, 0 corpus contacts) — noise, not a company. Excluded so
+    every search result has actual evidence behind it.
     """
     q = f"%{(query or '').strip().lower()}%"
     if not q.strip("%"):
@@ -2027,6 +2032,7 @@ def search_company_email_formats(query: str, limit: int = 20) -> list:
                    is_predictable
             FROM company_email_formats
             WHERE format_rank = 1
+              AND contacts_280k > 0
               AND (LOWER(company_name) LIKE %s OR LOWER(domain) LIKE %s)
             ORDER BY contacts_280k DESC, validated_emails DESC
             LIMIT %s
@@ -2049,13 +2055,16 @@ def get_company_email_formats(domain: str) -> list:
 
 
 def company_email_formats_stats() -> dict:
-    """Row/domain counts for the Prediction Engine overview strip."""
+    """Row/domain counts for the Prediction Engine overview strip.
+    Scoped to evidence-backed domains (contacts_280k > 0) so the numbers
+    shown match what search actually surfaces — see search_company_email_formats."""
     with db_cursor(commit=False) as cur:
         cur.execute("""
             SELECT COUNT(*) AS total_rows,
                    COUNT(DISTINCT domain) AS domains,
                    COUNT(DISTINCT domain) FILTER (WHERE is_predictable AND format_rank = 1) AS predictable_domains
             FROM company_email_formats
+            WHERE contacts_280k > 0
         """)
         return dict(cur.fetchone())
 
