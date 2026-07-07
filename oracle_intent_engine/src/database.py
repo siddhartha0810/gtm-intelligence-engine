@@ -208,6 +208,29 @@ _DDL = [
     """,
     "CREATE INDEX IF NOT EXISTS idx_ep_domain ON email_patterns(domain)",
     """
+    CREATE TABLE IF NOT EXISTS company_email_formats (
+        id                  BIGSERIAL PRIMARY KEY,
+        company_name        TEXT NOT NULL,
+        domain              TEXT NOT NULL,
+        format_rank         INTEGER NOT NULL DEFAULT 1,
+        format_code         TEXT NOT NULL,
+        formula             TEXT NOT NULL DEFAULT '',
+        description         TEXT NOT NULL DEFAULT '',
+        domain_example      TEXT NOT NULL DEFAULT '',
+        share_pct           REAL NOT NULL DEFAULT 0,
+        format_count        INTEGER NOT NULL DEFAULT 0,
+        sample_emails       TEXT NOT NULL DEFAULT '',
+        contacts_280k       INTEGER NOT NULL DEFAULT 0,
+        validated_emails    INTEGER NOT NULL DEFAULT 0,
+        formats_found       INTEGER NOT NULL DEFAULT 1,
+        is_predictable      BOOLEAN NOT NULL DEFAULT TRUE,
+        recommended_action  TEXT NOT NULL DEFAULT '',
+        UNIQUE (domain, format_rank)
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_cef_domain ON company_email_formats(domain)",
+    "CREATE INDEX IF NOT EXISTS idx_cef_company_name ON company_email_formats(LOWER(company_name))",
+    """
     CREATE TABLE IF NOT EXISTS enrichment_cache (
         lead_id                     TEXT PRIMARY KEY,
         email                       TEXT NOT NULL DEFAULT '',
@@ -1945,6 +1968,96 @@ def email_patterns_stats() -> dict:
         """)
         dist = [dict(r) for r in cur.fetchall()]
     return {"total_rows": row["total_rows"], "domains": row["domains"], "distribution": dist}
+
+# ── Prediction Engine — full company_email_formats reference ─────────────────
+# Every domain×format row from COMPANY-EMAIL-FORMAT-REFERENCE-GUIDE.xlsx, not
+# just the engine-buildable subset in email_patterns. This is the read model
+# for the Prediction Engine UI (browse/search/explain); email_patterns stays
+# the lean operational table actual predictions are built from.
+
+def upsert_company_email_formats(rows: list) -> int:
+    """
+    Bulk upsert full-guide format rows, one per (domain, format_rank).
+    Each row is a dict — see import_email_formats.py for the field set.
+    """
+    if not rows:
+        return 0
+    cols = ["company_name", "domain", "format_rank", "format_code", "formula",
+            "description", "domain_example", "share_pct", "format_count",
+            "sample_emails", "contacts_280k", "validated_emails",
+            "formats_found", "is_predictable", "recommended_action"]
+    with db_cursor() as cur:
+        psycopg2.extras.execute_values(
+            cur,
+            f"""INSERT INTO company_email_formats ({", ".join(cols)})
+                VALUES %s
+                ON CONFLICT (domain, format_rank) DO UPDATE SET
+                    company_name       = EXCLUDED.company_name,
+                    format_code        = EXCLUDED.format_code,
+                    formula            = EXCLUDED.formula,
+                    description        = EXCLUDED.description,
+                    domain_example     = EXCLUDED.domain_example,
+                    share_pct          = EXCLUDED.share_pct,
+                    format_count       = EXCLUDED.format_count,
+                    sample_emails      = EXCLUDED.sample_emails,
+                    contacts_280k      = EXCLUDED.contacts_280k,
+                    validated_emails   = EXCLUDED.validated_emails,
+                    formats_found      = EXCLUDED.formats_found,
+                    is_predictable     = EXCLUDED.is_predictable,
+                    recommended_action = EXCLUDED.recommended_action""",
+            [tuple(r.get(c) for c in cols) for r in rows],
+            page_size=1000,
+        )
+    return len(rows)
+
+
+def search_company_email_formats(query: str, limit: int = 20) -> list:
+    """
+    Search the reference guide by company name or domain (case-insensitive
+    substring). Returns one row per matching domain — its primary
+    (format_rank = 1) format — ordered by corpus evidence.
+    """
+    q = f"%{(query or '').strip().lower()}%"
+    if not q.strip("%"):
+        return []
+    with db_cursor(commit=False) as cur:
+        cur.execute("""
+            SELECT company_name, domain, format_code, formula, domain_example,
+                   share_pct, formats_found, contacts_280k, validated_emails,
+                   is_predictable
+            FROM company_email_formats
+            WHERE format_rank = 1
+              AND (LOWER(company_name) LIKE %s OR LOWER(domain) LIKE %s)
+            ORDER BY contacts_280k DESC, validated_emails DESC
+            LIMIT %s
+        """, (q, q, limit))
+        return [dict(r) for r in cur.fetchall()]
+
+
+def get_company_email_formats(domain: str) -> list:
+    """All ranked format rows for one domain (rank 1 = primary)."""
+    domain = (domain or "").strip().lower()
+    if not domain:
+        return []
+    with db_cursor(commit=False) as cur:
+        cur.execute("""
+            SELECT * FROM company_email_formats
+            WHERE domain = %s
+            ORDER BY format_rank
+        """, (domain,))
+        return [dict(r) for r in cur.fetchall()]
+
+
+def company_email_formats_stats() -> dict:
+    """Row/domain counts for the Prediction Engine overview strip."""
+    with db_cursor(commit=False) as cur:
+        cur.execute("""
+            SELECT COUNT(*) AS total_rows,
+                   COUNT(DISTINCT domain) AS domains,
+                   COUNT(DISTINCT domain) FILTER (WHERE is_predictable AND format_rank = 1) AS predictable_domains
+            FROM company_email_formats
+        """)
+        return dict(cur.fetchone())
 
 # hubspot_config helpers
 def get_hubspot_config() -> dict:

@@ -310,6 +310,27 @@ _DDL = [
     )
     """,
     """
+    CREATE TABLE IF NOT EXISTS company_email_formats (
+        id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+        company_name        TEXT NOT NULL,
+        domain              TEXT NOT NULL,
+        format_rank         INTEGER NOT NULL DEFAULT 1,
+        format_code         TEXT NOT NULL,
+        formula             TEXT NOT NULL DEFAULT '',
+        description         TEXT NOT NULL DEFAULT '',
+        domain_example      TEXT NOT NULL DEFAULT '',
+        share_pct           REAL NOT NULL DEFAULT 0,
+        format_count        INTEGER NOT NULL DEFAULT 0,
+        sample_emails       TEXT NOT NULL DEFAULT '',
+        contacts_280k       INTEGER NOT NULL DEFAULT 0,
+        validated_emails    INTEGER NOT NULL DEFAULT 0,
+        formats_found       INTEGER NOT NULL DEFAULT 1,
+        is_predictable      INTEGER NOT NULL DEFAULT 1,
+        recommended_action  TEXT NOT NULL DEFAULT '',
+        UNIQUE (domain, format_rank)
+    )
+    """,
+    """
     CREATE TABLE IF NOT EXISTS domain_knowledge (
         company_normalized  TEXT PRIMARY KEY,
         company             TEXT NOT NULL,
@@ -1192,6 +1213,87 @@ def email_patterns_stats() -> dict:
         cur.execute("SELECT COUNT(DISTINCT domain) AS d, COUNT(*) AS p FROM email_patterns")
         row = cur.fetchone()
     return {"domains": row["d"], "patterns": row["p"]}
+
+
+# ── Prediction Engine — full company_email_formats reference ─────────────────
+
+def upsert_company_email_formats(rows: list) -> int:
+    if not rows:
+        return 0
+    cols = ["company_name", "domain", "format_rank", "format_code", "formula",
+            "description", "domain_example", "share_pct", "format_count",
+            "sample_emails", "contacts_280k", "validated_emails",
+            "formats_found", "is_predictable", "recommended_action"]
+    ph = ", ".join("?" * len(cols))
+    with db_cursor() as cur:
+        for r in rows:
+            cur.execute(
+                f"""INSERT INTO company_email_formats ({", ".join(cols)})
+                    VALUES ({ph})
+                    ON CONFLICT(domain, format_rank) DO UPDATE SET
+                        company_name       = excluded.company_name,
+                        format_code        = excluded.format_code,
+                        formula            = excluded.formula,
+                        description        = excluded.description,
+                        domain_example     = excluded.domain_example,
+                        share_pct          = excluded.share_pct,
+                        format_count       = excluded.format_count,
+                        sample_emails      = excluded.sample_emails,
+                        contacts_280k      = excluded.contacts_280k,
+                        validated_emails   = excluded.validated_emails,
+                        formats_found      = excluded.formats_found,
+                        is_predictable     = excluded.is_predictable,
+                        recommended_action = excluded.recommended_action""",
+                tuple(r.get(c) for c in cols),
+            )
+    return len(rows)
+
+
+def search_company_email_formats(query: str, limit: int = 20) -> list:
+    q = f"%{(query or '').strip().lower()}%"
+    if not q.strip("%"):
+        return []
+    with db_cursor(commit=False) as cur:
+        cur.execute("""
+            SELECT company_name, domain, format_code, formula, domain_example,
+                   share_pct, formats_found, contacts_280k, validated_emails,
+                   is_predictable
+            FROM company_email_formats
+            WHERE format_rank = 1
+              AND (LOWER(company_name) LIKE ? OR LOWER(domain) LIKE ?)
+            ORDER BY contacts_280k DESC, validated_emails DESC
+            LIMIT ?
+        """, (q, q, limit))
+        return [dict(r) for r in cur.fetchall()]
+
+
+def get_company_email_formats(domain: str) -> list:
+    domain = (domain or "").strip().lower()
+    if not domain:
+        return []
+    with db_cursor(commit=False) as cur:
+        cur.execute("""
+            SELECT * FROM company_email_formats
+            WHERE domain = ?
+            ORDER BY format_rank
+        """, (domain,))
+        return [dict(r) for r in cur.fetchall()]
+
+
+def company_email_formats_stats() -> dict:
+    with db_cursor(commit=False) as cur:
+        cur.execute("""
+            SELECT COUNT(*) AS total_rows,
+                   COUNT(DISTINCT domain) AS domains
+            FROM company_email_formats
+        """)
+        row = dict(cur.fetchone())
+        cur.execute("""
+            SELECT COUNT(DISTINCT domain) AS n FROM company_email_formats
+            WHERE is_predictable = 1 AND format_rank = 1
+        """)
+        row["predictable_domains"] = cur.fetchone()["n"]
+    return row
 
 
 # ── HubSpot ───────────────────────────────────────────────────────────────────

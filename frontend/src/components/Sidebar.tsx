@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Building2, Users, Cpu, ClipboardCheck,
   BarChart3, Settings, ChevronLeft, ChevronRight,
   Zap, Target, Layers, Upload, CalendarDays,
-  ScrollText, UserCog, RefreshCw, PackageSearch, Search, Rocket, Crosshair, Activity, Sparkles
+  ScrollText, UserCog, RefreshCw, PackageSearch, Search, Rocket, Crosshair, Activity, Sparkles, Wand2
 } from 'lucide-react'
 
 interface NavItem {
@@ -52,9 +52,10 @@ function buildNavGroups(user?: User): NavGroup[] {
       { to: '/review-queue', icon: ClipboardCheck, label: 'Review Queue', min: 2 },
     ]},
     { label: 'REACH', stage: 3, items: [
-      { to: '/people-search', icon: Search,    label: 'People Search', min: 1 },
-      { to: '/list-import',   icon: Upload,    label: 'List Import',   min: 2 },
-      { to: '/hubspot-sync',  icon: RefreshCw, label: 'HubSpot Sync',  min: 3 },
+      { to: '/people-search',      icon: Search,    label: 'People Search',      min: 1 },
+      { to: '/prediction-engine',  icon: Wand2,     label: 'Prediction Engine',  min: 1 },
+      { to: '/list-import',        icon: Upload,    label: 'List Import',        min: 2 },
+      { to: '/hubspot-sync',       icon: RefreshCw, label: 'HubSpot Sync',       min: 3 },
     ]},
     { label: 'INTELLIGENCE', items: [
       { to: '/reporting',            icon: BarChart3,     label: 'Reporting',      min: 2 },

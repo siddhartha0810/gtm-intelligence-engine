@@ -1349,6 +1349,106 @@ async def api_predict_contact_email(contact_id: int, current_user: dict = Depend
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
+# ═══════════════════ PREDICTION ENGINE ═══════════════════════════════════════
+# Browse the full company_email_formats reference (40K+ domains, loaded from
+# COMPANY-EMAIL-FORMAT-REFERENCE-GUIDE.xlsx via import_email_formats.py) and
+# see it applied live to whatever contacts we already have on file for that
+# company — this is the "how does the prediction engine actually work" view,
+# read-only and free (no ZeroBounce calls; those only happen on the explicit
+# per-contact predict-email action above).
+
+@app.get("/api/prediction-engine/stats")
+async def api_prediction_engine_stats(current_user: dict = Depends(oracle_auth.require_user)):
+    try:
+        return oracle_db.company_email_formats_stats()
+    except Exception as e:
+        logger.exception(f"prediction-engine stats: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@app.get("/api/prediction-engine/search")
+async def api_prediction_engine_search(q: str = "", current_user: dict = Depends(oracle_auth.require_user)):
+    q = (q or "").strip()
+    if len(q) < 2:
+        return {"results": []}
+    try:
+        return {"results": oracle_db.search_company_email_formats(q, limit=20)}
+    except Exception as e:
+        logger.exception(f"prediction-engine search q={q!r}: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@app.get("/api/prediction-engine/company")
+async def api_prediction_engine_company(domain: str = "", current_user: dict = Depends(oracle_auth.require_user)):
+    """
+    Full detail for one domain: every ranked format the reference guide found,
+    plus every contact we already have on file at that domain — each shown
+    with its real email if we have one, or a live-generated preview built
+    from the domain's primary predictable format if we don't. That preview
+    is exactly what "assign the same format to a new contact" looks like.
+    """
+    domain = (domain or "").strip().lower().lstrip("@")
+    if not domain:
+        raise HTTPException(status_code=400, detail="domain is required")
+    try:
+        formats = oracle_db.get_company_email_formats(domain)
+        if not formats:
+            raise HTTPException(status_code=404, detail="No format on file for this domain")
+
+        primary = formats[0]
+        primary_pattern = primary["format_code"] if primary.get("is_predictable") else next(
+            (f["format_code"] for f in formats if f.get("is_predictable")), None
+        )
+
+        # Contacts we already have on file for this domain, via companies.domain.
+        contacts: list = []
+        with oracle_db.db_cursor(commit=False) as cur:
+            cur.execute("SELECT id, name FROM companies WHERE LOWER(domain) = %s", (domain,))
+            company_rows = cur.fetchall()
+        for crow in company_rows:
+            for c in oracle_db.get_contacts_for_company(crow["id"]):
+                contacts.append(dict(c))
+
+        # Fill in the master corpus too (read-only, gracefully absent if the
+        # table isn't loaded on this machine — see get_master_leads_by_company).
+        seen_names = {(c.get("first_name", "").lower(), c.get("last_name", "").lower()) for c in contacts}
+        for name_key in {c["company_name"] for c in formats if c.get("company_name")}:
+            for m in oracle_db.get_master_leads_by_company(name_key):
+                key = ((m.get("first_name") or "").lower(), (m.get("last_name") or "").lower())
+                if key not in seen_names and (m.get("first_name") or m.get("last_name")):
+                    seen_names.add(key)
+                    contacts.append(dict(m))
+
+        contact_out = []
+        for c in contacts:
+            email = (c.get("email") or "").strip()
+            first, last = c.get("first_name") or "", c.get("last_name") or ""
+            predicted = None
+            if not email and first and last and primary_pattern:
+                predicted = oracle_apollo._build_predicted_email(first, last, domain, primary_pattern)
+            contact_out.append({
+                "name": c.get("full_name") or f"{first} {last}".strip(),
+                "title": c.get("title") or c.get("job_title") or "",
+                "email": email or None,
+                "predicted_email": predicted or None,
+                "predicted_pattern": primary_pattern if predicted else None,
+                "source": "on file" if email else ("predicted" if predicted else "no email"),
+            })
+
+        return {
+            "domain": domain,
+            "company_name": primary.get("company_name"),
+            "formats": formats,
+            "primary_pattern": primary_pattern,
+            "contacts": contact_out,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"prediction-engine company domain={domain}: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
 # Per-company enrichment job state (keyed by company_id)
 _company_jobs: Dict[int, Dict] = {}
 _company_jobs_lock = threading.Lock()
