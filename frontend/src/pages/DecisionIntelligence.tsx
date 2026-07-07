@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Sparkles, ShieldCheck, Target, Users, Ban, Zap, Check, X,
          TrendingUp, TrendingDown, Mail, ChevronRight, ChevronDown, GitBranch, Loader2,
-         AtSign, Link as LinkIcon, ExternalLink, UserCircle2 } from 'lucide-react'
+         AtSign, Link as LinkIcon, ExternalLink, UserCircle2, AlertTriangle } from 'lucide-react'
 import { toast } from '../components/Toast'
 
 const authH = (): Record<string, string> => ({
@@ -108,6 +108,12 @@ function TraceLine({ row }: { row: TraceRow }) {
             display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 6, fontSize: 11.5,
             color: C.primary, textDecoration: 'none' }}>
             <ExternalLink size={11} /> View source</a>
+        )}
+        {row.fired && !row.source_url && (
+          <span style={{
+            display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 6, fontSize: 11.5,
+            color: C.warning, fontWeight: 600 }}>
+            <AlertTriangle size={11} /> Unverified — no public source on file</span>
         )}
       </div>
     </div>

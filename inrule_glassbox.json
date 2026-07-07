@@ -26,14 +26,16 @@
         "name": "Regulated-industry end user",
         "fired": true,
         "points": 6,
-        "why": "SEC industry classification: Insurance Agents, Brokers & Service \u2014 a core InRule vertical (insurance / banking / healthcare / government), a genuine end user rather than a software vendor describing its own product."
+        "why": "SEC industry classification: Insurance Agents, Brokers & Service \u2014 a core InRule vertical (insurance / banking / healthcare / government), a genuine end user rather than a software vendor describing its own product.",
+        "source_url": "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0001868640&type=10-K&dateb=&owner=include&count=10"
       },
       {
         "id": "R4",
         "name": "Recent-IPO governance trigger",
         "fired": true,
         "points": 8,
-        "why": "Filed S-1 on 2024-04-16 \u2014 newly public and newly subject to SOX/audit/board scrutiny, the exact moment rule-governance and auditability become board-level obligations."
+        "why": "Filed S-1 on 2024-04-16 \u2014 newly public and newly subject to SOX/audit/board scrutiny, the exact moment rule-governance and auditability become board-level obligations.",
+        "source_url": "https://www.sec.gov/Archives/edgar/data/1868640/000095017024044548/0000950170-24-044548-index.htm"
       },
       {
         "id": "R5",
@@ -46,7 +48,8 @@
         "name": "Live buying-window timing",
         "fired": true,
         "points": 4,
-        "why": "2 trigger events in the last 270 days (most recent 69 days ago) \u2014 signals cluster in time, indicating an active buying motion, not stale interest."
+        "why": "2 trigger events in the last 270 days (most recent 69 days ago) \u2014 signals cluster in time, indicating an active buying motion, not stale interest.",
+        "source_url": "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0001868640&type=&dateb=&owner=include&count=40"
       },
       {
         "id": "R7",
@@ -83,14 +86,16 @@
         "name": "Regulated-industry end user",
         "fired": true,
         "points": 6,
-        "why": "SEC industry classification: Insurance Agents, Brokers & Service \u2014 a core InRule vertical (insurance / banking / healthcare / government), a genuine end user rather than a software vendor describing its own product."
+        "why": "SEC industry classification: Insurance Agents, Brokers & Service \u2014 a core InRule vertical (insurance / banking / healthcare / government), a genuine end user rather than a software vendor describing its own product.",
+        "source_url": "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0002019505&type=10-K&dateb=&owner=include&count=10"
       },
       {
         "id": "R4",
         "name": "Recent-IPO governance trigger",
         "fired": true,
         "points": 8,
-        "why": "Filed 424B4 on 2024-12-23 \u2014 newly public and newly subject to SOX/audit/board scrutiny, the exact moment rule-governance and auditability become board-level obligations."
+        "why": "Filed 424B4 on 2024-12-23 \u2014 newly public and newly subject to SOX/audit/board scrutiny, the exact moment rule-governance and auditability become board-level obligations.",
+        "source_url": "https://www.sec.gov/Archives/edgar/data/2019505/000121390024111564/0001213900-24-111564-index.htm"
       },
       {
         "id": "R5",
@@ -146,7 +151,8 @@
         "name": "Recent-IPO governance trigger",
         "fired": true,
         "points": 8,
-        "why": "Filed 424B4 on 2024-10-24 \u2014 newly public and newly subject to SOX/audit/board scrutiny, the exact moment rule-governance and auditability become board-level obligations."
+        "why": "Filed 424B4 on 2024-10-24 \u2014 newly public and newly subject to SOX/audit/board scrutiny, the exact moment rule-governance and auditability become board-level obligations.",
+        "source_url": "https://www.sec.gov/Archives/edgar/data/2002473/000162828024043611/0001628280-24-043611-index.htm"
       },
       {
         "id": "R5",
@@ -159,7 +165,8 @@
         "name": "Live buying-window timing",
         "fired": true,
         "points": 8,
-        "why": "3 trigger events in the last 270 days (most recent 62 days ago) \u2014 signals cluster in time, indicating an active buying motion, not stale interest."
+        "why": "3 trigger events in the last 270 days (most recent 62 days ago) \u2014 signals cluster in time, indicating an active buying motion, not stale interest.",
+        "source_url": "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0002002473&type=&dateb=&owner=include&count=40"
       },
       {
         "id": "R7",
@@ -197,14 +204,16 @@
         "name": "Regulated-industry end user",
         "fired": true,
         "points": 6,
-        "why": "SEC industry classification: Mortgage Bankers & Loan Correspondents \u2014 a core InRule vertical (insurance / banking / healthcare / government), a genuine end user rather than a software vendor describing its own product."
+        "why": "SEC industry classification: Mortgage Bankers & Loan Correspondents \u2014 a core InRule vertical (insurance / banking / healthcare / government), a genuine end user rather than a software vendor describing its own product.",
+        "source_url": "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0001534708&type=10-K&dateb=&owner=include&count=10"
       },
       {
         "id": "R4",
         "name": "Recent-IPO governance trigger",
         "fired": true,
         "points": 8,
-        "why": "Filed S-1 on 2025-10-21 \u2014 newly public and newly subject to SOX/audit/board scrutiny, the exact moment rule-governance and auditability become board-level obligations."
+        "why": "Filed S-1 on 2025-10-21 \u2014 newly public and newly subject to SOX/audit/board scrutiny, the exact moment rule-governance and auditability become board-level obligations.",
+        "source_url": "https://www.sec.gov/Archives/edgar/data/1534708/000149315225018826/0001493152-25-018826-index.htm"
       },
       {
         "id": "R5",
@@ -259,7 +268,8 @@
         "name": "Recent-IPO governance trigger",
         "fired": true,
         "points": 8,
-        "why": "Filed 424B4 on 2026-01-30 \u2014 newly public and newly subject to SOX/audit/board scrutiny, the exact moment rule-governance and auditability become board-level obligations."
+        "why": "Filed 424B4 on 2026-01-30 \u2014 newly public and newly subject to SOX/audit/board scrutiny, the exact moment rule-governance and auditability become board-level obligations.",
+        "source_url": "https://www.sec.gov/Archives/edgar/data/1788451/000119312526029993/0001193125-26-029993-index.htm"
       },
       {
         "id": "R5",
@@ -272,14 +282,16 @@
         "name": "Live buying-window timing",
         "fired": true,
         "points": 4,
-        "why": "2 trigger events in the last 270 days (most recent 111 days ago) \u2014 signals cluster in time, indicating an active buying motion, not stale interest."
+        "why": "2 trigger events in the last 270 days (most recent 111 days ago) \u2014 signals cluster in time, indicating an active buying motion, not stale interest.",
+        "source_url": "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0001788451&type=&dateb=&owner=include&count=40"
       },
       {
         "id": "R7",
         "name": "Decision-maker identified",
         "fired": true,
         "points": 4,
-        "why": "A persona-matched decision-maker is already on file (Vipul Sharma, Chief Technology Officer) \u2014 the account is actionable today, no first-touch enrichment needed."
+        "why": "A persona-matched decision-maker is already on file (Vipul Sharma, Chief Technology Officer) \u2014 the account is actionable today, no first-touch enrichment needed.",
+        "source_url": "https://linkedin.com/in/vipulethos"
       }
     ]
   },
@@ -316,7 +328,8 @@
         "name": "Recent-IPO governance trigger",
         "fired": true,
         "points": 8,
-        "why": "Filed 424B4 on 2026-05-14 \u2014 newly public and newly subject to SOX/audit/board scrutiny, the exact moment rule-governance and auditability become board-level obligations."
+        "why": "Filed 424B4 on 2026-05-14 \u2014 newly public and newly subject to SOX/audit/board scrutiny, the exact moment rule-governance and auditability become board-level obligations.",
+        "source_url": "https://www.sec.gov/Archives/edgar/data/2067129/000162828026035207/0001628280-26-035207-index.htm"
       },
       {
         "id": "R5",
@@ -329,14 +342,16 @@
         "name": "Live buying-window timing",
         "fired": true,
         "points": 4,
-        "why": "2 trigger events in the last 270 days (most recent 53 days ago) \u2014 signals cluster in time, indicating an active buying motion, not stale interest."
+        "why": "2 trigger events in the last 270 days (most recent 53 days ago) \u2014 signals cluster in time, indicating an active buying motion, not stale interest.",
+        "source_url": "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0002067129&type=&dateb=&owner=include&count=40"
       },
       {
         "id": "R7",
         "name": "Decision-maker identified",
         "fired": true,
         "points": 4,
-        "why": "A persona-matched decision-maker is already on file (Trevor Burgess, Chairman & Chief Executive Officer) \u2014 the account is actionable today, no first-touch enrichment needed."
+        "why": "A persona-matched decision-maker is already on file (Trevor Burgess, Chairman & Chief Executive Officer) \u2014 the account is actionable today, no first-touch enrichment needed.",
+        "source_url": "https://linkedin.com/in/trevorburgess94"
       }
     ]
   },
@@ -367,7 +382,8 @@
         "name": "Regulated-industry end user",
         "fired": true,
         "points": 6,
-        "why": "SEC industry classification: Surety Insurance \u2014 a core InRule vertical (insurance / banking / healthcare / government), a genuine end user rather than a software vendor describing its own product."
+        "why": "SEC industry classification: Surety Insurance \u2014 a core InRule vertical (insurance / banking / healthcare / government), a genuine end user rather than a software vendor describing its own product.",
+        "source_url": "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0001448893&type=10-K&dateb=&owner=include&count=10"
       },
       {
         "id": "R4",
@@ -392,7 +408,8 @@
         "name": "Decision-maker identified",
         "fired": true,
         "points": 4,
-        "why": "A persona-matched decision-maker is already on file (David Weinstock, Chief Financial Officer) \u2014 the account is actionable today, no first-touch enrichment needed."
+        "why": "A persona-matched decision-maker is already on file (David Weinstock, Chief Financial Officer) \u2014 the account is actionable today, no first-touch enrichment needed.",
+        "source_url": "https://linkedin.com/in/dbweinstock"
       }
     ]
   },
@@ -423,7 +440,8 @@
         "name": "Regulated-industry end user",
         "fired": true,
         "points": 6,
-        "why": "SEC industry classification: Fire, Marine & Casualty Insurance \u2014 a core InRule vertical (insurance / banking / healthcare / government), a genuine end user rather than a software vendor describing its own product."
+        "why": "SEC industry classification: Fire, Marine & Casualty Insurance \u2014 a core InRule vertical (insurance / banking / healthcare / government), a genuine end user rather than a software vendor describing its own product.",
+        "source_url": "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0001819035&type=10-K&dateb=&owner=include&count=10"
       },
       {
         "id": "R4",
@@ -479,7 +497,8 @@
         "name": "Regulated-industry end user",
         "fired": true,
         "points": 6,
-        "why": "SEC industry classification: Title Insurance \u2014 a core InRule vertical (insurance / banking / healthcare / government), a genuine end user rather than a software vendor describing its own product."
+        "why": "SEC industry classification: Title Insurance \u2014 a core InRule vertical (insurance / banking / healthcare / government), a genuine end user rather than a software vendor describing its own product.",
+        "source_url": "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0001472787&type=10-K&dateb=&owner=include&count=10"
       },
       {
         "id": "R4",
@@ -504,7 +523,8 @@
         "name": "Decision-maker identified",
         "fired": true,
         "points": 4,
-        "why": "A persona-matched decision-maker is already on file (Jody Mulkey, Chief Technology Officer) \u2014 the account is actionable today, no first-touch enrichment needed."
+        "why": "A persona-matched decision-maker is already on file (Jody Mulkey, Chief Technology Officer) \u2014 the account is actionable today, no first-touch enrichment needed.",
+        "source_url": "https://linkedin.com/in/jodymulkey"
       }
     ]
   },
@@ -535,7 +555,8 @@
         "name": "Regulated-industry end user",
         "fired": true,
         "points": 6,
-        "why": "SEC industry classification: Hospital & Medical Service Plans \u2014 a core InRule vertical (insurance / banking / healthcare / government), a genuine end user rather than a software vendor describing its own product."
+        "why": "SEC industry classification: Hospital & Medical Service Plans \u2014 a core InRule vertical (insurance / banking / healthcare / government), a genuine end user rather than a software vendor describing its own product.",
+        "source_url": "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0001371285&type=10-K&dateb=&owner=include&count=10"
       },
       {
         "id": "R4",
@@ -560,7 +581,8 @@
         "name": "Decision-maker identified",
         "fired": true,
         "points": 4,
-        "why": "A persona-matched decision-maker is already on file (Jamie Adams, Chief Information Officer) \u2014 the account is actionable today, no first-touch enrichment needed."
+        "why": "A persona-matched decision-maker is already on file (Jamie Adams, Chief Information Officer) \u2014 the account is actionable today, no first-touch enrichment needed.",
+        "source_url": "https://linkedin.com/in/jamiechristinaadams"
       }
     ]
   },
@@ -591,7 +613,8 @@
         "name": "Regulated-industry end user",
         "fired": true,
         "points": 6,
-        "why": "SEC industry classification: Insurance Agents, Brokers & Service \u2014 a core InRule vertical (insurance / banking / healthcare / government), a genuine end user rather than a software vendor describing its own product."
+        "why": "SEC industry classification: Insurance Agents, Brokers & Service \u2014 a core InRule vertical (insurance / banking / healthcare / government), a genuine end user rather than a software vendor describing its own product.",
+        "source_url": "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0001823529&type=10-K&dateb=&owner=include&count=10"
       },
       {
         "id": "R4",
@@ -616,7 +639,8 @@
         "name": "Decision-maker identified",
         "fired": true,
         "points": 4,
-        "why": "A persona-matched decision-maker is already on file (Neenu Sohi Kainth, Chief Customer Experience Officer & Head of Strategy) \u2014 the account is actionable today, no first-touch enrichment needed."
+        "why": "A persona-matched decision-maker is already on file (Neenu Sohi Kainth, Chief Customer Experience Officer & Head of Strategy) \u2014 the account is actionable today, no first-touch enrichment needed.",
+        "source_url": "https://linkedin.com/in/neenukainth"
       }
     ]
   },
@@ -647,7 +671,8 @@
         "name": "Regulated-industry end user",
         "fired": true,
         "points": 6,
-        "why": "SEC industry classification: National Commercial Banks \u2014 a core InRule vertical (insurance / banking / healthcare / government), a genuine end user rather than a software vendor describing its own product."
+        "why": "SEC industry classification: National Commercial Banks \u2014 a core InRule vertical (insurance / banking / healthcare / government), a genuine end user rather than a software vendor describing its own product.",
+        "source_url": "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0001590799&type=10-K&dateb=&owner=include&count=10"
       },
       {
         "id": "R4",
@@ -672,7 +697,8 @@
         "name": "Decision-maker identified",
         "fired": true,
         "points": 4,
-        "why": "A persona-matched decision-maker is already on file (Kirk Fox, Chief Executive Officer) \u2014 the account is actionable today, no first-touch enrichment needed."
+        "why": "A persona-matched decision-maker is already on file (Kirk Fox, Chief Executive Officer) \u2014 the account is actionable today, no first-touch enrichment needed.",
+        "source_url": "https://linkedin.com/in/kirk-fox-22719a172"
       }
     ]
   },
@@ -703,7 +729,8 @@
         "name": "Regulated-industry end user",
         "fired": true,
         "points": 6,
-        "why": "SEC industry classification: Mortgage Bankers & Loan Correspondents \u2014 a core InRule vertical (insurance / banking / healthcare / government), a genuine end user rather than a software vendor describing its own product."
+        "why": "SEC industry classification: Mortgage Bankers & Loan Correspondents \u2014 a core InRule vertical (insurance / banking / healthcare / government), a genuine end user rather than a software vendor describing its own product.",
+        "source_url": "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0000873860&type=10-K&dateb=&owner=include&count=10"
       },
       {
         "id": "R4",
@@ -728,7 +755,8 @@
         "name": "Decision-maker identified",
         "fired": true,
         "points": 4,
-        "why": "A persona-matched decision-maker is already on file (Scott Anderson, EVP & Chief Servicing Officer) \u2014 the account is actionable today, no first-touch enrichment needed."
+        "why": "A persona-matched decision-maker is already on file (Scott Anderson, EVP & Chief Servicing Officer) \u2014 the account is actionable today, no first-touch enrichment needed.",
+        "source_url": "https://linkedin.com/in/scott-anderson-8b7bb598"
       }
     ]
   },
@@ -759,7 +787,8 @@
         "name": "Regulated-industry end user",
         "fired": true,
         "points": 6,
-        "why": "SEC industry classification: Fire, Marine & Casualty Insurance \u2014 a core InRule vertical (insurance / banking / healthcare / government), a genuine end user rather than a software vendor describing its own product."
+        "why": "SEC industry classification: Fire, Marine & Casualty Insurance \u2014 a core InRule vertical (insurance / banking / healthcare / government), a genuine end user rather than a software vendor describing its own product.",
+        "source_url": "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0001788882&type=10-K&dateb=&owner=include&count=10"
       },
       {
         "id": "R4",
@@ -807,14 +836,16 @@
         "name": "Competitor product in use (displacement window)",
         "fired": true,
         "points": 12,
-        "why": "Names a competitor decisioning product (Drools (actively hiring for it)) \u2014 category budget already exists; this is a rip-and-replace opportunity, not a cold category-education sale."
+        "why": "Names a competitor decisioning product (Drools (actively hiring for it)) \u2014 category budget already exists; this is a rip-and-replace opportunity, not a cold category-education sale.",
+        "source_url": "https://www.monster.com/job-openings/sr-java-developer-drools-carrollton-tx--a22f10a8-cbc5-4145-9499-1a60f61ca51a"
       },
       {
         "id": "R3",
         "name": "Regulated-industry end user",
         "fired": true,
         "points": 6,
-        "why": "Confirmed end-user via displacement detection (sourced from a live job posting; staffing/consulting firms filtered out) \u2014 a core InRule vertical (insurance / banking / healthcare / government), a genuine end user rather than a software vendor describing its own product."
+        "why": "Confirmed end-user via displacement detection (sourced from a live job posting; staffing/consulting firms filtered out) \u2014 a core InRule vertical (insurance / banking / healthcare / government), a genuine end user rather than a software vendor describing its own product.",
+        "source_url": "https://www.monster.com/job-openings/sr-java-developer-drools-carrollton-tx--a22f10a8-cbc5-4145-9499-1a60f61ca51a"
       },
       {
         "id": "R4",
@@ -923,7 +954,8 @@
         "name": "Regulated-industry end user",
         "fired": true,
         "points": 6,
-        "why": "SEC industry classification: Life Insurance \u2014 a core InRule vertical (insurance / banking / healthcare / government), a genuine end user rather than a software vendor describing its own product."
+        "why": "SEC industry classification: Life Insurance \u2014 a core InRule vertical (insurance / banking / healthcare / government), a genuine end user rather than a software vendor describing its own product.",
+        "source_url": "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0000035733&type=10-K&dateb=&owner=include&count=10"
       },
       {
         "id": "R4",
@@ -978,7 +1010,8 @@
         "name": "Regulated-industry end user",
         "fired": true,
         "points": 6,
-        "why": "SEC industry classification: Fire, Marine & Casualty Insurance \u2014 a core InRule vertical (insurance / banking / healthcare / government), a genuine end user rather than a software vendor describing its own product."
+        "why": "SEC industry classification: Fire, Marine & Casualty Insurance \u2014 a core InRule vertical (insurance / banking / healthcare / government), a genuine end user rather than a software vendor describing its own product.",
+        "source_url": "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0000073952&type=10-K&dateb=&owner=include&count=10"
       },
       {
         "id": "R4",
@@ -1033,7 +1066,8 @@
         "name": "Regulated-industry end user",
         "fired": true,
         "points": 6,
-        "why": "SEC industry classification: Accident & Health Insurance \u2014 a core InRule vertical (insurance / banking / healthcare / government), a genuine end user rather than a software vendor describing its own product."
+        "why": "SEC industry classification: Accident & Health Insurance \u2014 a core InRule vertical (insurance / banking / healthcare / government), a genuine end user rather than a software vendor describing its own product.",
+        "source_url": "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0000005513&type=10-K&dateb=&owner=include&count=10"
       },
       {
         "id": "R4",
@@ -1074,7 +1108,8 @@
         "name": "Category buying-language in SEC filings",
         "fired": true,
         "points": 10,
-        "why": "Uses category language (business rules engine) in its own SEC filings \u2014 actively describing the capability InRule provides."
+        "why": "Uses category language (business rules engine) in its own SEC filings \u2014 actively describing the capability InRule provides.",
+        "source_url": "https://www.sec.gov/Archives/edgar/data/754009/000075400907000031/form10k.pdf"
       },
       {
         "id": "R2",
@@ -1087,7 +1122,8 @@
         "name": "Regulated-industry end user",
         "fired": true,
         "points": 6,
-        "why": "SEC industry classification: Hospital & Medical Service Plans \u2014 a core InRule vertical (insurance / banking / healthcare / government), a genuine end user rather than a software vendor describing its own product."
+        "why": "SEC industry classification: Hospital & Medical Service Plans \u2014 a core InRule vertical (insurance / banking / healthcare / government), a genuine end user rather than a software vendor describing its own product.",
+        "source_url": "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0000754009&type=10-K&dateb=&owner=include&count=10"
       },
       {
         "id": "R4",
@@ -1128,7 +1164,8 @@
         "name": "Category buying-language in SEC filings",
         "fired": true,
         "points": 10,
-        "why": "Uses category language (business rules engine) in its own SEC filings \u2014 actively describing the capability InRule provides."
+        "why": "Uses category language (business rules engine) in its own SEC filings \u2014 actively describing the capability InRule provides.",
+        "source_url": "https://www.sec.gov/Archives/edgar/data/64996/000006499621000004/mcy-20201231.htm"
       },
       {
         "id": "R2",
@@ -1141,7 +1178,8 @@
         "name": "Regulated-industry end user",
         "fired": true,
         "points": 6,
-        "why": "SEC industry classification: Fire, Marine & Casualty Insurance \u2014 a core InRule vertical (insurance / banking / healthcare / government), a genuine end user rather than a software vendor describing its own product."
+        "why": "SEC industry classification: Fire, Marine & Casualty Insurance \u2014 a core InRule vertical (insurance / banking / healthcare / government), a genuine end user rather than a software vendor describing its own product.",
+        "source_url": "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0000064996&type=10-K&dateb=&owner=include&count=10"
       },
       {
         "id": "R4",
@@ -1220,7 +1258,8 @@
         "name": "Decision-maker identified",
         "fired": true,
         "points": 4,
-        "why": "A persona-matched decision-maker is already on file (Morris Taylor, Chief Information Officer) \u2014 the account is actionable today, no first-touch enrichment needed."
+        "why": "A persona-matched decision-maker is already on file (Morris Taylor, Chief Information Officer) \u2014 the account is actionable today, no first-touch enrichment needed.",
+        "source_url": "https://linkedin.com/in/morristaylor1"
       }
     ]
   },
@@ -1249,7 +1288,8 @@
         "name": "Regulated-industry end user",
         "fired": true,
         "points": 6,
-        "why": "SEC industry classification: Life Insurance \u2014 a core InRule vertical (insurance / banking / healthcare / government), a genuine end user rather than a software vendor describing its own product."
+        "why": "SEC industry classification: Life Insurance \u2014 a core InRule vertical (insurance / banking / healthcare / government), a genuine end user rather than a software vendor describing its own product.",
+        "source_url": "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0001049537&type=10-K&dateb=&owner=include&count=10"
       },
       {
         "id": "R4",
@@ -1302,7 +1342,8 @@
         "name": "Regulated-industry end user",
         "fired": true,
         "points": 6,
-        "why": "SEC industry classification: Fire, Marine & Casualty Insurance \u2014 a core InRule vertical (insurance / banking / healthcare / government), a genuine end user rather than a software vendor describing its own product."
+        "why": "SEC industry classification: Fire, Marine & Casualty Insurance \u2014 a core InRule vertical (insurance / banking / healthcare / government), a genuine end user rather than a software vendor describing its own product.",
+        "source_url": "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0001401521&type=10-K&dateb=&owner=include&count=10"
       },
       {
         "id": "R4",
