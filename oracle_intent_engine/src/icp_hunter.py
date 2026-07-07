@@ -1,14 +1,18 @@
 """
 icp_hunter.py
 =============
-Fetches YC-backed companies matching Weave's ICP from the public yc-oss/api.
-Returns companies filtered by tag, batch recency, and team size.
+Fetches YC-backed companies matching a configurable ICP from the public
+yc-oss/api. Returns companies filtered by tag, batch recency, and team size.
 
 No API key required — yc-oss/api is a free public GitHub Pages endpoint.
 
+DEFAULT_ICP_TAGS below is just a starting point (AI/dev-tool/infra
+startups) — pass your own tags via search_icp(keywords=[...]) to target a
+different ICP entirely; they replace the defaults rather than adding to them.
+
 Usage:
-    from oracle_intent_engine.src.icp_hunter import fetch_weave_icp
-    companies = fetch_weave_icp()
+    from oracle_intent_engine.src.icp_hunter import fetch_icp_companies
+    companies = fetch_icp_companies()
     # [{"name": "Browserbase", "website": "https://browserbase.com", ...}, ...]
 """
 
@@ -23,9 +27,10 @@ logger = logging.getLogger(__name__)
 _BASE = "https://yc-oss.github.io/api"
 _TIMEOUT = 15
 
-# Tags that signal a company is in Weave's ICP
+# Default tags — a reasonable starting ICP (AI / dev-tool / infra startups).
 # Only include slugs that exist on yc-oss.github.io/api/tags/<slug>.json
-ICP_TAGS = {
+# Override entirely via search_icp(keywords=[...]) for a different ICP.
+DEFAULT_ICP_TAGS = {
     "developer-tools",
     "ai",
     "infrastructure",
@@ -46,8 +51,8 @@ RECENT_BATCHES = {
     "Winter 2022", "Summer 2022",
 }
 
-# Team size range that matches Weave's ICP (10–150 engineers)
-# team_size in yc-oss is total headcount, not just engineers
+# Default team-size range (total headcount, not just engineers) — override
+# via search_icp(min_team=..., max_team=...).
 MIN_TEAM = 8
 MAX_TEAM = 400
 
@@ -79,22 +84,22 @@ def _passes_filters(company: dict[str, Any]) -> bool:
     return True
 
 
-def fetch_weave_icp(
-    extra_tags: list[str] | None = None,
+def fetch_icp_companies(
+    tags: set[str] | list[str] | None = None,
     min_team: int = MIN_TEAM,
     max_team: int = MAX_TEAM,
     batches: set[str] | None = None,
     limit: int = 100,
 ) -> list[dict[str, Any]]:
     """
-    Fetch YC companies matching Weave's ICP.
+    Fetch YC companies matching an ICP defined by `tags` — replaces
+    DEFAULT_ICP_TAGS entirely when given, so a custom ICP doesn't get
+    diluted with unrelated AI/dev-tool companies.
 
     Returns a list of dicts with keys:
         name, website, one_liner, team_size, batch, tags, industry
     """
-    tags_to_fetch = list(ICP_TAGS)
-    if extra_tags:
-        tags_to_fetch.extend(extra_tags)
+    tags_to_fetch = list(tags) if tags else list(DEFAULT_ICP_TAGS)
 
     effective_batches = batches if batches else RECENT_BATCHES
 
@@ -138,7 +143,7 @@ def fetch_weave_icp(
         if len(results) >= limit:
             break
 
-    # Sort: smallest teams first (highest-fit for Weave)
+    # Sort: smallest teams first (earliest-stage companies surface first)
     results.sort(key=lambda c: c["team_size"])
     logger.info(f"[ICP Hunter] Found {len(results)} companies across {len(tags_to_fetch)} tags")
     return results[:limit]
@@ -153,12 +158,12 @@ def search_icp(
 ) -> list[dict[str, Any]]:
     """
     Flexible ICP search — called by the Campaign Builder API endpoint.
-    keywords maps to tags; if none given defaults to ICP_TAGS.
+    keywords maps directly to tags, replacing DEFAULT_ICP_TAGS; if none
+    given, falls back to the defaults.
     """
-    tag_set = set(keywords) if keywords else ICP_TAGS
     batch_set = set(batches) if batches else RECENT_BATCHES
-    return fetch_weave_icp(
-        extra_tags=list(tag_set - ICP_TAGS),
+    return fetch_icp_companies(
+        tags=set(keywords) if keywords else None,
         min_team=min_team,
         max_team=max_team,
         batches=batch_set,

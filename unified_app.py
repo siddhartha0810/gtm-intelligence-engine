@@ -4261,12 +4261,19 @@ async def campaign_icp_companies(
     min_team: int = 8,
     max_team: int = 400,
     limit: int = 80,
+    tags: str = "",
     current_user: dict = Depends(oracle_auth.require_user),
 ):
-    """Fetch YC companies matching Weave's ICP from the public yc-oss/api."""
+    """
+    Fetch YC companies matching an ICP from the public yc-oss/api.
+    tags: comma-separated yc-oss tag slugs (e.g. "fintech,payments") — replaces
+    icp_hunter's default AI/dev-tool tags entirely when given. Leave blank to
+    use the defaults.
+    """
     try:
-        from oracle_intent_engine.src.icp_hunter import fetch_weave_icp
-        companies = fetch_weave_icp(min_team=min_team, max_team=max_team, limit=limit)
+        from oracle_intent_engine.src.icp_hunter import fetch_icp_companies
+        tag_set = {t.strip() for t in tags.split(",") if t.strip()} or None
+        companies = fetch_icp_companies(tags=tag_set, min_team=min_team, max_team=max_team, limit=limit)
         return {"companies": companies, "count": len(companies)}
     except Exception as e:
         logger.exception("ICP fetch failed")
@@ -4370,13 +4377,16 @@ async def campaign_generate_hooks(
 ):
     """
     Generate personalised email hooks for a list of contacts.
-    Body: { contacts: [...], product_context: "..." (optional) }
+    Body: { contacts: [...], product_context: "..." (optional), icp_research: "..." (optional) }
+    Neither has a "sample" default — hook_generator's defaults explicitly tell the
+    LLM not to invent a product or persona research when none is supplied.
     Requires ANTHROPIC_API_KEY in .env.
     """
     try:
         body = await request.json()
         contacts: list = body.get("contacts", [])
         product_context: str = body.get("product_context", "")
+        icp_research: str = body.get("icp_research", "")
 
         anthropic_key = os.getenv("ANTHROPIC_API_KEY", "").strip()
         if not anthropic_key:
@@ -4386,10 +4396,12 @@ async def campaign_generate_hooks(
             )
 
         from oracle_intent_engine.src.company_researcher import research_company
-        from oracle_intent_engine.src.hook_generator import generate_hook, _PRODUCT_CONTEXT
+        from oracle_intent_engine.src.hook_generator import (
+            generate_hook, _DEFAULT_PRODUCT_CONTEXT, _DEFAULT_ICP_RESEARCH,
+        )
 
-        if not product_context:
-            product_context = _PRODUCT_CONTEXT
+        product_context = product_context or _DEFAULT_PRODUCT_CONTEXT
+        icp_research = icp_research or _DEFAULT_ICP_RESEARCH
 
         hooks: list[dict] = []
         for contact in contacts[:50]:  # cap at 50 to be safe
@@ -4414,6 +4426,7 @@ async def campaign_generate_hooks(
                 contact=contact,
                 company_research=co_research,
                 product_context=product_context,
+                icp_research=icp_research,
                 api_key=anthropic_key,
             )
             hooks.append(hook)

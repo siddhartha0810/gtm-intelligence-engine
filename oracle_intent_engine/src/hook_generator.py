@@ -22,55 +22,26 @@ from src import guards
 
 logger = logging.getLogger(__name__)
 
-# ── ICP Research Context (grounded in real CTO research) ─────────────────────
-# Sourced from HN, LinkedIn, LinearB 2025, Jellyfish 2024, ICONIQ 2024,
-# Cortex CTO Playbook, Charity Majors, Laura Tacho, Rob Zuber/CircleCI.
+# ── ICP Research Context ──────────────────────────────────────────────────────
+# This is campaign-specific and has no safe generic default: a fabricated
+# "target persona" would let the LLM invent plausible-sounding pain points,
+# quotes, and vocabulary that aren't real — exactly what the grounding gate
+# below (guards.grounding_check) exists to catch. So the default explicitly
+# tells the model NOT to invent research when none was supplied, and callers
+# (see /api/campaign/generate-hooks) should pass real ICP research per campaign.
 
-_ICP_RESEARCH = """
-TARGET ICP: CTO or VP Engineering at a YC-backed AI or dev-tool startup.
-Team size: 10–75 engineers. Stage: Seed to Series B. Location: SF Bay Area.
-
-THEIR CORE PAIN (use real quotes as angle inspiration):
-- "Flying blind" — they lose direct line of sight around 15-20 engineers and never get it back
-- "Engineering can feel like a mysterious black box to the CEO/CFO" — ICONIQ board research
-- "Sales has CRMs, finance has ERPs. Why is engineering the only org flying blind?" — Cortex CTO
-- PR review lag is the hidden bottleneck: 39% of cycle time is waiting for review (LinearB 6.1M PRs)
-- 93% of teams use AI tools; only 20% can measure whether they're working (Jellyfish 2025)
-- Board asks "how is engineering performing?" — they have no data-backed answer
-
-TRIGGER EVENTS (when they start looking):
-- Hiring surge after a funding round (team crosses 20-person threshold)
-- Board asks about AI tool ROI and they can't answer with data
-- A competitor ships visibly faster than them
-- PR cycle time blows up after AI adoption
-- New CTO/VP Eng joins and wants a baseline
-
-VOCABULARY THEY USE:
-- "flying blind", "black box", "no visibility", "line of sight disappears"
-- "PR cycle time", "pickup time", "review lag", "code churn"
-- "on the hook for productivity", "justify headcount"
-- "objective measurement", "keep ourselves honest"
-- "another dashboard" (negative — what they DON'T want)
-
-WHAT EARNS TRUST:
-- Specific peer proof: PostHog, Robinhood, Rho, Browserbase, Reducto (companies they know)
-- Team-level framing — NOT individual monitoring (surveillance language = immediate rejection)
-- Short time-to-value, connects to GitHub/Linear, shows data in <1 hour
-- Concrete non-obvious finding ("30% of PRs waiting on same 2 reviewers")
-
-WHAT TO AVOID:
-- Any surveillance/monitoring language
-- Lines-of-code counting
-- "Another dashboard" positioning
-- McKinsey-flavored productivity language
-- Generic DORA metrics as the lead
+_DEFAULT_ICP_RESEARCH = """
+No target-persona research was provided for this campaign. Do not invent
+industry-specific pain points, quotes, statistics, or vocabulary. Ground the
+hook only in the contact's title and the company description given below.
 """
 
-_SYSTEM_PROMPT = f"""You are a senior GTM engineer writing hyper-personalised cold email HOOKS.
+def _build_system_prompt(icp_research: str) -> str:
+    return f"""You are a senior GTM engineer writing hyper-personalised cold email HOOKS.
 A hook is the opening 1-2 sentences only — not a full email. It earns the right to be read.
 
 ICP RESEARCH (ground your angles in this):
-{_ICP_RESEARCH}
+{icp_research}
 
 HOOK RULES (non-negotiable):
 - EXACTLY ONE SENTENCE. Never more. Period.
@@ -89,9 +60,9 @@ HOOK RULES (non-negotiable):
 - Subject line: under 8 words, no question mark, no exclamation mark
 
 EXAMPLES of perfect hooks (one sentence, names the problem, stops):
-  "Greg, most CTOs at your stage can't tell the board if their AI tools are actually paying off."
-  "Ryan, 39% of your cycle time is waiting for review — not writing code."
-  "Adit, your board will ask about AI ROI before Q3 and you won't have the data."
+  "Priya, most operations leads at your stage can't tell finance where the budget is actually leaking."
+  "Marcus, half your team's week goes into a report that's outdated the moment it's shared."
+  "Elena, the compliance deadline lands before your current process can catch up."
 
 OUTPUT FORMAT (return exactly this JSON, nothing else):
 {{
@@ -102,15 +73,10 @@ OUTPUT FORMAT (return exactly this JSON, nothing else):
 }}
 """
 
-_PRODUCT_CONTEXT = """
-PRODUCT BEING PITCHED: Weave (workweave.dev)
-What it is: Engineering analytics tool — "X-ray vision for engineering teams."
-Uses LLMs + domain-specific ML to understand what the engineering team is doing:
-PR throughput, code output, velocity bottlenecks, team health, AI tool ROI.
-Customers: PostHog, Robinhood, Rho, Browserbase, Reducto, 11x, Nooks.
-Key differentiator: connects to GitHub/Linear, shows insights in <1 hour,
-team-level (not individual monitoring), measures AI tool ROI vs human contribution.
-Backed by Y Combinator (W25), $4.2M seed.
+_DEFAULT_PRODUCT_CONTEXT = """
+No product context was provided for this campaign. Reference only that the
+sender has a relevant solution — do not invent a product name, features,
+customers, or funding details.
 """
 
 
@@ -204,7 +170,8 @@ Return only the JSON object."""
 def generate_hook(
     contact: dict[str, Any],
     company_research: dict[str, Any],
-    product_context: str = _PRODUCT_CONTEXT,
+    product_context: str = _DEFAULT_PRODUCT_CONTEXT,
+    icp_research: str = _DEFAULT_ICP_RESEARCH,
     api_key: str | None = None,
     model: str = "claude-haiku-4-5-20251001",
     force_angle: str | None = None,
@@ -216,23 +183,17 @@ def generate_hook(
     Args:
         contact:                dict with first_name, title, company, email, linkedin_url
         company_research:       dict from icp_hunter + company_researcher
-        product_context:        what you're pitching (defaults to Weave)
+        product_context:        what's being pitched — name, positioning, differentiators.
+                                No safe default; pass the real campaign's product or hooks
+                                will explicitly avoid naming one (see _DEFAULT_PRODUCT_CONTEXT).
+        icp_research:           target-persona research — pain points, vocabulary, triggers.
+                                Same reasoning as product_context: no invented default.
         api_key:                Anthropic API key
         model:                  Claude model ID
         force_angle:            Force a specific tension angle
         enforce_bucket_minimum: Contacts below this personalization bucket are
                                 returned as hold-back without calling the API.
                                 Default: 2 (bucket-1 contacts never get a hook).
-    """
-    """
-    Generate one personalised email hook for a contact.
-
-    Args:
-        contact: dict with first_name, title, company, email, linkedin_url
-        company_research: dict from icp_hunter + company_researcher
-        product_context: what you're pitching (defaults to Weave)
-        api_key: Anthropic API key (falls back to ANTHROPIC_API_KEY env var)
-        model: Claude model ID (default: Haiku for speed + cost)
 
     Returns:
         {
@@ -274,7 +235,7 @@ def generate_hook(
         # Gateway: Groq/Gemini/Ollama/Anthropic + cache + budget. task="copy"
         # routes to the smart tier. api_key kept only for backwards compat —
         # gateway resolves providers from env.
-        parsed = llm_gateway.complete_json(user_prompt, system=_SYSTEM_PROMPT,
+        parsed = llm_gateway.complete_json(user_prompt, system=_build_system_prompt(icp_research),
                                            task="copy", max_tokens=400)
         if parsed is None:
             return _error_result(contact, company_research,
@@ -409,7 +370,8 @@ _ANGLE_ROTATION = ["Time", "Risk", "Effort", "Cost", "Identity"]
 def batch_generate(
     contacts: list[dict[str, Any]],
     company_map: dict[str, dict[str, Any]],
-    product_context: str = _PRODUCT_CONTEXT,
+    product_context: str = _DEFAULT_PRODUCT_CONTEXT,
+    icp_research: str = _DEFAULT_ICP_RESEARCH,
     api_key: str | None = None,
     delay: float = 0.3,
 ) -> list[dict[str, Any]]:
@@ -425,7 +387,8 @@ def batch_generate(
         co_name = contact.get("company", "")
         co_research = company_map.get(co_name, {"name": co_name})
         angle = _ANGLE_ROTATION[i % len(_ANGLE_ROTATION)]
-        hook = generate_hook(contact, co_research, product_context, api_key, force_angle=angle)
+        hook = generate_hook(contact, co_research, product_context, icp_research,
+                             api_key=api_key, force_angle=angle)
         results.append(hook)
         if delay:
             time.sleep(delay)

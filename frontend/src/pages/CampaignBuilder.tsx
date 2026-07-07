@@ -111,19 +111,28 @@ export default function CampaignBuilder() {
   const [maxTeam,   setMaxTeam]   = useState(300)
   const [expanded,  setExpanded]  = useState<number | null>(null)
 
+  // ── Campaign setup — no hardcoded product or ICP; every campaign supplies
+  // its own. Blank product/ICP-research fields are handled server-side by
+  // telling the model not to invent one (see hook_generator.py's defaults).
+  const [icpTags,        setIcpTags]        = useState('')
+  const [targetTitles,   setTargetTitles]   = useState('')
+  const [productContext, setProductContext] = useState('')
+  const [icpResearch,    setIcpResearch]    = useState('')
+
   // ── Step 1 — fetch ICP companies ──────────────────────────────────────────
   async function fetchICP() {
     setLoading(true)
     try {
+      const tagsParam = icpTags.trim() ? `&tags=${encodeURIComponent(icpTags.trim())}` : ''
       const r = await fetch(
-        `/api/campaign/icp-companies?min_team=${minTeam}&max_team=${maxTeam}&limit=80`,
+        `/api/campaign/icp-companies?min_team=${minTeam}&max_team=${maxTeam}&limit=80${tagsParam}`,
         { headers: authH() }
       )
       if (!r.ok) throw new Error(`HTTP ${r.status}`)
       const d = await r.json()
       setCompanies((d.companies || []).map((c: YCCompany) => ({ ...c, selected: true })))
       setStep('contacts')
-      toast.success(`Found ${d.count} companies matching Weave's ICP`)
+      toast.success(`Found ${d.count} companies matching your ICP`)
     } catch (e: unknown) {
       toast.error((e as Error).message)
     } finally {
@@ -131,16 +140,17 @@ export default function CampaignBuilder() {
     }
   }
 
-  // ── Step 2 — find CTO contacts ────────────────────────────────────────────
+  // ── Step 2 — find contacts ─────────────────────────────────────────────────
   async function findContacts() {
     const selected = companies.filter(c => c.selected)
     if (!selected.length) { toast.error('Select at least one company'); return }
     setLoading(true)
     try {
+      const titles = targetTitles.split(',').map(t => t.trim()).filter(Boolean)
       const r = await fetch('/api/campaign/find-contacts', {
         method: 'POST',
         headers: { ...authH(), 'Content-Type': 'application/json' },
-        body: JSON.stringify({ companies: selected }),
+        body: JSON.stringify({ companies: selected, ...(titles.length ? { titles } : {}) }),
       })
       if (!r.ok) throw new Error(`HTTP ${r.status}`)
       const d = await r.json()
@@ -164,7 +174,11 @@ export default function CampaignBuilder() {
       const r = await fetch('/api/campaign/generate-hooks', {
         method: 'POST',
         headers: { ...authH(), 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contacts: selected }),
+        body: JSON.stringify({
+          contacts: selected,
+          product_context: productContext,
+          icp_research: icpResearch,
+        }),
       })
       if (!r.ok) {
         const err = await r.json()
@@ -195,10 +209,10 @@ export default function CampaignBuilder() {
       const url  = URL.createObjectURL(blob)
       const a    = document.createElement('a')
       a.href     = url
-      a.download = 'weave_campaign.csv'
+      a.download = 'campaign_export.csv'
       a.click()
       URL.revokeObjectURL(url)
-      toast.success('Downloaded weave_campaign.csv')
+      toast.success('Downloaded campaign_export.csv')
     } catch (e: unknown) {
       toast.error((e as Error).message)
     }
@@ -264,7 +278,7 @@ export default function CampaignBuilder() {
           Campaign Builder
         </h1>
         <p style={{ color: '#64748b', marginTop: 4, margin: '4px 0 0' }}>
-          Find YC AI startups → enrich CTOs → generate personalised hooks → export
+          Find ICP companies → enrich decision-makers → generate personalised hooks → export
         </p>
       </div>
 
@@ -287,44 +301,109 @@ export default function CampaignBuilder() {
         ))}
       </div>
 
-      {/* ── STEP 1: ICP companies ── */}
+      {/* ── STEP 1: campaign setup + ICP companies ── */}
       {step === 'icp' && (
-        <div style={card}>
-          <h2 style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', marginTop: 0 }}>
-            Find companies matching Weave's ICP
-          </h2>
-          <p style={{ color: '#64748b', fontSize: 13, marginBottom: 20 }}>
-            Pulls from the public YC company directory — filters to AI / dev tool startups
-            in recent batches (W22–W26) with team sizes matching Weave's customer profile.
-          </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={card}>
+            <h2 style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', marginTop: 0 }}>
+              Campaign setup
+            </h2>
+            <p style={{ color: '#64748b', fontSize: 13, marginBottom: 16 }}>
+              What you fill in here becomes the hook — leave a field blank and the model is told
+              not to invent one, rather than guessing at a product or persona that isn't real.
+            </p>
 
-          <div style={{ display: 'flex', gap: 16, marginBottom: 20 }}>
-            <div>
+            <div style={{ marginBottom: 14 }}>
               <label style={{ fontSize: 12, fontWeight: 600, color: '#64748b', display: 'block', marginBottom: 4 }}>
-                Min team size
+                What are you pitching?
               </label>
-              <input
-                type="number" value={minTeam}
-                onChange={e => setMinTeam(+e.target.value)}
-                style={{ width: 90, padding: '6px 10px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 13 }}
+              <textarea
+                value={productContext}
+                onChange={e => setProductContext(e.target.value)}
+                placeholder="Product name, one-liner, key differentiators, notable customers, funding — whatever should ground the hook"
+                rows={3}
+                style={{ width: '100%', padding: '8px 10px', border: '1px solid #e2e8f0', borderRadius: 6,
+                  fontSize: 13, fontFamily: 'inherit', resize: 'vertical', boxSizing: 'border-box' }}
               />
             </div>
-            <div>
+
+            <div style={{ marginBottom: 14 }}>
               <label style={{ fontSize: 12, fontWeight: 600, color: '#64748b', display: 'block', marginBottom: 4 }}>
-                Max team size
+                Who's the buyer, and what do they care about? <span style={{ fontWeight: 400, color: '#94a3b8' }}>(optional)</span>
               </label>
-              <input
-                type="number" value={maxTeam}
-                onChange={e => setMaxTeam(+e.target.value)}
-                style={{ width: 90, padding: '6px 10px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 13 }}
+              <textarea
+                value={icpResearch}
+                onChange={e => setIcpResearch(e.target.value)}
+                placeholder="Target persona, their real pain points, vocabulary they use, trigger events — sharpens the angle the hook picks"
+                rows={3}
+                style={{ width: '100%', padding: '8px 10px', border: '1px solid #e2e8f0', borderRadius: 6,
+                  fontSize: 13, fontFamily: 'inherit', resize: 'vertical', boxSizing: 'border-box' }}
               />
+            </div>
+
+            <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+              <div style={{ flex: '1 1 240px' }}>
+                <label style={{ fontSize: 12, fontWeight: 600, color: '#64748b', display: 'block', marginBottom: 4 }}>
+                  Target job titles <span style={{ fontWeight: 400, color: '#94a3b8' }}>(comma-separated, optional)</span>
+                </label>
+                <input
+                  value={targetTitles}
+                  onChange={e => setTargetTitles(e.target.value)}
+                  placeholder="Default: CTO, VP Engineering, Head of Engineering…"
+                  style={{ width: '100%', padding: '6px 10px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' }}
+                />
+              </div>
+              <div style={{ flex: '1 1 240px' }}>
+                <label style={{ fontSize: 12, fontWeight: 600, color: '#64748b', display: 'block', marginBottom: 4 }}>
+                  Company tags <span style={{ fontWeight: 400, color: '#94a3b8' }}>(comma-separated, optional)</span>
+                </label>
+                <input
+                  value={icpTags}
+                  onChange={e => setIcpTags(e.target.value)}
+                  placeholder="Default: ai, developer-tools, infrastructure…"
+                  style={{ width: '100%', padding: '6px 10px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' }}
+                />
+              </div>
             </div>
           </div>
 
-          <button onClick={fetchICP} disabled={loading} style={btn('#3b82f6')}>
-            <Search size={14} />
-            {loading ? 'Fetching...' : 'Fetch ICP Companies from YC Directory'}
-          </button>
+          <div style={card}>
+            <h2 style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', marginTop: 0 }}>
+              Find companies matching your ICP
+            </h2>
+            <p style={{ color: '#64748b', fontSize: 13, marginBottom: 20 }}>
+              Pulls from the public YC company directory — filters to the tags above (or the AI /
+              dev-tool default) in recent batches, within this team-size range.
+            </p>
+
+            <div style={{ display: 'flex', gap: 16, marginBottom: 20 }}>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, color: '#64748b', display: 'block', marginBottom: 4 }}>
+                  Min team size
+                </label>
+                <input
+                  type="number" value={minTeam}
+                  onChange={e => setMinTeam(+e.target.value)}
+                  style={{ width: 90, padding: '6px 10px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 13 }}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, color: '#64748b', display: 'block', marginBottom: 4 }}>
+                  Max team size
+                </label>
+                <input
+                  type="number" value={maxTeam}
+                  onChange={e => setMaxTeam(+e.target.value)}
+                  style={{ width: 90, padding: '6px 10px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 13 }}
+                />
+              </div>
+            </div>
+
+            <button onClick={fetchICP} disabled={loading} style={btn('#3b82f6')}>
+              <Search size={14} />
+              {loading ? 'Fetching...' : 'Fetch ICP Companies from YC Directory'}
+            </button>
+          </div>
         </div>
       )}
 
