@@ -87,7 +87,7 @@
           "title": "Chief Information Officer",
           "persona": "technical_buyer",
           "email": "bspina@bowheadspecialty.com",
-          "linkedin": null,
+          "linkedin": "linkedin.com/in/robert-spina",
           "evidence": "email pattern-derived: {first-initial}{last}@bowheadspecialty.com, confirmed from ssills@/sfeltner@"
         },
         {
@@ -159,7 +159,7 @@
           "title": "Chief Executive Officer",
           "persona": "economic_buyer",
           "email": "tjohnson@healthintech.com",
-          "linkedin": null,
+          "linkedin": "linkedin.com/in/tim-johnson-b2814812",
           "evidence": "email pattern-derived: {first-initial}{last}@healthintech.com, confirmed from zhasan@healthintech.com"
         },
         {
@@ -303,7 +303,7 @@
           "title": "President & Chief Technology Officer",
           "persona": "technical_buyer",
           "email": "matt@joinroot.com",
-          "linkedin": null,
+          "linkedin": "linkedin.com/in/matt-bonakdarpour",
           "evidence": "official company LinkedIn announcement post (Feb 2024); email predicted from validated joinroot.com pattern (198 samples)"
         }
       ]
@@ -327,7 +327,7 @@
           "title": "Chief Accounting Officer",
           "persona": "economic_buyer",
           "email": "lindsay.alexovich@metromile.com",
-          "linkedin": null,
+          "linkedin": "linkedin.com/in/lindsay-alexovich-24079b8",
           "evidence": "unverified \u2014 no confirmed email sample exists for this domain; format guessed for display"
         },
         {
