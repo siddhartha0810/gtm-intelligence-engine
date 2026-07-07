@@ -61,17 +61,22 @@ Hooks are grounded in real ICP research: LinearB (6.1M PR dataset), ICONIQ board
 ## Running on macOS (this machine)
 
 ```bash
-# Activate venv
-source "/Users/sid/Desktop/DATA TOOL/venv/bin/activate"
-
-# Start unified backend (launches both engines + serves frontend)
-cd "/Users/sid/Desktop/DATA TOOL"
-python unified_app.py
+# One command, one process, one port — builds the frontend and serves it
+# from the same FastAPI process on :8000. This is the mac equivalent of the
+# old start.bat and is the preferred way to run the app: there's no separate
+# dev server to fall out of sync with the backend.
+./start.sh
 # → http://localhost:8000
+```
 
-# OR in dev mode (hot reload frontend separately)
+Dev mode (hot-reload frontend on its own port, if you're actively editing
+frontend code) still works, but remember BOTH processes need to be running —
+if the backend dies, the frontend will still answer and every API call will
+fail with a cryptic `Unexpected end of JSON input` instead of a clear error:
+
+```bash
 # Terminal 1
-python unified_app.py
+.venv/bin/python -m uvicorn unified_app:app --host 0.0.0.0 --port 8000
 
 # Terminal 2
 cd "/Users/sid/Desktop/DATA TOOL/frontend"
@@ -79,14 +84,13 @@ npm run dev
 # → http://localhost:5173
 ```
 
-> The CLAUDE.md below was originally written for Windows (`venv\Scripts\activate`). On this Mac, always use `venv/bin/activate`.
+> The CLAUDE.md below was originally written for Windows (`venv\Scripts\activate`). On this Mac, the working venv is `.venv/bin/activate` — the `venv/` folder in this repo is a stale Windows-layout copy (`Scripts/`, not `bin/`) and won't run here.
 
 ## PostgreSQL quick check
 ```bash
-source "/Users/sid/Desktop/DATA TOOL/venv/bin/activate"
-python -c "import psycopg2; c = psycopg2.connect('host=10.0.0.149 port=5432 dbname=oracle_intent user=postgres'); print('DB OK'); c.close()"
+.venv/bin/python -c "import psycopg2; c = psycopg2.connect('host=127.0.0.1 port=5432 dbname=oracle_intent user=postgres password=postgres'); print('DB OK'); c.close()"
 ```
-If this fails: you need to be on the office network or VPN — the DB is at `10.0.0.149`.
+This machine runs Postgres locally (`oracle_intent_engine/.env` has `DB_HOST=127.0.0.1`), not against the office DB at `10.0.0.149`. If you're pointed at the office DB instead, you need to be on the office network or VPN.
 
 ---
 

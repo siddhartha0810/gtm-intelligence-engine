@@ -219,7 +219,7 @@ export default function DecisionIntelligence() {
         setData(d)
         if (d.prospects?.length) setSelected(d.prospects[0].name)
       })
-      .catch(e => { setError(e.message); toast('Could not load decision intelligence', 'error') })
+      .catch(e => { setError(e.message); toast.error('Could not load decision intelligence') })
       .finally(() => setLoading(false))
   }, [])
 
