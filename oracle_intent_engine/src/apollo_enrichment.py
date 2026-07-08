@@ -349,6 +349,18 @@ _RELEVANCE_KEYWORDS = [
 DEFAULT_ROLE_FILTERS = DEFAULT_ROLE_TITLES
 
 # ── Live status (read by enrichment_worker's status thread) ─────────────────
+# current_stage cycles per company (this loop is sequential-per-company, not
+# batch-per-stage like the Signal Engine) — it points at whichever of these
+# is active for the company currently being processed, not a permanent
+# completion flag. See EngineControl.tsx's Lead Enrichment workflow view.
+ENRICH_STAGE_DEFS: list[tuple[str, str]] = [
+    ("domain",   "Resolve missing company domain"),
+    ("discover", "Find contacts (contacts_master → Apollo/ZoomInfo)"),
+    ("validate", "Validate emails via ZeroBounce"),
+    ("predict",  "Predict missing emails + validate"),
+    ("score",    "Score readiness & save contacts"),
+]
+
 _status: dict = {
     "status": "idle",
     "progress": "",
@@ -356,6 +368,7 @@ _status: dict = {
     "companies_total": 0,
     "contacts_found": 0,
     "contacts_validated": 0,
+    "current_stage": None,
 }
 
 
@@ -834,6 +847,7 @@ def enrich_companies(
         "companies_total": 0,
         "contacts_found": 0,
         "contacts_validated": 0,
+        "current_stage": None,
     })
 
     if provider == "zoominfo":
@@ -898,6 +912,7 @@ def enrich_companies(
 
         # Stage 2 — domain resolution for companies the scan couldn't resolve.
         # A domain is needed for Stage 5 email prediction to work.
+        _status["current_stage"] = "domain"
         if not company.get("domain"):
             try:
                 resolved = domain_enricher.lookup_domain(name)
@@ -909,6 +924,7 @@ def enrich_companies(
                 logger.warning(f"Domain resolution failed for {name}: {e}")
 
         # Stage 3a — check contacts_master first (Salesforce export — no API cost)
+        _status["current_stage"] = "discover"
         master_rows = db.get_master_leads_by_company(name)
         if master_rows:
             to_save = master_rows_to_contacts(master_rows)
@@ -950,6 +966,7 @@ def enrich_companies(
         # Stage 4: Validate Apollo emails in batch via ZeroBounce
         # Only VALID emails are kept — catch-all is cleared so the prediction engine
         # can attempt to find a confirmed-valid email for those contacts instead.
+        _status["current_stage"] = "validate"
         emails_to_validate = [c["email"] for c in contacts if c.get("email")]
         if emails_to_validate and zerobounce_key:
             log(f"  ~ validating {len(emails_to_validate)} email(s)...")
@@ -986,6 +1003,7 @@ def enrich_companies(
         # Stage 5+6: Email prediction for contacts Apollo couldn't supply an email for.
         # Also picks up existing DB contacts for this company that still have no email
         # (e.g. from a previous Apollo run that returned LinkedIn-only results).
+        _status["current_stage"] = "predict"
         company_domain = (company.get("domain") or "").strip().lower()
 
         # Merge existing no-email DB contacts into the prediction batch
@@ -1089,6 +1107,7 @@ def enrich_companies(
                 "add ZeroBounce key to enable prediction")
 
         # Stage 7 — score readiness + tag the Oracle product to pitch, then save
+        _status["current_stage"] = "score"
         contacts = _score_contacts(contacts, target_product)
         db.save_contacts(company_id, contacts)
         total_contacts += len(contacts)
@@ -1109,4 +1128,5 @@ def enrich_companies(
         f"{total_validated} valid emails")
     _status["status"]   = "completed"
     _status["progress"] = f"Done — {total_contacts} contacts, {total_validated} valid emails"
+    _status["current_stage"] = None
     return current_status()

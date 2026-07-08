@@ -133,6 +133,7 @@ def main() -> None:
             "companies_total": 0,
             "contacts_found": 0,
             "contacts_validated": 0,
+            "current_stage": None,
         }),
         encoding="utf-8",
     )

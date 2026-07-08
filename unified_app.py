@@ -503,6 +503,7 @@ _ENRICH_IDLE = {
     "status": "idle", "progress": "",
     "companies_processed": 0, "companies_total": 0,
     "contacts_found": 0, "contacts_validated": 0,
+    "current_stage": None,
 }
 
 def _enrich_current_status() -> dict:
@@ -549,12 +550,7 @@ def _start_enrich_subprocess(
         elif _enrich_proc is not None and _enrich_proc.poll() is None:
             return False  # already running
 
-        _ENRICH_STATUS_FILE.write_text(
-            json.dumps({
-                "status": "running", "progress": "Starting...",
-                "companies_processed": 0, "companies_total": 0,
-                "contacts_found": 0, "contacts_validated": 0,
-            }),
+        _ENRICH_STATUS_FILE.write_text(json.dumps(_ENRICH_IDLE | {"status": "running", "progress": "Starting..."}),
             encoding="utf-8",
         )
         _ENRICH_LOG_FILE.write_text("", encoding="utf-8")

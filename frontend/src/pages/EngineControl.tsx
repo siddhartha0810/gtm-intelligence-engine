@@ -138,6 +138,20 @@ const PIPELINE_STAGES: { id: string; label: string }[] = [
 ]
 type StageStatus = 'pending' | 'running' | 'done' | 'error'
 
+// Mirrors ENRICH_STAGE_DEFS in oracle_intent_engine/src/apollo_enrichment.py.
+// Unlike the Signal Engine's stages, this loop runs per-company (all 5 stages
+// for company 1, then all 5 for company 2, ...) rather than stage-by-stage
+// across every company at once — so "current_stage" is a live pointer to
+// where the company being processed right now is, not a one-time completion
+// flag. See the workflow panel below for how that's presented honestly.
+const ENRICH_PIPELINE_STAGES: { id: string; label: string }[] = [
+  { id: 'domain',   label: 'Resolve missing company domain' },
+  { id: 'discover', label: 'Find contacts (contacts_master → Apollo/ZoomInfo)' },
+  { id: 'validate', label: 'Validate emails via ZeroBounce' },
+  { id: 'predict',  label: 'Predict missing emails + validate' },
+  { id: 'score',    label: 'Score readiness & save contacts' },
+]
+
 const card = { background:'#ffffff', border:'1px solid #e2e8f0', borderRadius:12, padding:20, boxShadow:'0 1px 3px rgba(0,0,0,0.06)' }
 const now  = () => new Date().toLocaleTimeString('en-GB', { hour12: false })
 const levelColor = (l: string) =>
@@ -169,6 +183,7 @@ interface EnrichStatus {
   status?: string; progress?: string;
   companies_processed?: number; companies_total?: number;
   contacts_found?: number; contacts_validated?: number;
+  current_stage?: string | null;
 }
 
 // ── Pre-flight modal ──────────────────────────────────────────────────────────
@@ -1003,6 +1018,7 @@ export default function EngineControl() {
   const [verticalIndustryFilter, setVerticalIndustryFilter] = useState(DEFAULT_VERTICAL_INDUSTRY_FILTER)
   const [stages, setStages] = useState<Record<string, StageStatus>>({})
   const [workflowOpen, setWorkflowOpen] = useState(false)
+  const [enrichWorkflowOpen, setEnrichWorkflowOpen] = useState(false)
   const [enrichLimit,     setEnrichLimit]     = useState(50)
   const [enrichPerCo,     setEnrichPerCo]     = useState(10)
   const [batchSize,       setBatchSize]       = useState(0)
@@ -1452,6 +1468,15 @@ export default function EngineControl() {
                         {workflowOpen ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
                       </button>
                     )}
+                    {isEnrichment && (
+                      <button onClick={() => setEnrichWorkflowOpen(v => !v)}
+                        title="Show the pipeline workflow"
+                        style={{ border:'none', background:'none', cursor:'pointer', color:'#94a3b8',
+                          display:'flex', alignItems:'center', padding:2 }}>
+                        <Workflow size={13} />
+                        {enrichWorkflowOpen ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+                      </button>
+                    )}
                   </div>
                   <div style={{ fontSize:12, color:'#64748b', marginTop:4, lineHeight:1.5 }}>{engine.desc}</div>
                 </div>
@@ -1562,6 +1587,47 @@ export default function EngineControl() {
             @media (prefers-reduced-motion: reduce){.wf-spin{animation:none}}`}</style>
         </div>
       )}
+
+      {/* Lead Enrichment workflow — this loop runs per company (all 5 stages for
+          company 1, then all 5 for company 2, ...), not stage-by-stage across every
+          company like the Signal Engine — so this shows where the CURRENT company
+          is in the cycle, not a one-time completion checklist. */}
+      {enrichWorkflowOpen && (() => {
+        const currentIdx = ENRICH_PIPELINE_STAGES.findIndex(s => s.id === enrichStatus.current_stage)
+        return (
+          <div style={{ ...card, marginTop:16 }}>
+            <div style={{ fontSize:13, fontWeight:600, color:'#0f172a', marginBottom:4 }}>Lead Enrichment workflow</div>
+            <div style={{ fontSize:12, color:'#64748b', marginBottom:14 }}>
+              {enrichState === 'running'
+                ? `Live — company ${enrichStatus.companies_processed ?? 0}/${enrichStatus.companies_total ?? '?'} · runs these 5 stages once per company, in order.`
+                : 'What each company runs through, in order. Run enrichment to watch it cycle live.'}
+            </div>
+            <div style={{ display:'flex', flexDirection:'column', gap:2 }}>
+              {ENRICH_PIPELINE_STAGES.map((stage, i) => {
+                const status: StageStatus =
+                  enrichState !== 'running' || currentIdx < 0 ? 'pending' :
+                  i < currentIdx  ? 'done' :
+                  i === currentIdx ? 'running' : 'pending'
+                const icon =
+                  status === 'done'    ? <CheckCircle size={16} color="#a7f3d0" /> :
+                  status === 'running' ? <Loader2 size={16} color="#6366f1" className="wf-spin" /> :
+                                          <Circle size={14} color="#cbd5e1" />
+                return (
+                  <div key={stage.id} style={{ display:'flex', alignItems:'center', gap:12, padding:'8px 10px',
+                    borderRadius:8, background: status === 'running' ? 'rgba(99,102,241,0.06)' : 'transparent' }}>
+                    <span style={{ fontSize:11, fontFamily:'ui-monospace, monospace', color:'#cbd5e1', width:16, textAlign:'right' }}>{i + 1}</span>
+                    {icon}
+                    <span style={{ fontSize:13, color: status === 'pending' ? '#94a3b8' : '#0f172a',
+                      fontWeight: status === 'running' ? 600 : 400, flex:1 }}>
+                      {stage.label}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )
+      })()}
 
       {/* Enrichment complete — point the user at the results */}
       {enrichDone && enrichState === 'idle' && (
