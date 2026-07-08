@@ -315,6 +315,7 @@ _scan_proc_lock   = threading.Lock()
 _IDLE_STATUS = {
     "status": "idle", "progress": "",
     "run_id": None, "raw_signals": 0, "companies_found": 0,
+    "stages": {},
 }
 
 def _scan_current_status() -> dict:
@@ -392,7 +393,8 @@ def _watch_queued_scan_then_enrich(enrich_params: dict) -> None:
         logger.warning("Queued auto-enrich watcher failed", exc_info=True)
 
 def _start_scan_subprocess(sources: list, location: str, max_pages: int,
-                           jde_manufacturing: bool = False,
+                           job_queries: Optional[list] = None,
+                           industry_filter: Optional[str] = None,
                            auto_enrich: bool = False,
                            enrich_params: Optional[dict] = None) -> bool:
     """Runs scan_worker.py — via the RQ queue if REDIS_URL is configured
@@ -410,11 +412,7 @@ def _start_scan_subprocess(sources: list, location: str, max_pages: int,
             return False  # already running
 
         # Seed status + clear log before spawning so reads never see stale data
-        _SCAN_STATUS_FILE.write_text(
-            json.dumps({
-                "status": "running", "progress": "Starting...",
-                "run_id": None, "raw_signals": 0, "companies_found": 0,
-            }),
+        _SCAN_STATUS_FILE.write_text(json.dumps(_IDLE_STATUS | {"status": "running", "progress": "Starting..."}),
             encoding="utf-8",
         )
         _SCAN_LOG_FILE.write_text("", encoding="utf-8")
@@ -430,8 +428,10 @@ def _start_scan_subprocess(sources: list, location: str, max_pages: int,
             cmd += ["--sources"] + list(sources)
         if location:
             cmd += ["--location", location]
-        if jde_manufacturing:
-            cmd += ["--jde-manufacturing"]
+        if job_queries:
+            cmd += ["--job-queries"] + list(job_queries)
+        if industry_filter:
+            cmd += ["--industry-filter", industry_filter]
 
         if use_queue:
             job_queue.enqueue("scan", cmd, str(BASE_DIR), os.environ.copy())
@@ -746,7 +746,12 @@ async def start_scan(request: Request, current_user: dict = Depends(oracle_auth.
     sources             = data.get("sources",   ["linkedin", "oracle_website", "news", "erp_today", "partner_casestudy", "si_casestudy", "oracle_community", "oracle_event", "home_builders"])
     location            = data.get("location",  "")
     max_pages           = int(data.get("max_pages", oracle_cfg.MAX_PAGES))
-    jde_manufacturing   = bool(data.get("jde_manufacturing", False))
+    # job_queries/industry_filter let a caller fully replace the default search
+    # queries (e.g. a vertical-focus preset) — see EngineControl's "Industry
+    # Vertical Focus" panel. Neither is Oracle/JDE-specific; that's just today's
+    # default preset the frontend pre-fills.
+    job_queries         = data.get("job_queries") or None
+    industry_filter     = data.get("industry_filter") or None
     auto_enrich         = bool(data.get("auto_enrich", False))
     enrich_params = {
         "limit":           int(data.get("enrich_limit", 50)),
@@ -755,12 +760,11 @@ async def start_scan(request: Request, current_user: dict = Depends(oracle_auth.
     }
 
     started = _start_scan_subprocess(sources=sources, location=location, max_pages=max_pages,
-                                     jde_manufacturing=jde_manufacturing,
+                                     job_queries=job_queries, industry_filter=industry_filter,
                                      auto_enrich=auto_enrich, enrich_params=enrich_params)
     if not started:
         return JSONResponse({"error": "Scan already running."}, status_code=409)
-    return {"message": "Scan started.", "sources": sources,
-            "jde_manufacturing": jde_manufacturing, "auto_enrich": auto_enrich}
+    return {"message": "Scan started.", "sources": sources, "auto_enrich": auto_enrich}
 
 @app.get("/scan/status")
 async def scan_status(current_user: dict = Depends(oracle_auth.require_user)):

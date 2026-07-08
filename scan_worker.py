@@ -102,8 +102,10 @@ def main() -> None:
                         help="Path to JSON file for live status updates")
     parser.add_argument("--log-file",         required=True,
                         help="Path to text file for log lines")
-    parser.add_argument("--jde-manufacturing", action="store_true",
-                        help="Use JDE manufacturing-focused queries + LinkedIn industry filter")
+    parser.add_argument("--job-queries",      nargs="+", default=None,
+                        help="Custom job-search queries — replaces the tech_profiles default entirely")
+    parser.add_argument("--industry-filter",  default=None,
+                        help="LinkedIn industry-code filter, e.g. '96,4,80,22,10,74,57'")
     args = parser.parse_args()
 
     status_path = Path(args.status_file)
@@ -115,6 +117,7 @@ def main() -> None:
         json.dumps({
             "status": "running", "progress": "Starting...",
             "run_id": None, "raw_signals": 0, "companies_found": 0,
+            "stages": {sid: "pending" for sid, _ in pipeline.STAGE_DEFS},
         }),
         encoding="utf-8",
     )
@@ -142,7 +145,8 @@ def main() -> None:
         sources=args.sources,
         max_pages=args.max_pages,
         location=args.location,
-        jde_manufacturing_focus=args.jde_manufacturing,
+        job_queries=args.job_queries,
+        industry_filter=args.industry_filter,
     )
 
     # Flush final status

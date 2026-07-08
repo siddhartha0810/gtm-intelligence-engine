@@ -45,12 +45,28 @@ _scan_lock = threading.Lock()
 _stop_requested = False
 _log_buffer: deque = deque(maxlen=200)
 
+# Ordered, high-level pipeline stages — surfaced to the frontend as a live
+# checklist (see /scan/status "stages" field) rather than the ~15 individual
+# per-source scrapers, which would be too granular to read as a workflow.
+STAGE_DEFS: list[tuple[str, str]] = [
+    ("fetch",         "Fetch signals from sources"),
+    ("filter",        "Filter staffing agencies"),
+    ("classify",       "Classify product + buying phase"),
+    ("aggregate",      "Aggregate signals by company"),
+    ("firmographics",  "Enrich company size & industry"),
+    ("domains",        "Enrich company domains"),
+    ("persist",        "Save companies & signals"),
+    ("contacts",        "Match existing contacts (free)"),
+    ("export",          "Export CSV & Excel"),
+]
+
 _current_scan: dict = {
     "status": "idle",
     "progress": "",
     "run_id": None,
     "raw_signals": 0,
     "companies_found": 0,
+    "stages": {},
 }
 
 def current_status() -> dict:
@@ -73,6 +89,10 @@ def _log(message: str):
 def _is_stopped() -> bool:
     return _stop_requested
 
+def _stage(stage_id: str, status: str) -> None:
+    """status: 'running' | 'done' | 'error'. See STAGE_DEFS for the fixed order."""
+    _current_scan.setdefault("stages", {})[stage_id] = status
+
 def run_scan(
     job_queries: list[str] = None,
     news_queries: list[str] = None,
@@ -80,9 +100,15 @@ def run_scan(
     max_pages: int = None,
     sources: list[str] = None,
     jde_manufacturing_focus: bool = False,
+    industry_filter: str | None = None,
     campaign_id: int | None = None,
     campaign_keywords: list[str] | None = None,
 ) -> dict:
+    """
+    industry_filter: LinkedIn industry-code filter (e.g. "96,4,80,22,10,74,57"
+    for manufacturing) — independent of jde_manufacturing_focus so any custom
+    job_queries list can also carry its own vertical/industry targeting.
+    """
     global _stop_requested
 
     if not _scan_lock.acquire(blocking=False):
@@ -117,11 +143,14 @@ def run_scan(
             "progress": "Starting...",
             "raw_signals": 0,
             "companies_found": 0,
+            "stages": {sid: "pending" for sid, _ in STAGE_DEFS},
         })
 
         focus_label = " [JDE MANUFACTURING FOCUS]" if jde_manufacturing_focus else ""
         _log(f"Scan started{focus_label} — sources: {', '.join(sources)}")
         _log(f"Queries: {len(job_queries)} job queries, {len(news_queries)} news queries")
+
+        _stage("fetch", "running")
 
         scrapers = {
             "indeed":           IndeedSignal(),
@@ -155,16 +184,17 @@ def run_scan(
                 break
             scraper = scrapers[source_name]
             _current_scan["progress"] = f"Scanning {source_name}..."
-            industry_label = " [manufacturing filter]" if jde_manufacturing_focus and source_name == "linkedin" else ""
+            effective_industry_filter = industry_filter or (LINKEDIN_MANUFACTURING_INDUSTRIES if jde_manufacturing_focus else None)
+            industry_label = " [industry filter]" if effective_industry_filter and source_name == "linkedin" else ""
             _log(f"▶ Starting {source_name.upper()}{industry_label} ({len(job_queries)} queries)")
 
             for i, query in enumerate(job_queries, 1):
                 if _is_stopped():
                     break
                 try:
-                    if source_name == "linkedin" and jde_manufacturing_focus:
+                    if source_name == "linkedin" and effective_industry_filter:
                         results = scraper.fetch(query, location=location, max_pages=max_pages,
-                                                industry_filter=LINKEDIN_MANUFACTURING_INDUSTRIES)
+                                                industry_filter=effective_industry_filter)
                     else:
                         results = scraper.fetch(query, location=location, max_pages=max_pages)
                     raw_signals.extend(results)
@@ -364,16 +394,20 @@ def run_scan(
             _log(f"⛔ Scan stopped by user — {len(raw_signals)} signals collected before stop")
 
         _log(f"─── Total raw signals collected: {len(raw_signals)} ───")
+        _stage("fetch", "done")
 
         # smart staffing filter
         # staffing filter: drop pure agencies, extract end clients from SI/contractor signals
+        _stage("filter", "running")
         raw_signals, removed = staffing_filter.filter_signals(raw_signals)
         if removed:
             _log(f"▶ Staffing filter removed {removed} signals (pure staffing / unresolved SI)")
         _log(f"─── Signals after filter: {len(raw_signals)} ───")
+        _stage("filter", "done")
 
         _current_scan["progress"] = f"Classifying {len(raw_signals)} signals..."
         _log(f"▶ Classifying signals (Oracle product + phase detection)...")
+        _stage("classify", "running")
 
         # classify
         classified: list[dict] = []
@@ -413,17 +447,21 @@ def run_scan(
         if dropped:
             _log(f"  Dropped {dropped} unclassified signals (no specific Oracle product detected)")
         _log(f"✓ Classification done — {len(classified)} signals with identified products")
+        _stage("classify", "done")
 
         # aggregate
         _current_scan["progress"] = "Aggregating by company..."
         _log("▶ Aggregating signals by company...")
+        _stage("aggregate", "running")
         companies = agg.aggregate(classified)
         _current_scan["companies_found"] = len(companies)
         _log(f"✓ Aggregation done — {len(companies)} unique companies detected")
+        _stage("aggregate", "done")
 
         # firmographics enrichment (wikidata — free, no key)
         _current_scan["progress"] = "Enriching company firmographics..."
         _log("▶ Enriching company sizes via Wikidata (parallel)...")
+        _stage("firmographics", "running")
         needs_firmographics = [c for c in companies if not c.get("size")]
 
         def _enrich_firmographics(company):
@@ -443,10 +481,12 @@ def run_scan(
 
         enriched_count = sum(1 for c in companies if c.get("size"))
         _log(f"✓ Firmographics done — {enriched_count} companies enriched")
+        _stage("firmographics", "done")
 
         # domain enrichment (wikidata p856 + duckduckgo, free, no key)
         _current_scan["progress"] = "Enriching company domains..."
         _log("▶ Enriching company domains (Wikidata + DuckDuckGo, parallel)...")
+        _stage("domains", "running")
         needs_domain = [c for c in companies if not c.get("domain")]
 
         def _enrich_domain(company):
@@ -464,6 +504,7 @@ def run_scan(
 
         domain_count = sum(1 for c in companies if c.get("domain"))
         _log(f"✓ Domain enrichment done — {domain_count} domains found")
+        _stage("domains", "done")
 
         from collections import Counter
         phase_counts = Counter(c["phase"] for c in companies)
@@ -474,6 +515,7 @@ def run_scan(
         # persist
         _current_scan["progress"] = "Saving to database..."
         _log("▶ Saving to database...")
+        _stage("persist", "running")
         new_count, known_count = _persist(companies, run_id=run_id)
         _log(f"✓ Database save complete — {new_count} NEW leads, {known_count} already known (skipped)")
 
@@ -485,12 +527,8 @@ def run_scan(
                 _log(f"✓ Target product set for {filled} companies from their signals")
         except Exception as e:
             _log(f"  [target_product] Warning: {e}")
+        _stage("persist", "done")
 
-        # contacts_master pre-check (FREE — runs before any paid enrichment):
-        # every scanned company is checked against the Salesforce export first.
-        # Matches get their contacts saved immediately, so those companies are
-        # already satisfied and never appear in the paid-enrichment queue.
-        # Companies that already have contacts in the DB are skipped entirely.
         # contacts_master pre-check (FREE — runs before any paid enrichment):
         # every scanned company is checked against the Salesforce export first.
         # Matches get their contacts saved immediately, so those companies are
@@ -498,6 +536,7 @@ def run_scan(
         # Companies that already have contacts in the DB are skipped entirely.
         _current_scan["progress"] = "Checking contacts_master for known contacts..."
         _log("▶ Checking scanned companies against contacts_master (no credits used)...")
+        _stage("contacts", "running")
         master_companies = master_contacts = 0
         from src.apollo_enrichment import master_rows_to_contacts, _score_contacts
         for company in companies:
@@ -544,6 +583,7 @@ def run_scan(
                 except Exception as e:
                     _log(f"  [csv_contacts] Error for {company['company_name']}: {e}")
             _log(f"✓ CSV contacts matched — {matched_contacts} contacts across {matched_companies} companies")
+        _stage("contacts", "done")
 
         # purge invalid company names from db (catches any that slipped through)
         _current_scan["progress"] = "Cleaning invalid company names..."
@@ -557,9 +597,11 @@ def run_scan(
         # export
         _current_scan["progress"] = "Exporting CSV and Excel..."
         _log("▶ Exporting CSV and Excel...")
+        _stage("export", "running")
         csv_path = exporter.export_csv(companies)
         xlsx_path = exporter.export_excel(companies)
         _log(f"✓ Export complete")
+        _stage("export", "done")
 
         status = "stopped" if _is_stopped() else "completed"
         db.finish_scan_run(run_id, len(classified), new_count, status=status)
@@ -600,6 +642,12 @@ def run_scan(
         _log(f"✗ Pipeline error: {e}")
         if _current_scan.get("run_id"):
             db.finish_scan_run(_current_scan["run_id"], 0, 0, status="failed")
+        # Whichever stage was mid-flight when this fired should show as errored,
+        # not stuck on "running" forever in the frontend's checklist.
+        stages = _current_scan.get("stages", {})
+        for sid, sstatus in stages.items():
+            if sstatus == "running":
+                stages[sid] = "error"
         _current_scan.update({"status": "idle", "progress": f"Failed: {e}"})
         _metrics.scan_in_progress.set(0)
         return {"error": str(e)}

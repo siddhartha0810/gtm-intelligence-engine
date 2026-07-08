@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Play, Square, RotateCcw, Download, Trash2, Factory, Users, CheckCircle,
-         Mail, X, ChevronRight, Zap, Clock, CreditCard, Building2, Database,
-         Globe, BarChart2 } from 'lucide-react'
+         Mail, X, ChevronRight, ChevronDown, Zap, Clock, CreditCard, Building2, Database,
+         Globe, BarChart2, Loader2, XCircle, Circle, Workflow } from 'lucide-react'
 import { toast } from '../components/Toast'
 
 const authH = (): Record<string, string> => ({
@@ -65,28 +65,78 @@ const ENGINES = [
 // Sources are split into active (proven signal generators) and experimental (0 signals to date).
 // Experimental sources are hidden by default but can be expanded if needed.
 const ACTIVE_SOURCES = [
-  { id: 'ats',            label: 'ATS Boards',       desc: 'Greenhouse/Lever/Ashby/SmartRecruiters — first-party open job JSON, ~0% block rate, highest signal (company hiring a "NetSuite Admin" = confirmed customer)' },
-  { id: 'linkedin',       label: 'LinkedIn Jobs',    desc: '787 signals · 664 companies — primary signal source (ALL Oracle products)' },
-  { id: 'oracle_website', label: 'Oracle.com',       desc: '95 signals · 94 companies — customer stories + press releases' },
+  { id: 'ats',            label: 'ATS Boards',       desc: 'Greenhouse/Lever/Ashby/SmartRecruiters — first-party open job JSON, ~0% block rate, highest signal (company hiring a target-product admin role = confirmed customer)' },
+  { id: 'linkedin',       label: 'LinkedIn Jobs',    desc: '787 signals · 664 companies — primary signal source' },
+  { id: 'oracle_website', label: 'Vendor Site (Oracle.com)', desc: '95 signals · 94 companies — customer stories + press releases' },
   { id: 'erp_today',      label: 'ERP News (Multi)', desc: 'ERP Today + Diginomica + Bing RSS — EBS, PeopleSoft, Siebel, Hyperion, JDE go-lives' },
-  { id: 'news',           label: 'Oracle News',      desc: 'Bing RSS — go-live announcements for ALL Oracle products' },
-  { id: 'g2_reviews',     label: 'G2 / Capterra',   desc: 'Software review sites — confirms active Oracle deployments (post_live signals)' },
+  { id: 'news',           label: 'Vendor News (Bing RSS)', desc: 'Go-live announcements across all tracked products' },
+  { id: 'g2_reviews',     label: 'G2 / Capterra',   desc: 'Software review sites — confirms active deployments (post_live signals)' },
 ]
 
 const EXPERIMENTAL_SOURCES = [
-  { id: 'partner_casestudy', label: 'Partner Stories',        desc: 'Oracle Gold/Platinum SI case studies' },
+  { id: 'partner_casestudy', label: 'Partner Stories',        desc: 'Gold/Platinum SI partner case studies' },
   { id: 'si_casestudy',      label: 'SI Case Studies',        desc: 'Accenture, Deloitte, PwC, KPMG client names' },
-  { id: 'oracle_community',  label: 'Oracle Community',       desc: 'Migration stories + oracle.com news' },
-  { id: 'oracle_event',      label: 'Oracle Events',          desc: 'CloudWorld / OpenWorld attendance signals' },
-  { id: 'home_builders',     label: 'Home Builders',          desc: 'JDE construction signals (1,000+ closing builders)' },
+  { id: 'oracle_community',  label: 'Vendor Community (Oracle)', desc: 'Migration stories + vendor site news' },
+  { id: 'oracle_event',      label: 'Vendor Events (Oracle)', desc: 'CloudWorld / OpenWorld attendance signals' },
+  { id: 'home_builders',     label: 'Home Builders',          desc: 'Construction-vertical signals (1,000+ closing builders)' },
   { id: 'company_pages',     label: 'Company Press Releases', desc: 'Company IR pages + announcements' },
   { id: 'procurement',       label: 'Procurement Tenders',    desc: 'Contracts Finder (UK) + USASpending.gov + Bing procurement RSS' },
-  { id: 'sec_filing',        label: 'SEC Filings (EDGAR)',    desc: 'Free EDGAR search — 10-K/10-Q/8-K filings mentioning Oracle, EBS, PeopleSoft' },
+  { id: 'sec_filing',        label: 'SEC Filings (EDGAR)',    desc: 'Free EDGAR search — 10-K/10-Q/8-K filings mentioning tracked ERP products' },
   { id: 'indeed',            label: 'Indeed',                 desc: 'Job postings — limited by bot detection' },
   { id: 'agentic_harvester', label: 'Agentic Harvester',      desc: 'LLM-driven extraction from watch-list URLs — no per-site parser needed, add URLs in config' },
 ]
 
 const DEFAULT_SOURCES = ['ats', 'linkedin', 'oracle_website', 'erp_today', 'news', 'g2_reviews']
+
+// ── Industry Vertical Focus ───────────────────────────────────────────────────
+// Not locked to any one vertical — this is just today's starting preset
+// (JD Edwards manufacturing). Fully editable in the panel; whatever's typed
+// here replaces the default search queries entirely (see /scan/start).
+const DEFAULT_VERTICAL_QUERIES = [
+  'JD Edwards EnterpriseOne manufacturing ERP manager',
+  'JDE manufacturing systems administrator',
+  'JD Edwards production planning MRP manager',
+  'JDE shop floor control work orders director',
+  'JD Edwards discrete manufacturing project manager',
+  'JDE process manufacturing implementation lead',
+  'JD Edwards bill of materials routing engineer',
+  'JDE demand planning supply chain manager manufacturing',
+  'JD Edwards quality management manufacturing director',
+  'JD Edwards automotive manufacturing ERP',
+  'JDE aerospace defense ERP implementation',
+  'JD Edwards industrial equipment manufacturer ERP',
+  'JDE food beverage manufacturing ERP manager',
+  'JD Edwards chemical manufacturing ERP consultant',
+  'JDE electronics manufacturer ERP systems',
+  'JD Edwards metal fabrication ERP project',
+  'JDE plastics rubber manufacturing systems manager',
+  'JD Edwards packaging manufacturer ERP',
+  'JDE pharmaceutical manufacturing ERP systems',
+  'JD Edwards Oracle Cloud migration manufacturing director',
+  'JDE EnterpriseOne upgrade manufacturing company',
+  'migrating JDE manufacturing Oracle Cloud project manager',
+  'JD Edwards to Oracle Cloud ERP manufacturing',
+  'JD Edwards construction job costing project director',
+  'JDE EnterpriseOne homebuilder land development',
+  'JD Edwards construction procurement manager',
+]
+const DEFAULT_VERTICAL_INDUSTRY_FILTER = '96,4,80,22,10,74,57' // LinkedIn industry codes: Manufacturing, Automotive, Mechanical/Industrial Eng, Construction, Civil Eng, Oil & Energy, Food & Beverages
+
+// ── Pipeline stages ────────────────────────────────────────────────────────────
+// Mirrors STAGE_DEFS in oracle_intent_engine/src/pipeline.py — the ids must match
+// exactly, since they key the "stages" object returned by /scan/status.
+const PIPELINE_STAGES: { id: string; label: string }[] = [
+  { id: 'fetch',          label: 'Fetch signals from sources' },
+  { id: 'filter',         label: 'Filter staffing agencies' },
+  { id: 'classify',       label: 'Classify product + buying phase' },
+  { id: 'aggregate',      label: 'Aggregate signals by company' },
+  { id: 'firmographics',  label: 'Enrich company size & industry' },
+  { id: 'domains',        label: 'Enrich company domains' },
+  { id: 'persist',        label: 'Save companies & signals' },
+  { id: 'contacts',       label: 'Match existing contacts (free)' },
+  { id: 'export',         label: 'Export CSV & Excel' },
+]
+type StageStatus = 'pending' | 'running' | 'done' | 'error'
 
 const card = { background:'#ffffff', border:'1px solid #e2e8f0', borderRadius:12, padding:20, boxShadow:'0 1px 3px rgba(0,0,0,0.06)' }
 const now  = () => new Date().toLocaleTimeString('en-GB', { hour12: false })
@@ -143,6 +193,7 @@ function PreflightModal({
 }) {
   const [roleTab, setRoleTab] = useState<'exact' | 'keyword'>('exact')
   const [coQuery, setCoQuery] = useState('')
+  const [customRole, setCustomRole] = useState('')
 
   const visibleCompanies = pendingCompanies.filter(c =>
     !coQuery || c.name.toLowerCase().includes(coQuery.toLowerCase()))
@@ -154,6 +205,12 @@ function PreflightModal({
     setSelectedRoles(selectedRoles.includes(r) ? selectedRoles.filter(x => x !== r) : [...selectedRoles, r])
   const selectAll  = () => setSelectedRoles(ALL_ROLES)
   const clearAll   = () => setSelectedRoles([])
+  const addCustomRole = () => {
+    const r = customRole.trim()
+    if (r && !selectedRoles.includes(r)) setSelectedRoles([...selectedRoles, r])
+    setCustomRole('')
+  }
+  const customRoles = selectedRoles.filter(r => !ALL_ROLES.includes(r))
 
   const effectiveCount = selectedCompanyIds.length > 0 && pendingCompanies.length > 0
     ? selectedCompanyIds.length
@@ -367,7 +424,7 @@ function PreflightModal({
                     color: roleTab === tab ? '#0f172a' : '#64748b',
                     boxShadow: roleTab === tab ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
                     transition:'all 0.15s' }}>
-                  {tab === 'exact' ? `Exact Roles (${EXACT_ROLES.length})` : `Oracle Keywords (${KEYWORD_ROLES.length})`}
+                  {tab === 'exact' ? `Exact Roles (${EXACT_ROLES.length})` : `Keyword Roles (${KEYWORD_ROLES.length})`}
                 </button>
               ))}
             </div>
@@ -386,6 +443,27 @@ function PreflightModal({
                   </button>
                 )
               })}
+            </div>
+            {customRoles.length > 0 && (
+              <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginTop:8 }}>
+                {customRoles.map(role => (
+                  <button key={role} onClick={() => toggleRole(role)}
+                    style={{ padding:'5px 10px', borderRadius:7, border:'1px solid rgba(16,185,129,0.35)',
+                      background:'rgba(16,185,129,0.08)', color:'#059669', fontSize:11, fontWeight:600,
+                      cursor:'pointer', display:'inline-flex', alignItems:'center', gap:4 }}>
+                    {role} <X size={11} />
+                  </button>
+                ))}
+              </div>
+            )}
+            <div style={{ display:'flex', gap:6, marginTop:8 }}>
+              <input value={customRole} onChange={e => setCustomRole(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCustomRole() } }}
+                placeholder="Add a custom role title…"
+                style={{ flex:1, padding:'6px 10px', borderRadius:7, border:'1px solid #e2e8f0', fontSize:12 }} />
+              <button onClick={addCustomRole}
+                style={{ padding:'6px 12px', borderRadius:7, border:'none', background:'#6366f1', color:'#fff',
+                  fontSize:11, fontWeight:600, cursor:'pointer' }}>Add</button>
             </div>
             <div style={{ fontSize:11, color:'#94a3b8', marginTop:6 }}>
               Selected roles are sent as Apollo <code>person_titles</code> filter. Pass 2 (broad) uses keyword matching as fallback.
@@ -920,7 +998,11 @@ export default function EngineControl() {
   const [enrichLogs,      setEnrichLogs]      = useState<LogEntry[]>([])
   const [selectedSources, setSelectedSources] = useState<string[]>(DEFAULT_SOURCES)
   const [depth,           setDepth]           = useState('medium')
-  const [jdeMfg,          setJdeMfg]          = useState(false)
+  const [verticalFocus,   setVerticalFocus]   = useState(false)
+  const [verticalQueries, setVerticalQueries] = useState(DEFAULT_VERTICAL_QUERIES.join('\n'))
+  const [verticalIndustryFilter, setVerticalIndustryFilter] = useState(DEFAULT_VERTICAL_INDUSTRY_FILTER)
+  const [stages, setStages] = useState<Record<string, StageStatus>>({})
+  const [workflowOpen, setWorkflowOpen] = useState(false)
   const [enrichLimit,     setEnrichLimit]     = useState(50)
   const [enrichPerCo,     setEnrichPerCo]     = useState(10)
   const [batchSize,       setBatchSize]       = useState(0)
@@ -1093,15 +1175,20 @@ export default function EngineControl() {
     } catch { toast.error('Failed to stop enrichment') }
   }
 
-  // ── Oracle scan controls ────────────────────────────────────────────────────
+  // ── Signal engine controls ────────────────────────────────────────────────────
   const startEngine = async () => {
     const maxPages = depth === 'shallow' ? 1 : depth === 'deep' ? 5 : 3
+    const parsedQueries = verticalQueries.split('\n').map(q => q.trim()).filter(Boolean)
     try {
       const res = await fetch('/scan/start', {
         method: 'POST',
         headers: { ...authH(), 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          sources: selectedSources, max_pages: maxPages, jde_manufacturing: jdeMfg,
+          sources: selectedSources, max_pages: maxPages,
+          ...(verticalFocus ? {
+            job_queries: parsedQueries,
+            industry_filter: verticalIndustryFilter.trim() || undefined,
+          } : {}),
           auto_enrich: autoTrigger,
           enrich_limit: enrichLimit, enrich_per_company: enrichPerCo,
           enrich_provider: provider,
@@ -1119,6 +1206,7 @@ export default function EngineControl() {
         pollRef.current = setInterval(async () => {
           await fetchLog()
           const s = await fetch('/scan/status', { headers: authH() }).then(r => r.json()).catch(() => null)
+          if (s) setStages(s.stages || {})
           if (s && s.status !== 'running') {
             setOracleState('idle')
             clearInterval(pollRef.current!)
@@ -1131,12 +1219,15 @@ export default function EngineControl() {
       if (!res.ok) { toast.error((await res.json()).error || 'Failed to start scan'); return }
       scanStartedAt.current = Date.now()
       setOracleState('running')
-      addLog('INFO', `Signal Engine starting... sources: ${selectedSources.join(', ')}${jdeMfg ? ' [JDE Mfg Focus]' : ''}`)
+      setStages(Object.fromEntries(PIPELINE_STAGES.map(s => [s.id, 'pending' as StageStatus])))
+      setWorkflowOpen(true)
+      addLog('INFO', `Signal Engine starting... sources: ${selectedSources.join(', ')}${verticalFocus ? ' [Vertical Focus]' : ''}`)
       toast.success('Signal scan started')
       if (pollRef.current) clearInterval(pollRef.current)
       pollRef.current = setInterval(async () => {
         await fetchLog()
         const s = await fetch('/scan/status', { headers: authH() }).then(r => r.json()).catch(() => null)
+        if (s) setStages(s.stages || {})
         const elapsed = Date.now() - scanStartedAt.current
         if (s && s.status !== 'running' && elapsed >= STOP_BTN_MIN_MS) {
           setOracleState('idle')
@@ -1203,12 +1294,15 @@ export default function EngineControl() {
           if (d.status === 'running') {
             scanStartedAt.current = Date.now() - STOP_BTN_MIN_MS  // already running → no min wait
             setOracleState('running')
+            setStages(d.stages || {})
+            setWorkflowOpen(true)
             addLog('INFO', 'Scan already running — resuming live log...')
             if (pollRef.current) clearInterval(pollRef.current)
             pollRef.current = setInterval(async () => {
               await fetchLog()
               const s = await fetch('/scan/status', { headers: authH() })
                 .then(res => res.json()).catch(() => null)
+              if (s) setStages(s.stages || {})
               if (s && s.status !== 'running') {
                 setOracleState('idle')
                 addLog('SUCCESS', 'Signal scan completed.')
@@ -1347,7 +1441,18 @@ export default function EngineControl() {
             <div key={engine.id} style={card}>
               <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:12 }}>
                 <div style={{ flex:1, paddingRight:12 }}>
-                  <div style={{ fontSize:14, fontWeight:600, color:'#0f172a' }}>{engine.label}</div>
+                  <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                    <span style={{ fontSize:14, fontWeight:600, color:'#0f172a' }}>{engine.label}</span>
+                    {isOracle && (
+                      <button onClick={() => setWorkflowOpen(v => !v)}
+                        title="Show the pipeline workflow"
+                        style={{ border:'none', background:'none', cursor:'pointer', color:'#94a3b8',
+                          display:'flex', alignItems:'center', padding:2 }}>
+                        <Workflow size={13} />
+                        {workflowOpen ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+                      </button>
+                    )}
+                  </div>
                   <div style={{ fontSize:12, color:'#64748b', marginTop:4, lineHeight:1.5 }}>{engine.desc}</div>
                 </div>
                 <div style={{ width:10, height:10, borderRadius:'50%', flexShrink:0, marginTop:4,
@@ -1421,6 +1526,42 @@ export default function EngineControl() {
           )
         })}
       </div>
+
+      {/* Signal Engine workflow — live pipeline stages, ticked off as the running scan completes each one */}
+      {workflowOpen && (
+        <div style={{ ...card, marginTop:16 }}>
+          <div style={{ fontSize:13, fontWeight:600, color:'#0f172a', marginBottom:4 }}>Signal Engine workflow</div>
+          <div style={{ fontSize:12, color:'#64748b', marginBottom:14 }}>
+            {oracleState === 'running'
+              ? 'Live — updates as the running scan moves through each stage.'
+              : 'What a scan runs through, in order. Start a scan to watch it fill in live.'}
+          </div>
+          <div style={{ display:'flex', flexDirection:'column', gap:2 }}>
+            {PIPELINE_STAGES.map((stage, i) => {
+              const status: StageStatus = stages[stage.id] || 'pending'
+              const icon =
+                status === 'done'    ? <CheckCircle size={16} color="#10b981" /> :
+                status === 'running' ? <Loader2 size={16} color="#3b82f6" className="wf-spin" /> :
+                status === 'error'   ? <XCircle size={16} color="#ef4444" /> :
+                                        <Circle size={14} color="#cbd5e1" />
+              return (
+                <div key={stage.id} style={{ display:'flex', alignItems:'center', gap:12, padding:'8px 10px',
+                  borderRadius:8, background: status === 'running' ? 'rgba(59,130,246,0.06)' : 'transparent' }}>
+                  <span style={{ fontSize:11, fontFamily:'ui-monospace, monospace', color:'#cbd5e1', width:16, textAlign:'right' }}>{i + 1}</span>
+                  {icon}
+                  <span style={{ fontSize:13, color: status === 'pending' ? '#94a3b8' : '#0f172a',
+                    fontWeight: status === 'running' ? 600 : 400, flex:1 }}>
+                    {stage.label}
+                  </span>
+                  {status === 'error' && <span style={{ fontSize:11, color:'#ef4444', fontWeight:600 }}>Failed</span>}
+                </div>
+              )
+            })}
+          </div>
+          <style>{`@keyframes wf-spin{to{transform:rotate(360deg)}}.wf-spin{animation:wf-spin 1s linear infinite}
+            @media (prefers-reduced-motion: reduce){.wf-spin{animation:none}}`}</style>
+        </div>
+      )}
 
       {/* Enrichment complete — point the user at the results */}
       {enrichDone && enrichState === 'idle' && (
@@ -1552,24 +1693,37 @@ export default function EngineControl() {
             </div>
           </div>
 
-          {/* JDE Manufacturing Focus */}
-          <div style={{ marginBottom:16, padding:'12px 14px', background: jdeMfg ? 'rgba(16,185,129,0.08)' : '#f8fafc', border:`1px solid ${jdeMfg ? 'rgba(16,185,129,0.3)' : '#e2e8f0'}`, borderRadius:10 }}>
+          {/* Industry Vertical Focus — fully editable, JDE manufacturing is just the starting preset */}
+          <div style={{ marginBottom:16, padding:'12px 14px', background: verticalFocus ? 'rgba(16,185,129,0.08)' : '#f8fafc', border:`1px solid ${verticalFocus ? 'rgba(16,185,129,0.3)' : '#e2e8f0'}`, borderRadius:10 }}>
             <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-              <button onClick={() => setJdeMfg(v => !v)}
-                style={{ width:36, height:20, borderRadius:10, border:'none', cursor:'pointer', background: jdeMfg ? '#10b981' : '#cbd5e1', position:'relative', flexShrink:0, transition:'background 0.2s' }}>
-                <span style={{ position:'absolute', top:2, left: jdeMfg ? 18 : 2, width:16, height:16, borderRadius:'50%', background:'white', transition:'left 0.2s' }} />
+              <button onClick={() => setVerticalFocus(v => !v)}
+                style={{ width:36, height:20, borderRadius:10, border:'none', cursor:'pointer', background: verticalFocus ? '#10b981' : '#cbd5e1', position:'relative', flexShrink:0, transition:'background 0.2s' }}>
+                <span style={{ position:'absolute', top:2, left: verticalFocus ? 18 : 2, width:16, height:16, borderRadius:'50%', background:'white', transition:'left 0.2s' }} />
               </button>
-              <Factory size={14} color={jdeMfg ? '#10b981' : '#475569'} />
+              <Factory size={14} color={verticalFocus ? '#10b981' : '#475569'} />
               <div>
-                <div style={{ fontSize:13, fontWeight:600, color: jdeMfg ? '#10b981' : '#0f172a' }}>JDE Manufacturing Focus</div>
-                <div style={{ fontSize:11, color:'#475569', marginTop:2 }}>Manufacturing queries + LinkedIn industry filter</div>
+                <div style={{ fontSize:13, fontWeight:600, color: verticalFocus ? '#10b981' : '#0f172a' }}>Industry Vertical Focus</div>
+                <div style={{ fontSize:11, color:'#475569', marginTop:2 }}>Replace the default search queries with your own vertical/product targeting</div>
               </div>
             </div>
-            {jdeMfg && (
-              <div style={{ marginTop:10, fontSize:11, color:'#64748b', lineHeight:1.6 }}>
-                ✓ 29 manufacturing-specific JDE queries<br/>
-                ✓ LinkedIn: Manufacturing, Automotive, Industrial Eng, Construction, Energy, Food & Bev<br/>
-                ✓ Home Builders: 36 companies ≥1,000 annual closings
+            {verticalFocus && (
+              <div style={{ marginTop:12, display:'flex', flexDirection:'column', gap:8 }}>
+                <div>
+                  <div style={{ fontSize:11, fontWeight:600, color:'#64748b', marginBottom:4 }}>
+                    Search queries ({verticalQueries.split('\n').filter(q => q.trim()).length}, one per line)
+                  </div>
+                  <textarea value={verticalQueries} onChange={e => setVerticalQueries(e.target.value)}
+                    rows={5}
+                    style={{ width:'100%', padding:'8px 10px', borderRadius:7, border:'1px solid #e2e8f0',
+                      fontSize:11.5, fontFamily:'ui-monospace, monospace', resize:'vertical', boxSizing:'border-box' }} />
+                </div>
+                <div>
+                  <div style={{ fontSize:11, fontWeight:600, color:'#64748b', marginBottom:4 }}>
+                    LinkedIn industry filter <span style={{ fontWeight:400, color:'#94a3b8' }}>(comma-separated codes, optional)</span>
+                  </div>
+                  <input value={verticalIndustryFilter} onChange={e => setVerticalIndustryFilter(e.target.value)}
+                    style={{ width:'100%', padding:'6px 10px', borderRadius:7, border:'1px solid #e2e8f0', fontSize:12, boxSizing:'border-box' }} />
+                </div>
               </div>
             )}
           </div>
@@ -1635,7 +1789,7 @@ export default function EngineControl() {
 
           <div style={{ padding:'10px 12px', background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:8, fontSize:11, color:'#94a3b8' }}>
             {ACTIVE_SOURCES.filter(s => selectedSources.includes(s.id)).length} active + {EXPERIMENTAL_SOURCES.filter(s => selectedSources.includes(s.id)).length} experimental · depth: {depth}
-            {jdeMfg && <span style={{ color:'#10b981', marginLeft:8 }}>· JDE Mfg focus ON</span>}
+            {verticalFocus && <span style={{ color:'#10b981', marginLeft:8 }}>· vertical focus ON</span>}
             {autoTrigger && <span style={{ color:'#6366f1', marginLeft:8 }}>· auto-enrich ON</span>}
           </div>
         </div>

@@ -296,7 +296,7 @@ def _predict_and_fill_emails(
 
 # Pass-1: exact Oracle/JDE/Finance/IT titles — very targeted
 # Includes user-specified target roles plus standard Oracle/JDE roles
-ORACLE_JDE_TITLES = [
+DEFAULT_ROLE_TITLES = [
     # User-specified exact roles
     "Oracle Apps DBA",
     "Oracle Business Analyst",
@@ -345,8 +345,8 @@ _RELEVANCE_KEYWORDS = [
     "financial system", "business system", "application", "project manager",
 ]
 
-# Default role filters when user hasn't customised (matches ORACLE_JDE_TITLES above)
-DEFAULT_ROLE_FILTERS = ORACLE_JDE_TITLES
+# Default role filters when user hasn't customised (matches DEFAULT_ROLE_TITLES above)
+DEFAULT_ROLE_FILTERS = DEFAULT_ROLE_TITLES
 
 # ── Live status (read by enrichment_worker's status thread) ─────────────────
 _status: dict = {
@@ -502,7 +502,7 @@ def _apollo_call(org_name: str, api_key: str, max_per: int,
         "page": 1,
     }
     if with_titles:
-        payload_dict["person_titles"] = role_filters if role_filters else ORACLE_JDE_TITLES
+        payload_dict["person_titles"] = role_filters if role_filters else DEFAULT_ROLE_TITLES
 
     try:
         req = urllib.request.Request(
@@ -807,7 +807,7 @@ def enrich_companies(
         max_per_company:  Max contacts to fetch per company.
         log:              Callable for progress messages.
         role_filters:     List of job titles to search for (pass-1 filter).
-                          Defaults to ORACLE_JDE_TITLES if not supplied.
+                          Defaults to DEFAULT_ROLE_TITLES if not supplied.
         batch_size:       Process in sub-batches of this size with a pause between
                           (useful for rate limiting / credit control). None = no batching.
         provider:         "apollo" (default) or "zoominfo" — which paid API to use
@@ -822,8 +822,8 @@ def enrich_companies(
 
     provider = (provider or "apollo").lower().strip()
 
-    # Resolve role filters — fall back to full ORACLE_JDE_TITLES list
-    effective_roles = role_filters if role_filters else ORACLE_JDE_TITLES
+    # Resolve role filters — fall back to full DEFAULT_ROLE_TITLES list
+    effective_roles = role_filters if role_filters else DEFAULT_ROLE_TITLES
     if role_filters:
         log(f"Role filters active: {len(effective_roles)} titles")
 
