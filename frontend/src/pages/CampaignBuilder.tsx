@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Search, Users, Zap, Download, RefreshCw, CheckCircle2, XCircle, Copy, Mail, MessageSquare, Link } from 'lucide-react'
 import { toast } from '../components/Toast'
 
@@ -119,6 +119,24 @@ export default function CampaignBuilder() {
   const [targetTitles,   setTargetTitles]   = useState('')
   const [productContext, setProductContext] = useState('')
   const [icpResearch,    setIcpResearch]    = useState('')
+
+  // Handoff from the Contacts page ("Generate hooks" on selected signal-engine
+  // contacts) — skips steps 1-2 entirely, since those contacts are already
+  // found and validated. Read-once: the key is cleared immediately so a later
+  // manual visit starts at step 1 as usual.
+  useEffect(() => {
+    const raw = sessionStorage.getItem('cb_handoff_contacts')
+    if (!raw) return
+    sessionStorage.removeItem('cb_handoff_contacts')
+    try {
+      const handed: Contact[] = JSON.parse(raw)
+      if (Array.isArray(handed) && handed.length) {
+        setContacts(handed)
+        setStep('hooks')
+        toast.info(`${handed.length} contact${handed.length === 1 ? '' : 's'} loaded from Contacts — set your campaign context, then generate hooks`)
+      }
+    } catch { /* malformed handoff — fall through to the normal step 1 flow */ }
+  }, [])
 
   // ── Step 1 — fetch ICP companies ──────────────────────────────────────────
   async function fetchICP() {
@@ -457,6 +475,33 @@ export default function CampaignBuilder() {
       {/* ── STEP 3: contacts + generate ── */}
       {step === 'hooks' && contacts.length > 0 && (
         <div>
+          {/* Campaign context — normally set in step 1, but contacts handed
+              off from the Contacts page skip straight here, so the same
+              fields are editable in place before generating. */}
+          {!productContext && (
+            <div style={{ ...card, marginBottom: 12 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>Campaign context</div>
+              <p style={{ color: '#64748b', fontSize: 12, margin: '0 0 10px' }}>
+                What are you pitching? Hooks are grounded in this — leaving it blank tells the model not to name a product at all.
+              </p>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <textarea
+                  value={productContext}
+                  onChange={e => setProductContext(e.target.value)}
+                  placeholder="Product pitch — what you sell and the problem it kills"
+                  rows={3}
+                  style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #d1d5db', fontSize: 12.5, color: '#0f172a', resize: 'vertical', boxSizing: 'border-box', fontFamily: 'inherit' }}
+                />
+                <textarea
+                  value={icpResearch}
+                  onChange={e => setIcpResearch(e.target.value)}
+                  placeholder="ICP research (optional) — stats, quotes, or pain points to ground the copy in"
+                  rows={3}
+                  style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #d1d5db', fontSize: 12.5, color: '#0f172a', resize: 'vertical', boxSizing: 'border-box', fontFamily: 'inherit' }}
+                />
+              </div>
+            </div>
+          )}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
             <div style={{ fontSize: 13, color: '#64748b' }}>
               {selectedContacts} of {contacts.length} contacts selected

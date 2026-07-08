@@ -4,7 +4,7 @@ const authH = (): Record<string, string> => ({
   'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
   'Content-Type': 'application/json',
 })
-import { Search, Download, Mail, ExternalLink, MoreHorizontal, CheckCircle2, Trash2, Send, UserX, Loader, RefreshCw } from 'lucide-react'
+import { Search, Download, Mail, ExternalLink, MoreHorizontal, CheckCircle2, Trash2, Send, UserX, Loader, RefreshCw, Rocket } from 'lucide-react'
 import { toast } from '../components/Toast'
 
 interface Contact {
@@ -191,6 +191,27 @@ export default function Contacts() {
   const toggleSelect = (id: number) => setSelected(s => s.includes(id) ? s.filter(x => x !== id) : [...s, id])
   const allSelected = filtered.length > 0 && filtered.every(c => selected.includes(c.id))
 
+  // Bridge into the hook-generation pipeline: hand the selected signal-engine
+  // contacts to Campaign Builder via sessionStorage (no backend round-trip —
+  // the builder's hook/cadence steps only need fields we already have here).
+  const sendToCampaignBuilder = () => {
+    const picked = contacts.filter(c => selected.includes(c.id))
+    if (!picked.length) return
+    const handoff = picked.map(c => ({
+      first_name:   c.first_name,
+      last_name:    c.last_name,
+      title:        c.title,
+      email:        c.email || '',
+      email_status: c.email_validation_status || '',
+      linkedin_url: c.linkedin_url || '',
+      company:      c.company_name,
+      website:      c.company_domain || '',
+      selected:     true,
+    }))
+    sessionStorage.setItem('cb_handoff_contacts', JSON.stringify(handoff))
+    window.location.href = '/campaign-builder'
+  }
+
   const pushSelected = async () => {
     let ok = 0
     for (const id of selected) {
@@ -237,6 +258,9 @@ export default function Contacts() {
           {selected.length > 0 && (
             <>
               <span style={{ fontSize: 13, color: '#64748b' }}>{selected.length} selected</span>
+              <button onClick={sendToCampaignBuilder} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 8, border: 'none', background: '#8b5cf6', color: 'white', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
+                <Rocket size={13} /> Generate hooks
+              </button>
               <button onClick={pushSelected} style={{ padding: '7px 14px', borderRadius: 8, border: 'none', background: '#3b82f6', color: 'white', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
                 Push to HubSpot
               </button>

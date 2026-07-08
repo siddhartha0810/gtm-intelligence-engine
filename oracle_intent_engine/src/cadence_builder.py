@@ -204,6 +204,7 @@ def sequences_to_csv_rows(sequences: list[dict[str, Any]]) -> list[dict]:
             continue
         for touch in seq.get("touches", []):
             rows.append({
+                "Hook ID":       seq.get("hook_id", ""),
                 "Contact Name":  seq["contact_name"],
                 "Company":       seq["company"],
                 "Email":         seq["email"],

@@ -4545,13 +4545,18 @@ async def campaign_export_csv_post(
         hooks: list[dict] = body.get("hooks", [])
 
         output = io.StringIO()
+        # hook_id ties each exported row back to its campaign_hooks record, so
+        # replies/meetings from a send that happened outside the tool can still
+        # be logged against the right hook (POST /api/outcomes with hook_id)
+        # and roll up into angle-level attribution.
         writer = csv.DictWriter(output, fieldnames=[
-            "company", "contact_name", "title", "email", "linkedin_url",
+            "hook_id", "company", "contact_name", "title", "email", "linkedin_url",
             "subject", "angle", "body", "word_count",
         ])
         writer.writeheader()
         for h in hooks:
             writer.writerow({
+                "hook_id":      h.get("hook_id", ""),
                 "company":      h.get("company", ""),
                 "contact_name": h.get("contact_name", ""),
                 "title":        h.get("title", ""),
@@ -4567,7 +4572,7 @@ async def campaign_export_csv_post(
         return StreamingResponse(
             iter([output.getvalue()]),
             media_type="text/csv",
-            headers={"Content-Disposition": "attachment; filename=weave_campaign.csv"},
+            headers={"Content-Disposition": "attachment; filename=campaign_hooks.csv"},
         )
     except Exception as e:
         logger.exception("CSV export failed")
@@ -4613,6 +4618,7 @@ async def build_cadence(
         # older frontend sessions without it just skip persistence here.
         for hook, seq in zip(hooks, sequences):
             hook_id = hook.get("hook_id")
+            seq["hook_id"] = hook_id  # ride along so the cadence CSV export stays attributable
             if hook_id and seq.get("ok"):
                 try:
                     oracle_db.save_campaign_touches(hook_id, seq.get("touches", []))
