@@ -72,6 +72,20 @@ def _get_conn() -> sqlite3.Connection:
             _connection.row_factory = sqlite3.Row
             _connection.execute("PRAGMA journal_mode=WAL")
             _connection.execute("PRAGMA foreign_keys=ON")
+            # Postgres compatibility shims — SQL written for the primary
+            # backend calls these (data_quality.py uses REGEXP_REPLACE);
+            # without them, fallback mode 500s on those queries.
+            import re as _re
+
+            def _regexp_replace(source, pattern, replacement, flags=""):
+                if source is None:
+                    return None
+                py_flags = _re.IGNORECASE if "i" in (flags or "") else 0
+                count = 0 if "g" in (flags or "") else 1
+                return _re.sub(pattern, replacement, str(source), count=count, flags=py_flags)
+
+            _connection.create_function("REGEXP_REPLACE", 3, _regexp_replace)
+            _connection.create_function("REGEXP_REPLACE", 4, _regexp_replace)
             logger.info("SQLite backend ready at %s", _DB_PATH)
     return _connection
 
@@ -982,6 +996,112 @@ def get_signals_for_company(company_id: int) -> list:
             (company_id,),
         )
         return cur.fetchall()
+
+
+def get_top_signals_for_companies(names: list) -> dict:
+    """Mirrors database.py — highest-confidence signal per company name as a
+    one-line summary. SQLite has no DISTINCT ON, so rank in Python instead."""
+    wanted = [n.strip().lower() for n in names if n and n.strip()]
+    if not wanted:
+        return {}
+    placeholders = ",".join("?" for _ in wanted)
+    with db_cursor(commit=False) as cur:
+        cur.execute(f"""
+            SELECT c.name, s.oracle_product, s.phase, s.signal_type,
+                   s.job_title, s.evidence, s.source, s.confidence, s.detected_at
+            FROM companies c
+            JOIN oracle_signals s ON s.company_id = c.id
+            WHERE LOWER(c.name) IN ({placeholders})
+            ORDER BY s.confidence DESC, s.detected_at DESC
+        """, wanted)
+        out = {}
+        for r in cur.fetchall():
+            key = (r["name"] or "").strip().lower()
+            if key in out:
+                continue  # rows arrive best-first; keep only the top one
+            bits = [b for b in (r["signal_type"], r["oracle_product"], r["phase"]) if b]
+            head = " / ".join(bits) if bits else "intent signal"
+            detail = r["job_title"] or r["evidence"] or ""
+            summary = f"{head}: {detail}" if detail else head
+            out[key] = f"{summary} (source: {r['source']}, confidence {(r['confidence'] or 0):.2f})"
+        return out
+
+
+# ── Review queue — mirrors database.py ───────────────────────────────────────
+# The Postgres versions use NOW(), CONCAT(), and ANY(%s), none of which exist
+# in SQLite, so without these mirrors the Review Queue crashes in fallback mode.
+
+def add_to_review_queue(entity_type: str, entity_id: int, issue_type: str,
+                         severity: str = 'warning', issue_detail: dict = None) -> dict:
+    import json
+    with db_cursor() as cur:
+        cur.execute(
+            """INSERT INTO review_queue (entity_type, entity_id, issue_type, severity, issue_detail)
+               VALUES (?, ?, ?, ?, ?)
+               ON CONFLICT DO NOTHING""",
+            (entity_type, entity_id, issue_type, severity,
+             json.dumps(issue_detail) if issue_detail else None),
+        )
+        new_id = cur.lastrowid
+        if not new_id:
+            return {}
+        cur.execute("SELECT * FROM review_queue WHERE id = ?", (new_id,))
+        row = cur.fetchone()
+        return dict(row) if row else {}
+
+
+def list_review_queue(status: str = None, entity_type: str = None,
+                       limit: int = 100, offset: int = 0) -> list:
+    with db_cursor(commit=False) as cur:
+        wheres, params = [], []
+        if status:
+            wheres.append("rq.status=?"); params.append(status)
+        if entity_type:
+            wheres.append("rq.entity_type=?"); params.append(entity_type)
+        where_sql = ("WHERE " + " AND ".join(wheres)) if wheres else ""
+        cur.execute(
+            f"""SELECT rq.*,
+                       CASE rq.entity_type
+                           WHEN 'company' THEN c.name
+                           WHEN 'contact' THEN cc.first_name || ' ' || cc.last_name
+                       END AS entity_name
+                FROM review_queue rq
+                LEFT JOIN companies c ON rq.entity_type='company' AND c.id=rq.entity_id
+                LEFT JOIN company_contacts cc ON rq.entity_type='contact' AND cc.id=rq.entity_id
+                {where_sql}
+                ORDER BY rq.created_at DESC
+                LIMIT ? OFFSET ?""",
+            params + [limit, offset],
+        )
+        return [dict(r) for r in cur.fetchall()]
+
+
+def resolve_review_queue_item(item_id: int, status: str,
+                               notes: str = None, resolved_by: str = None) -> dict:
+    with db_cursor() as cur:
+        cur.execute(
+            """UPDATE review_queue
+               SET status=?, notes=?, resolved_by=?,
+                   resolved_at=datetime('now'), updated_at=datetime('now')
+               WHERE id=?""",
+            (status, notes, resolved_by, item_id),
+        )
+        cur.execute("SELECT * FROM review_queue WHERE id = ?", (item_id,))
+        row = cur.fetchone()
+        return dict(row) if row else {}
+
+
+def bulk_resolve_review_queue(item_ids: list, status: str, resolved_by: str = None):
+    if not item_ids:
+        return
+    placeholders = ",".join("?" for _ in item_ids)
+    with db_cursor() as cur:
+        cur.execute(
+            f"""UPDATE review_queue
+                SET status=?, resolved_by=?, resolved_at=datetime('now'), updated_at=datetime('now')
+                WHERE id IN ({placeholders})""",
+            [status, resolved_by] + list(item_ids),
+        )
 
 
 # ── Scan runs ─────────────────────────────────────────────────────────────────

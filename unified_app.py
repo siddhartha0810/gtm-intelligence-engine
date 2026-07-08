@@ -1261,6 +1261,30 @@ async def api_revalidate_emails(
     return {"queued": True, "message": "Re-validation started in background"}
 
 
+@app.post("/api/contacts/signal-context")
+async def api_contacts_signal_context(
+    request: Request,
+    current_user: dict = Depends(oracle_auth.require_user),
+):
+    """
+    Top intent signal per company name — one batch query. Used by the
+    Contacts -> Campaign Builder handoff so hooks generated for signal-engine
+    contacts are grounded in the actual signal that surfaced the company,
+    instead of arriving with no evidence and sinking to a low
+    personalization bucket.
+    Body: { companies: ["Acme Corp", ...] }  ->  { "acme corp": "hiring / JD Edwards: ..." }
+    """
+    try:
+        body = await request.json()
+        names = body.get("companies", [])
+        if not isinstance(names, list) or not names:
+            return {"signals": {}}
+        return {"signals": oracle_db.get_top_signals_for_companies(names[:200])}
+    except Exception:
+        logger.exception("signal-context lookup failed")
+        return JSONResponse({"error": "Internal server error"}, status_code=500)
+
+
 @app.post("/api/contacts/{contact_id}/predict-email")
 async def api_predict_contact_email(contact_id: int, current_user: dict = Depends(oracle_auth.require_analyst)):
     """
@@ -4494,6 +4518,13 @@ async def campaign_generate_hooks(
     except Exception as e:
         logger.exception("Hook generation failed")
         return JSONResponse({"error": "Internal server error"}, status_code=500)
+
+
+@app.get("/api/campaign/llm-status")
+async def campaign_llm_status(current_user: dict = Depends(oracle_auth.require_user)):
+    """Whether hook/cadence generation can actually run — surfaces the missing
+    ANTHROPIC_API_KEY upfront in the UI instead of failing at generate time."""
+    return {"available": bool(os.getenv("ANTHROPIC_API_KEY", "").strip())}
 
 
 @app.get("/api/campaign/hook-stats")

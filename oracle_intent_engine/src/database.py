@@ -1035,12 +1035,16 @@ def insert_signal(company_id: int, oracle_product: str, phase: str, source: str,
     raw = f"{company_id}|{job_title or ''}|{source or ''}"
     content_hash = hashlib.md5(raw.encode()).hexdigest()
     with db_cursor() as cur:
+        # idx_signals_hash is a PARTIAL unique index (WHERE content_hash IS NOT
+        # NULL) — the conflict target must repeat that predicate or Postgres
+        # raises "no unique or exclusion constraint matching the ON CONFLICT
+        # specification" and the signal never lands.
         cur.execute("""
             INSERT INTO oracle_signals
                 (company_id, scan_run_id, oracle_product, phase, source,
                  signal_type, job_title, evidence, url, confidence, content_hash)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            ON CONFLICT (content_hash) DO NOTHING
+            ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL DO NOTHING
             RETURNING id
         """, (company_id, scan_run_id, oracle_product, phase, source,
               signal_type, job_title, evidence, url, confidence, content_hash))
@@ -1078,6 +1082,33 @@ def get_signals_for_company(company_id: int):
             ORDER BY detected_at DESC
         """, (company_id,))
         return cur.fetchall()
+
+
+def get_top_signals_for_companies(names: list) -> dict:
+    """Highest-confidence signal per company name (case-insensitive), as a
+    one-line summary string — the grounding evidence handed to hook generation
+    when signal-engine contacts are sent to Campaign Builder. One query for
+    the whole batch, not one per company."""
+    if not names:
+        return {}
+    with db_cursor(commit=False) as cur:
+        cur.execute("""
+            SELECT DISTINCT ON (LOWER(c.name))
+                   c.name, s.oracle_product, s.phase, s.signal_type,
+                   s.job_title, s.evidence, s.source, s.confidence
+            FROM companies c
+            JOIN oracle_signals s ON s.company_id = c.id
+            WHERE LOWER(c.name) = ANY(%s)
+            ORDER BY LOWER(c.name), s.confidence DESC, s.detected_at DESC
+        """, ([n.strip().lower() for n in names if n and n.strip()],))
+        out = {}
+        for r in cur.fetchall():
+            bits = [b for b in (r["signal_type"], r["oracle_product"], r["phase"]) if b]
+            head = " / ".join(bits) if bits else "intent signal"
+            detail = r["job_title"] or r["evidence"] or ""
+            summary = f"{head}: {detail}" if detail else head
+            out[r["name"].strip().lower()] = f"{summary} (source: {r['source']}, confidence {r['confidence']:.2f})"
+        return out
 
 # scan run tracking
 def start_scan_run(queries: str) -> int:

@@ -192,11 +192,22 @@ export default function Contacts() {
   const allSelected = filtered.length > 0 && filtered.every(c => selected.includes(c.id))
 
   // Bridge into the hook-generation pipeline: hand the selected signal-engine
-  // contacts to Campaign Builder via sessionStorage (no backend round-trip —
-  // the builder's hook/cadence steps only need fields we already have here).
-  const sendToCampaignBuilder = () => {
+  // contacts to Campaign Builder via sessionStorage. One batch call first
+  // pulls each company's top intent signal so the hooks are grounded in the
+  // evidence that surfaced the company — without it they'd arrive contextless
+  // and sink to a low personalization bucket.
+  const sendToCampaignBuilder = async () => {
     const picked = contacts.filter(c => selected.includes(c.id))
     if (!picked.length) return
+    let signals: Record<string, string> = {}
+    try {
+      const companies = [...new Set(picked.map(c => c.company_name).filter(Boolean))]
+      const r = await fetch('/api/contacts/signal-context', {
+        method: 'POST', headers: authH(),
+        body: JSON.stringify({ companies }),
+      })
+      if (r.ok) signals = (await r.json()).signals || {}
+    } catch { /* signal context is enrichment, not a requirement — proceed without */ }
     const handoff = picked.map(c => ({
       first_name:   c.first_name,
       last_name:    c.last_name,
@@ -206,6 +217,7 @@ export default function Contacts() {
       linkedin_url: c.linkedin_url || '',
       company:      c.company_name,
       website:      c.company_domain || '',
+      one_liner:    signals[(c.company_name || '').trim().toLowerCase()] || '',
       selected:     true,
     }))
     sessionStorage.setItem('cb_handoff_contacts', JSON.stringify(handoff))

@@ -95,28 +95,32 @@ class TestAuditLogs:
 
 
 class TestDataQualityEngine:
-    def test_dqe_company_check(self, client):
+    def test_dqe_requires_auth(self, client):
+        resp = client.post("/api/dqe/check/company", json={"name": "X"})
+        assert resp.status_code == 401
+
+    def test_dqe_company_check(self, client, auth_headers):
         resp = client.post("/api/dqe/check/company", json={
             "name": "Test Company Ltd",
             "domain": "testcompany.com",
-        })
+        }, headers=auth_headers)
         assert resp.status_code == 200
         data = resp.json()
         assert "issues" in data
         assert "has_critical" in data
 
-    def test_dqe_contact_check(self, client):
+    def test_dqe_contact_check(self, client, auth_headers):
         resp = client.post("/api/dqe/check/contact", json={
             "first_name": "John",
             "last_name": "Smith",
             "email": "john.smith@testcompany.com",
-        })
+        }, headers=auth_headers)
         assert resp.status_code == 200
         data = resp.json()
         assert "issues" in data
 
-    def test_dqe_empty_company_name(self, client):
-        resp = client.post("/api/dqe/check/company", json={"name": ""})
+    def test_dqe_empty_company_name(self, client, auth_headers):
+        resp = client.post("/api/dqe/check/company", json={"name": ""}, headers=auth_headers)
         assert resp.status_code == 200
         data = resp.json()
         # Empty name should flag a critical issue

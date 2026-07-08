@@ -2,17 +2,28 @@
 test_companies.py
 =================
 Tests for company-related API endpoints.
+
+/api/companies returns a pagination envelope: { total, offset, limit, rows }.
 """
 
 import pytest
+
+
+def _rows(resp):
+    """Unwrap the pagination envelope."""
+    data = resp.json()
+    assert isinstance(data, dict)
+    for key in ("total", "offset", "limit", "rows"):
+        assert key in data, f"pagination envelope missing '{key}'"
+    assert isinstance(data["rows"], list)
+    return data["rows"]
 
 
 class TestCompaniesEndpoint:
     def test_get_companies_authenticated(self, client, auth_headers):
         resp = client.get("/api/companies", headers=auth_headers)
         assert resp.status_code == 200
-        data = resp.json()
-        assert isinstance(data, list)
+        _rows(resp)
 
     def test_get_companies_unauthenticated(self, client):
         resp = client.get("/api/companies")
@@ -21,30 +32,30 @@ class TestCompaniesEndpoint:
     def test_get_companies_returns_expected_fields(self, client, auth_headers):
         resp = client.get("/api/companies", headers=auth_headers)
         assert resp.status_code == 200
-        companies = resp.json()
-        if companies:
-            company = companies[0]
+        rows = _rows(resp)
+        if rows:
+            company = rows[0]
             assert "name" in company
             assert "domain" in company
 
     def test_get_companies_phase_filter(self, client, auth_headers):
         resp = client.get("/api/companies?phase=hiring", headers=auth_headers)
         assert resp.status_code == 200
-        assert isinstance(resp.json(), list)
+        _rows(resp)
 
     def test_get_companies_product_filter(self, client, auth_headers):
         resp = client.get("/api/companies?product=JD+Edwards", headers=auth_headers)
         assert resp.status_code == 200
-        assert isinstance(resp.json(), list)
+        _rows(resp)
 
 
 class TestCompanyContacts:
     def test_get_contacts_for_valid_company(self, client, auth_headers):
         # Get the first company ID
-        companies = client.get("/api/companies", headers=auth_headers).json()
-        if not companies:
+        rows = _rows(client.get("/api/companies", headers=auth_headers))
+        if not rows:
             pytest.skip("No companies in database")
-        company_id = companies[0]["id"]
+        company_id = rows[0]["id"]
         resp = client.get(f"/api/company/{company_id}/contacts", headers=auth_headers)
         assert resp.status_code == 200
         assert isinstance(resp.json(), list)
@@ -61,10 +72,10 @@ class TestCompanyContacts:
 
 class TestCompanyStatus:
     def test_valid_status_values(self, client, auth_headers):
-        companies = client.get("/api/companies", headers=auth_headers).json()
-        if not companies:
+        rows = _rows(client.get("/api/companies", headers=auth_headers))
+        if not rows:
             pytest.skip("No companies in database")
-        company_id = companies[0]["id"]
+        company_id = rows[0]["id"]
         for status in ["staged", "pending_review", "approved"]:
             resp = client.patch(
                 f"/api/companies/{company_id}/status",
@@ -74,10 +85,10 @@ class TestCompanyStatus:
             assert resp.status_code == 200, f"Failed for status: {status}"
 
     def test_invalid_status_rejected(self, client, auth_headers):
-        companies = client.get("/api/companies", headers=auth_headers).json()
-        if not companies:
+        rows = _rows(client.get("/api/companies", headers=auth_headers))
+        if not rows:
             pytest.skip("No companies in database")
-        company_id = companies[0]["id"]
+        company_id = rows[0]["id"]
         resp = client.patch(
             f"/api/companies/{company_id}/status",
             json={"status": "active"},  # 'active' is not a valid status

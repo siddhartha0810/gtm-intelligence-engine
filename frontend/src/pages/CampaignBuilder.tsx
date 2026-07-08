@@ -119,6 +119,17 @@ export default function CampaignBuilder() {
   const [targetTitles,   setTargetTitles]   = useState('')
   const [productContext, setProductContext] = useState('')
   const [icpResearch,    setIcpResearch]    = useState('')
+  const [llmAvailable,   setLlmAvailable]   = useState<boolean | null>(null)
+
+  // Surface a missing LLM key on page load instead of at generate time —
+  // steps 1-2 work without it, so without this check the user only finds
+  // out after doing all the selection work.
+  useEffect(() => {
+    fetch('/api/campaign/llm-status', { headers: authH() })
+      .then(r => r.json())
+      .then(d => setLlmAvailable(!!d.available))
+      .catch(() => {})
+  }, [])
 
   // Handoff from the Contacts page ("Generate hooks" on selected signal-engine
   // contacts) — skips steps 1-2 entirely, since those contacts are already
@@ -319,6 +330,21 @@ export default function CampaignBuilder() {
           </div>
         ))}
       </div>
+
+      {llmAvailable === false && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16,
+          padding: '10px 14px', borderRadius: 10,
+          background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.3)',
+        }}>
+          <XCircle size={15} color="#f59e0b" style={{ flexShrink: 0 }} />
+          <span style={{ fontSize: 12.5, color: '#b45309' }}>
+            No LLM key configured — steps 1–2 (find companies and contacts) work, but hook and
+            cadence generation will fail. Add <code style={{ fontSize: 12 }}>ANTHROPIC_API_KEY</code> to
+            oracle_intent_engine/.env and restart.
+          </span>
+        </div>
+      )}
 
       {/* ── STEP 1: campaign setup + ICP companies ── */}
       {step === 'icp' && (
