@@ -4458,6 +4458,16 @@ async def campaign_hook_stats(current_user: dict = Depends(oracle_auth.require_u
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
+@app.get("/api/campaign/recent-hooks")
+async def campaign_recent_hooks(limit: int = 50, current_user: dict = Depends(oracle_auth.require_user)):
+    """Most recent persisted hooks — real examples for the Campaign Emails page."""
+    try:
+        return {"hooks": oracle_db.get_recent_campaign_hooks(limit)}
+    except Exception as e:
+        logger.exception("campaign recent hooks failed")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
 @app.get("/api/campaign/export-csv")
 async def campaign_export_csv(
     request: Request,

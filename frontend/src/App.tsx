@@ -29,6 +29,7 @@ const ProductIntelligence = lazy(() => import('./pages/ProductIntelligence'))
 const Profile             = lazy(() => import('./pages/Profile'))
 const PeopleSearch        = lazy(() => import('./pages/PeopleSearch'))
 const CampaignBuilder     = lazy(() => import('./pages/CampaignBuilder'))
+const CampaignEmails      = lazy(() => import('./pages/CampaignEmails'))
 const Campaigns           = lazy(() => import('./pages/Campaigns'))
 const DecisionIntelligence = lazy(() => import('./pages/DecisionIntelligence'))
 const PredictionEngine     = lazy(() => import('./pages/PredictionEngine'))
@@ -136,6 +137,7 @@ export default function App() {
                   <Route path="/profile"                    element={<Profile user={user ?? undefined} />} />
                   <Route path="/people-search"              element={<PeopleSearch />} />
                   <Route path="/campaign-builder"           element={<CampaignBuilder />} />
+                  <Route path="/campaign-emails"             element={<CampaignEmails />} />
                   <Route path="/campaigns"                  element={<Campaigns />} />
                 </>}
 

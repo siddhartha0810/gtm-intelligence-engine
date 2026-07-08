@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Building2, Users, Cpu, ClipboardCheck,
   BarChart3, Settings, ChevronLeft, ChevronRight,
   Zap, Target, Layers, Upload, CalendarDays,
-  ScrollText, UserCog, RefreshCw, PackageSearch, Search, Rocket, Crosshair, Activity, Sparkles, Wand2
+  ScrollText, UserCog, RefreshCw, PackageSearch, Search, Rocket, Crosshair, Activity, Sparkles, Wand2, Mail
 } from 'lucide-react'
 
 interface NavItem {
@@ -43,6 +43,7 @@ function buildNavGroups(user?: User): NavGroup[] {
     ]},
     { label: 'HUNT', stage: 1, items: [
       { to: '/campaign-builder', icon: Rocket,    label: 'Campaign Builder', min: 1 },
+      { to: '/campaign-emails',  icon: Mail,      label: 'Campaign Emails',  min: 1 },
       { to: '/campaigns',        icon: Crosshair, label: 'Signal Campaigns', min: 2 },
       { to: '/engine-control',   icon: Cpu,       label: 'Engine Control',   min: 3 },
     ]},
