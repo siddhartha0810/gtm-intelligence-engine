@@ -4,11 +4,15 @@ llm_gateway.py  (v2)
 Single LLM entry point for every GTM agent — provider-agnostic, never raises.
 
 PROVIDERS (tried in order, only if configured/reachable):
-  1. Groq       — free tier, OpenAI-compatible, very fast (Llama 3.3 70B)
-  2. Gemini     — free tier, OpenAI-compatible, huge context (2.5 Flash)
-  3. Ollama     — local, unlimited, private (same instance llm_extractor uses)
-  4. Anthropic  — quality ceiling (Haiku) via SDK
-Order overridable with LLM_PROVIDER_ORDER="groq,gemini,ollama,anthropic".
+  1. GLM        — free tier (GLM-4.7-Flash, $0 in/out per docs.z.ai pricing),
+                  OpenAI-compatible; set GLM_MODEL_SMART=glm-4.7 for the paid
+                  flagship ($0.60 in / $2.20 out per 1M tokens) if quality
+                  calls for it
+  2. Groq       — free tier, OpenAI-compatible, very fast (Llama 3.3 70B)
+  3. Gemini     — free tier, OpenAI-compatible, huge context (2.5 Flash)
+  4. Ollama     — local, unlimited, private (same instance llm_extractor uses)
+  5. Anthropic  — quality ceiling (Haiku) via SDK, paid
+Order overridable with LLM_PROVIDER_ORDER="glm,groq,gemini,ollama,anthropic".
 
 MODEL ROUTING:
   task="extract" | "classify"  → fast model tier
@@ -68,6 +72,20 @@ _OPENAI_PROVIDERS = {
         "models": {"smart": os.getenv("GEMINI_MODEL_SMART", "gemini-2.5-flash"),
                    "fast":  os.getenv("GEMINI_MODEL_FAST",  "gemini-2.5-flash-lite")},
     },
+    "glm": {
+        # Zhipu GLM via the Z.ai platform — OpenAI-compatible. GLM-4.7-Flash
+        # is free (free input, cached input, and output — confirmed at
+        # docs.z.ai pricing) and used for BOTH tiers by default so the
+        # waterfall costs nothing to run. Set GLM_MODEL_SMART=glm-4.7 to
+        # trade the free tier for the paid flagship ($0.60 in / $2.20 out
+        # per 1M tokens) if quality ever calls for it. Default endpoint is
+        # international; set GLM_BASE_URL=https://open.bigmodel.cn/api/paas/v4
+        # for mainland.
+        "base": os.getenv("GLM_BASE_URL", "https://api.z.ai/api/paas/v4"),
+        "key_env": "GLM_API_KEY",
+        "models": {"smart": os.getenv("GLM_MODEL_SMART", "glm-4.7-flash"),
+                   "fast":  os.getenv("GLM_MODEL_FAST",  "glm-4.7-flash")},
+    },
 }
 
 _ANTHROPIC_MODEL = os.getenv("LLM_GATEWAY_ANTHROPIC_MODEL", "claude-haiku-4-5-20251001")
@@ -75,7 +93,7 @@ _OLLAMA_MODEL_LARGE = os.getenv("OLLAMA_MODEL_LARGE", "").strip()
 
 _SMALL_TASKS = ("extract", "classify")
 
-_DEFAULT_ORDER = ["groq", "gemini", "ollama", "anthropic"]
+_DEFAULT_ORDER = ["glm", "groq", "gemini", "ollama", "anthropic"]
 
 
 def _provider_order() -> list[str]:

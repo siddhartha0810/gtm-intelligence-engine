@@ -106,6 +106,13 @@ def main() -> None:
                         help="Custom job-search queries — replaces the tech_profiles default entirely")
     parser.add_argument("--industry-filter",  default=None,
                         help="LinkedIn industry-code filter, e.g. '96,4,80,22,10,74,57'")
+    parser.add_argument("--news-queries",     nargs="+", default=None,
+                        help="Custom news-search queries — replaces config.NEWS_QUERIES entirely")
+    parser.add_argument("--campaign-id",      type=int,  default=None,
+                        help="Campaign this scan belongs to — updates campaigns.last_run stats on completion")
+    parser.add_argument("--campaign-keywords", nargs="+", default=None,
+                        help="Campaign keywords — switches classify_signals to generic keyword "
+                             "matching instead of the Oracle-product taxonomy (non-Oracle ICPs)")
     args = parser.parse_args()
 
     status_path = Path(args.status_file)
@@ -147,6 +154,9 @@ def main() -> None:
         location=args.location,
         job_queries=args.job_queries,
         industry_filter=args.industry_filter,
+        news_queries=args.news_queries,
+        campaign_id=args.campaign_id,
+        campaign_keywords=args.campaign_keywords,
     )
 
     # Flush final status

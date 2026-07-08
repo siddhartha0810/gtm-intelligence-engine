@@ -339,8 +339,9 @@ export default function CampaignBuilder() {
         }}>
           <XCircle size={15} color="#f59e0b" style={{ flexShrink: 0 }} />
           <span style={{ fontSize: 12.5, color: '#b45309' }}>
-            No LLM key configured — steps 1–2 (find companies and contacts) work, but hook and
-            cadence generation will fail. Add <code style={{ fontSize: 12 }}>ANTHROPIC_API_KEY</code> to
+            No LLM provider reachable — steps 1–2 (find companies and contacts) work, but hook and
+            cadence generation will fail. Set <code style={{ fontSize: 12 }}>GLM_API_KEY</code>, start
+            Ollama locally, or set <code style={{ fontSize: 12 }}>ANTHROPIC_API_KEY</code> in
             oracle_intent_engine/.env and restart.
           </span>
         </div>

@@ -655,27 +655,6 @@ def run_scan(
     finally:
         _scan_lock.release()
 
-def run_scan_async(
-    job_queries=None, news_queries=None,
-    location="", max_pages=None, sources=None,
-    campaign_id=None, campaign_keywords=None,
-):
-    thread = threading.Thread(
-        target=run_scan,
-        kwargs=dict(
-            job_queries=job_queries,
-            news_queries=news_queries,
-            location=location,
-            max_pages=max_pages,
-            sources=sources,
-            campaign_id=campaign_id,
-            campaign_keywords=campaign_keywords,
-        ),
-        daemon=True,
-    )
-    thread.start()
-    return thread
-
 def _persist(companies: list[dict], run_id: int = None) -> tuple[int, int]:
     """Persist companies and signals. Returns (new_count, known_count)."""
     from rapidfuzz import fuzz as _fuzz

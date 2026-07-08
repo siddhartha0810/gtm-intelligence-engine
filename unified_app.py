@@ -396,7 +396,10 @@ def _start_scan_subprocess(sources: list, location: str, max_pages: int,
                            job_queries: Optional[list] = None,
                            industry_filter: Optional[str] = None,
                            auto_enrich: bool = False,
-                           enrich_params: Optional[dict] = None) -> bool:
+                           enrich_params: Optional[dict] = None,
+                           news_queries: Optional[list] = None,
+                           campaign_id: Optional[int] = None,
+                           campaign_keywords: Optional[list] = None) -> bool:
     """Runs scan_worker.py — via the RQ queue if REDIS_URL is configured
     (job executes in a separate worker.py process, scales horizontally),
     otherwise spawns it directly in this process. Returns False if a scan
@@ -432,6 +435,12 @@ def _start_scan_subprocess(sources: list, location: str, max_pages: int,
             cmd += ["--job-queries"] + list(job_queries)
         if industry_filter:
             cmd += ["--industry-filter", industry_filter]
+        if news_queries:
+            cmd += ["--news-queries"] + list(news_queries)
+        if campaign_id:
+            cmd += ["--campaign-id", str(campaign_id)]
+        if campaign_keywords:
+            cmd += ["--campaign-keywords"] + list(campaign_keywords)
 
         if use_queue:
             job_queue.enqueue("scan", cmd, str(BASE_DIR), os.environ.copy())
@@ -4001,13 +4010,24 @@ async def launch_campaign_scan(
     The campaign's keywords are used to auto-generate job and news queries
     via query_builder.py. Custom queries override auto-generation if provided.
 
+    Runs through the same subprocess + status-file mechanism as /scan/start,
+    so /scan/status and /scan/log reflect campaign scans too — they used to
+    run in an untracked in-process thread with no progress visibility and no
+    "already running" guard.
+
     Optional body overrides:
       max_pages  (int)   — override campaign default
       location   (str)   — override campaign default
       sources    (list)  — override campaign default
     """
     from src.query_builder import build_all
-    import src.pipeline as scan_pipeline
+
+    status = _scan_current_status()
+    if status["status"] == "running":
+        return JSONResponse(
+            {"error": "A scan is already running.", "progress": status["progress"]},
+            status_code=409,
+        )
 
     body = {}
     try:
@@ -4045,15 +4065,13 @@ async def launch_campaign_scan(
         job_queries  = built["job_queries"]
         news_queries = built["news_queries"]
 
-    scan_pipeline.run_scan_async(
-        job_queries=job_queries,
-        news_queries=news_queries,
-        location=location,
-        max_pages=max_pages,
-        sources=sources or None,
-        campaign_id=campaign_id,
-        campaign_keywords=keywords,
+    started = _start_scan_subprocess(
+        sources=sources or [], location=location, max_pages=max_pages,
+        job_queries=job_queries, news_queries=news_queries,
+        campaign_id=campaign_id, campaign_keywords=keywords,
     )
+    if not started:
+        return JSONResponse({"error": "Scan already running."}, status_code=409)
 
     log_audit(current_user, "launch_campaign_scan", "campaign",
               str(campaign_id), new_value={"keywords": keywords, "max_pages": max_pages})
@@ -4461,12 +4479,17 @@ async def campaign_generate_hooks(
         product_context: str = body.get("product_context", "")
         icp_research: str = body.get("icp_research", "")
 
-        anthropic_key = os.getenv("ANTHROPIC_API_KEY", "").strip()
-        if not anthropic_key:
+        # hook_generator routes through llm_gateway (GLM/Ollama/Anthropic
+        # waterfall per LLM_PROVIDER_ORDER) — gate on the gateway, not on any
+        # one provider's key.
+        from oracle_intent_engine.src import llm_gateway
+        if not llm_gateway.is_available():
             return JSONResponse(
-                {"error": "ANTHROPIC_API_KEY not set in .env — add it to oracle_intent_engine/.env"},
+                {"error": "No LLM provider configured — set GLM_API_KEY, run Ollama, "
+                          "or set ANTHROPIC_API_KEY in oracle_intent_engine/.env"},
                 status_code=503,
             )
+        anthropic_key = os.getenv("ANTHROPIC_API_KEY", "").strip()  # legacy param only
 
         from oracle_intent_engine.src.company_researcher import research_company
         from oracle_intent_engine.src.hook_generator import (
@@ -4522,9 +4545,12 @@ async def campaign_generate_hooks(
 
 @app.get("/api/campaign/llm-status")
 async def campaign_llm_status(current_user: dict = Depends(oracle_auth.require_user)):
-    """Whether hook/cadence generation can actually run — surfaces the missing
-    ANTHROPIC_API_KEY upfront in the UI instead of failing at generate time."""
-    return {"available": bool(os.getenv("ANTHROPIC_API_KEY", "").strip())}
+    """Whether hook/cadence generation can actually run, and through which
+    providers — surfaces a dead LLM waterfall upfront in the UI instead of
+    failing at generate time."""
+    from oracle_intent_engine.src import llm_gateway
+    providers = llm_gateway.active_providers()
+    return {"available": bool(providers), "providers": providers}
 
 
 @app.get("/api/campaign/hook-stats")
@@ -4636,10 +4662,14 @@ async def build_cadence(
             return JSONResponse({"error": "No hooks provided"}, status_code=400)
 
         from oracle_intent_engine.src.cadence_builder import batch_build_sequences
-        import os
-        api_key = os.getenv("ANTHROPIC_API_KEY", "").strip()
-        if not api_key:
-            return JSONResponse({"error": "ANTHROPIC_API_KEY not set"}, status_code=500)
+        from oracle_intent_engine.src import llm_gateway
+        if not llm_gateway.is_available():
+            return JSONResponse(
+                {"error": "No LLM provider configured — set GLM_API_KEY, run Ollama, "
+                          "or set ANTHROPIC_API_KEY in oracle_intent_engine/.env"},
+                status_code=503,
+            )
+        api_key = os.getenv("ANTHROPIC_API_KEY", "").strip()  # legacy param only
 
         sequences = batch_build_sequences(hooks, api_key=api_key)
         ok_count  = sum(1 for s in sequences if s.get("ok"))
