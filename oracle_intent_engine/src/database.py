@@ -2021,6 +2021,12 @@ def search_company_email_formats(query: str, limit: int = 20) -> list:
     real presence in the corpus (e.g. "Co19 Oracle" / co19.oracle.com — 1
     validated email, 0 corpus contacts) — noise, not a company. Excluded so
     every search result has actual evidence behind it.
+
+    is_predictable = false means the primary format is "Other / unmatched" or
+    a custom multi-dot code with no buildable template — there's no format to
+    actually apply to a contact, so it doesn't belong in a *prediction* tool.
+    Excluded here (the full row still exists in company_email_formats — see
+    get_company_email_formats — for a domain someone navigates to directly).
     """
     q = f"%{(query or '').strip().lower()}%"
     if not q.strip("%"):
@@ -2033,6 +2039,7 @@ def search_company_email_formats(query: str, limit: int = 20) -> list:
             FROM company_email_formats
             WHERE format_rank = 1
               AND contacts_280k > 0
+              AND is_predictable
               AND (LOWER(company_name) LIKE %s OR LOWER(domain) LIKE %s)
             ORDER BY contacts_280k DESC, validated_emails DESC
             LIMIT %s
@@ -2056,17 +2063,21 @@ def get_company_email_formats(domain: str) -> list:
 
 def company_email_formats_stats() -> dict:
     """Row/domain counts for the Prediction Engine overview strip.
-    Scoped to evidence-backed domains (contacts_280k > 0) so the numbers
-    shown match what search actually surfaces — see search_company_email_formats."""
+    "domains" is scoped to exactly what search_company_email_formats surfaces
+    (evidence-backed AND a buildable primary format) so the number shown
+    never overstates what's actually searchable/usable."""
     with db_cursor(commit=False) as cur:
         cur.execute("""
-            SELECT COUNT(*) AS total_rows,
-                   COUNT(DISTINCT domain) AS domains,
-                   COUNT(DISTINCT domain) FILTER (WHERE is_predictable AND format_rank = 1) AS predictable_domains
+            SELECT COUNT(DISTINCT domain) FILTER (WHERE contacts_280k > 0 AND is_predictable AND format_rank = 1) AS domains,
+                   COUNT(*) FILTER (WHERE domain IN (
+                       SELECT domain FROM company_email_formats
+                       WHERE contacts_280k > 0 AND is_predictable AND format_rank = 1
+                   )) AS total_rows
             FROM company_email_formats
-            WHERE contacts_280k > 0
         """)
-        return dict(cur.fetchone())
+        row = dict(cur.fetchone())
+        row["predictable_domains"] = row["domains"]
+        return row
 
 # hubspot_config helpers
 def get_hubspot_config() -> dict:

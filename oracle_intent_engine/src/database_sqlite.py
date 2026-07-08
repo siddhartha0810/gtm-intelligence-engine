@@ -1251,8 +1251,10 @@ def upsert_company_email_formats(rows: list) -> int:
 
 def search_company_email_formats(query: str, limit: int = 20) -> list:
     # contacts_280k = 0 means a stray validated-email match with no real
-    # corpus presence — noise, not a company. See the Postgres version's
-    # docstring in database.py for the concrete example.
+    # corpus presence — noise, not a company. is_predictable = 0 means the
+    # primary format has no buildable template ("Other / unmatched" or a
+    # custom multi-dot code) — nothing to actually apply. See the Postgres
+    # version's docstring in database.py for concrete examples of both.
     q = f"%{(query or '').strip().lower()}%"
     if not q.strip("%"):
         return []
@@ -1264,6 +1266,7 @@ def search_company_email_formats(query: str, limit: int = 20) -> list:
             FROM company_email_formats
             WHERE format_rank = 1
               AND contacts_280k > 0
+              AND is_predictable = 1
               AND (LOWER(company_name) LIKE ? OR LOWER(domain) LIKE ?)
             ORDER BY contacts_280k DESC, validated_emails DESC
             LIMIT ?
@@ -1285,21 +1288,23 @@ def get_company_email_formats(domain: str) -> list:
 
 
 def company_email_formats_stats() -> dict:
-    # Scoped to evidence-backed domains (contacts_280k > 0) to match search.
+    # "domains" scoped to exactly what search_company_email_formats surfaces
+    # (evidence-backed AND a buildable primary format) — see database.py.
     with db_cursor(commit=False) as cur:
         cur.execute("""
-            SELECT COUNT(*) AS total_rows,
-                   COUNT(DISTINCT domain) AS domains
-            FROM company_email_formats
-            WHERE contacts_280k > 0
-        """)
-        row = dict(cur.fetchone())
-        cur.execute("""
             SELECT COUNT(DISTINCT domain) AS n FROM company_email_formats
-            WHERE is_predictable = 1 AND format_rank = 1 AND contacts_280k > 0
+            WHERE contacts_280k > 0 AND is_predictable = 1 AND format_rank = 1
         """)
-        row["predictable_domains"] = cur.fetchone()["n"]
-    return row
+        domains = cur.fetchone()["n"]
+        cur.execute("""
+            SELECT COUNT(*) AS n FROM company_email_formats
+            WHERE domain IN (
+                SELECT domain FROM company_email_formats
+                WHERE contacts_280k > 0 AND is_predictable = 1 AND format_rank = 1
+            )
+        """)
+        total_rows = cur.fetchone()["n"]
+    return {"domains": domains, "total_rows": total_rows, "predictable_domains": domains}
 
 
 # ── HubSpot ───────────────────────────────────────────────────────────────────
