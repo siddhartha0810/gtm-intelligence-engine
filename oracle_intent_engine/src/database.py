@@ -688,6 +688,64 @@ CREATE TABLE IF NOT EXISTS review_queue (
     "CREATE INDEX IF NOT EXISTS idx_outcomes_outcome ON outcomes(outcome)",
     "CREATE INDEX IF NOT EXISTS idx_outcomes_created ON outcomes(created_at DESC)",
 
+    # campaign_hooks — persists every hook hook_generator.py produces (the
+    # Signal -> Angle -> Hook step). Contacts here come from Campaign
+    # Builder's ICP flow (Apollo pass-through, not necessarily in
+    # company_contacts) so fields are denormalized text rather than FKs —
+    # a strict company_id/contact_id FK would silently drop most rows.
+    # Saved regardless of ok/hold_back so hold-back rate is a real metric,
+    # not just successful hooks.
+    """
+    CREATE TABLE IF NOT EXISTS campaign_hooks (
+        id                      BIGSERIAL PRIMARY KEY,
+        contact_name            TEXT NOT NULL DEFAULT '',
+        contact_email           TEXT NOT NULL DEFAULT '',
+        contact_title           TEXT NOT NULL DEFAULT '',
+        linkedin_url            TEXT NOT NULL DEFAULT '',
+        company_name            TEXT NOT NULL DEFAULT '',
+        signal_summary          TEXT NOT NULL DEFAULT '',
+        product_context         TEXT NOT NULL DEFAULT '',
+        icp_research             TEXT NOT NULL DEFAULT '',
+        angle                   TEXT NOT NULL DEFAULT '',
+        subject                 TEXT NOT NULL DEFAULT '',
+        body                    TEXT NOT NULL DEFAULT '',
+        word_count              INTEGER NOT NULL DEFAULT 0,
+        personalization_bucket  INTEGER,
+        personalization_label   TEXT NOT NULL DEFAULT '',
+        grounded                BOOLEAN,
+        grounded_on             TEXT NOT NULL DEFAULT '',
+        hold_back               BOOLEAN NOT NULL DEFAULT FALSE,
+        ok                      BOOLEAN NOT NULL DEFAULT FALSE,
+        error                   TEXT NOT NULL DEFAULT '',
+        created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_campaign_hooks_angle   ON campaign_hooks(angle)",
+    "CREATE INDEX IF NOT EXISTS idx_campaign_hooks_created ON campaign_hooks(created_at DESC)",
+
+    # campaign_touches — cadence_builder.py's touches 2-5 (LinkedIn + follow-up
+    # emails) for a hook already saved above. Touch 1 is the hook itself
+    # (campaign_hooks row), not duplicated here.
+    """
+    CREATE TABLE IF NOT EXISTS campaign_touches (
+        id         BIGSERIAL PRIMARY KEY,
+        hook_id    BIGINT REFERENCES campaign_hooks(id) ON DELETE CASCADE,
+        day        INTEGER NOT NULL,
+        channel    TEXT NOT NULL,
+        subject    TEXT NOT NULL DEFAULT '',
+        body       TEXT NOT NULL DEFAULT '',
+        notes      TEXT NOT NULL DEFAULT '',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_campaign_touches_hook ON campaign_touches(hook_id)",
+
+    # outcomes -> campaign_hooks link, so reply/meeting rates can eventually
+    # be sliced by angle. Nullable — most outcomes still won't trace back to
+    # a specific hook until the frontend threads hook_id through outreach.
+    "ALTER TABLE outcomes ADD COLUMN IF NOT EXISTS hook_id BIGINT REFERENCES campaign_hooks(id) ON DELETE SET NULL",
+    "CREATE INDEX IF NOT EXISTS idx_outcomes_hook ON outcomes(hook_id)",
+
     # ats_boards registry — auto-discovered company→ATS map (ats_discovery.py).
     # The ATS signal reads this on top of the config default boards, so the
     # watch-list grows itself as companies are discovered.
@@ -2516,6 +2574,84 @@ def get_outcome_totals() -> dict:
     with db_cursor(commit=False) as cur:
         cur.execute("SELECT outcome, COUNT(*) AS n FROM outcomes GROUP BY outcome")
         return {r["outcome"]: int(r["n"]) for r in cur.fetchall()}
+
+
+# ── Campaign hooks — persists the Signal -> Angle -> Hook step ───────────────
+# (see hook_generator.py / cadence_builder.py). Saved regardless of ok/hold_back
+# so hold-back rate is a real metric, not just successful hooks.
+
+def save_campaign_hook(hook: dict, signal_summary: str = "",
+                       product_context: str = "", icp_research: str = "") -> int:
+    with db_cursor() as cur:
+        cur.execute("""
+            INSERT INTO campaign_hooks (
+                contact_name, contact_email, contact_title, linkedin_url, company_name,
+                signal_summary, product_context, icp_research,
+                angle, subject, body, word_count,
+                personalization_bucket, personalization_label,
+                grounded, grounded_on, hold_back, ok, error
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING id
+        """, (
+            hook.get("contact_name", ""), hook.get("email", ""), hook.get("title", ""),
+            hook.get("linkedin_url", ""), hook.get("company", ""),
+            signal_summary, product_context, icp_research,
+            hook.get("angle", ""), hook.get("subject", ""), hook.get("body", ""),
+            hook.get("word_count", 0),
+            hook.get("personalization_bucket"), hook.get("personalization_label", ""),
+            hook.get("grounded"), hook.get("grounded_on", ""),
+            bool(hook.get("hold_back", False)), bool(hook.get("ok", False)),
+            hook.get("error") or "",
+        ))
+        return cur.fetchone()["id"]
+
+
+def save_campaign_touches(hook_id: int, touches: list) -> None:
+    if not touches:
+        return
+    with db_cursor() as cur:
+        for t in touches:
+            cur.execute("""
+                INSERT INTO campaign_touches (hook_id, day, channel, subject, body, notes)
+                VALUES (%s, %s, %s, %s, %s, %s)
+            """, (hook_id, t.get("day", 0), t.get("channel", ""),
+                  t.get("subject", ""), t.get("body", ""), t.get("notes", "")))
+
+
+def get_campaign_hook_stats() -> dict:
+    """Angle distribution, bucket distribution, hold-back rate — the metrics
+    half of the Signal -> Angle -> Hook -> Email page."""
+    with db_cursor(commit=False) as cur:
+        cur.execute("SELECT COUNT(*) AS n FROM campaign_hooks")
+        total = cur.fetchone()["n"]
+        cur.execute("SELECT COUNT(*) AS n FROM campaign_hooks WHERE ok")
+        ok = cur.fetchone()["n"]
+        cur.execute("SELECT COUNT(*) AS n FROM campaign_hooks WHERE hold_back")
+        held_back = cur.fetchone()["n"]
+        cur.execute("""
+            SELECT angle, COUNT(*) AS n FROM campaign_hooks
+            WHERE ok AND angle != '' GROUP BY angle ORDER BY n DESC
+        """)
+        by_angle = {r["angle"]: r["n"] for r in cur.fetchall()}
+        cur.execute("""
+            SELECT personalization_bucket AS bucket, COUNT(*) AS n FROM campaign_hooks
+            WHERE personalization_bucket IS NOT NULL GROUP BY personalization_bucket ORDER BY bucket
+        """)
+        by_bucket = {r["bucket"]: r["n"] for r in cur.fetchall()}
+        cur.execute("SELECT COUNT(*) AS n FROM campaign_touches")
+        touches = cur.fetchone()["n"]
+    return {
+        "total_hooks": total, "ok_hooks": ok, "held_back": held_back,
+        "by_angle": by_angle, "by_bucket": by_bucket, "total_touches": touches,
+    }
+
+
+def get_recent_campaign_hooks(limit: int = 50) -> list:
+    with db_cursor(commit=False) as cur:
+        cur.execute("""
+            SELECT * FROM campaign_hooks ORDER BY created_at DESC LIMIT %s
+        """, (limit,))
+        return [dict(r) for r in cur.fetchall()]
 
 
 # ── ATS board registry (auto-discovery) ───────────────────────────────────────

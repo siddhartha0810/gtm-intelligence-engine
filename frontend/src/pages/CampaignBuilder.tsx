@@ -63,6 +63,7 @@ interface Hook {
   linkedin_url: string
   ok: boolean
   error?: string
+  hook_id?: number  // set once the hook is persisted server-side; threaded through to build-cadence so touches 2-5 link back to it
 }
 
 type Step = 'icp' | 'contacts' | 'hooks' | 'export' | 'cadence'

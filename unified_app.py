@@ -4429,12 +4429,32 @@ async def campaign_generate_hooks(
                 icp_research=icp_research,
                 api_key=anthropic_key,
             )
+            try:
+                hook["hook_id"] = oracle_db.save_campaign_hook(
+                    hook,
+                    signal_summary=co_research.get("research", {}).get("summary", ""),
+                    product_context=product_context,
+                    icp_research=icp_research,
+                )
+            except Exception:
+                logger.warning("Failed to persist campaign hook", exc_info=True)
             hooks.append(hook)
             await asyncio.sleep(0.2)
 
         return {"hooks": hooks, "count": len(hooks)}
     except Exception as e:
         logger.exception("Hook generation failed")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.get("/api/campaign/hook-stats")
+async def campaign_hook_stats(current_user: dict = Depends(oracle_auth.require_user)):
+    """Angle distribution, personalization-bucket distribution, hold-back rate —
+    the metrics half of the future Signal -> Angle -> Hook -> Email page."""
+    try:
+        return oracle_db.get_campaign_hook_stats()
+    except Exception as e:
+        logger.exception("campaign hook stats failed")
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
@@ -4528,6 +4548,18 @@ async def build_cadence(
 
         sequences = batch_build_sequences(hooks, api_key=api_key)
         ok_count  = sum(1 for s in sequences if s.get("ok"))
+
+        # Persist touches 2-5 against the hook already saved in generate-hooks.
+        # hook_id only exists on hooks generated after this feature shipped —
+        # older frontend sessions without it just skip persistence here.
+        for hook, seq in zip(hooks, sequences):
+            hook_id = hook.get("hook_id")
+            if hook_id and seq.get("ok"):
+                try:
+                    oracle_db.save_campaign_touches(hook_id, seq.get("touches", []))
+                except Exception:
+                    logger.warning("Failed to persist campaign touches for hook_id=%s", hook_id, exc_info=True)
+
         log_audit(current_user, "build_cadence", "campaign", "batch", new_value={"count": len(sequences)})
         return {"sequences": sequences, "ok_count": ok_count, "total": len(sequences)}
 
