@@ -2,30 +2,37 @@
 """
 fix_company_names.py
 =====================
-company_email_formats.company_name came from the source guide's naive
-domain-parsing ("hsbc.com" -> "Hsbc", "hsbc.com.ar" -> "Hsbc Com" — the
-generic second-level TLD leaked in because the parser split on every dot).
-90% of covered domains (27,059 / 30,012) show this pattern.
+company_email_formats.company_name has three distinct, stackable data-quality
+bugs, all present in the source guide from the start (none introduced by any
+script in this repo):
 
-Two free, mechanical fixes — no live scraping, no API calls:
+  1. Naive domain-parsing: "hsbc.com" -> "Hsbc" (90% of covered domains,
+     27,059 / 30,012).
+  2. Leaked multi-part-TLD fragment: "hsbc.com.ar" -> "Hsbc Com" (splitting
+     on every dot instead of just the SLD leaks the generic middle label).
+  3. company_name literally equal to the full raw domain string:
+     "iqvia.com" as the NAME, not just the domain (3,633 domains) — worse
+     than #1, since it's not even title-cased.
 
-  1. Backfill from the `companies` table, which enrich_companies.py has
-     already been improving via free og:site_name scrapes for a while.
-     27,732 of the 30,012 covered domains already have a row there — some
-     already carry a real name ("flysterling.com" -> "Sterling Airways"),
-     even if most are still the same naive parse. Free instant win either way.
+Two free, mechanical fixes applied here, no live scraping, no invented names:
 
-  2. Strip a leaked generic-TLD fragment off the end of the name
-     ("Abercrombiekent Co" -> "Abercrombiekent", 213 domains) — a distinct,
-     narrower bug from splitting multi-part TLDs (.com.ar, .co.in, .com.au)
-     on every dot instead of just the SLD.
+  A. Backfill from the `companies` table, which enrich_companies.py has
+     already been improving via free og:site_name scrapes. Only applied when
+     BOTH sides check out: the existing company_email_formats name is
+     currently bad (one of the three patterns above, or a prior live-scrape
+     artifact that also looks like a domain), AND the companies.name being
+     pulled in doesn't itself look like a raw domain. Without this guard, an
+     earlier version of this script clobbered good live-scraped values
+     ("Cardinal Health Inc") with worse companies-table ones
+     ("cardinalhealth.com", itself bug #3 in that table) just because they
+     differed — verified and fixed before running for real.
 
-Neither of these invents a name — they either reuse a name this project
-already derived elsewhere, or remove characters that were never part of
-any real name. Getting REAL company names (e.g. "Hsbc" -> "HSBC") needs
-live per-domain enrichment — see enrich_companies.py, which already does
-this for the `companies` table and could be pointed at the remaining
-naive company_email_formats domains as a follow-up.
+  B. Fix bugs #2 and #3 directly wherever backfill didn't already fix them.
+
+Getting genuinely new names beyond what's already sitting in the companies
+table needs live per-domain enrichment — see enrich_prediction_names.py
+(reuses enrich_companies.py's free og:site_name mechanism, with an added
+filter for domain-shaped junk that mechanism can return).
 
 Usage:
     python fix_company_names.py            # writes to company_email_formats
@@ -33,6 +40,7 @@ Usage:
 """
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 
@@ -40,6 +48,27 @@ BASE = Path(__file__).parent
 ORACLE = BASE / "oracle_intent_engine"
 if str(ORACLE) not in sys.path:
     sys.path.insert(0, str(ORACLE))
+
+_DOMAIN_LIKE = re.compile(r"\.[a-z]{2,6}$", re.IGNORECASE)
+
+
+def _looks_like_domain(name: str) -> bool:
+    return bool(_DOMAIN_LIKE.search(name.strip()))
+
+
+def _is_bad(name: str, domain: str) -> bool:
+    """True if `name` is one of the three known-bad patterns for `domain`."""
+    n = name.strip().lower()
+    d = domain.strip().lower()
+    root = d.split(".")[0]
+    if n == d:                                  # bug #3: exact domain string
+        return True
+    if n.replace(" ", "") == root:               # bug #1: naive title-case of root
+        return True
+    if _looks_like_domain(name):                 # any other domain-shaped junk
+        return True
+    return False
+
 
 def _strip_tld_fragment(name: str, domain: str) -> str:
     """
@@ -71,45 +100,63 @@ def main() -> None:
 
     with db.db_cursor(commit=False) as cur:
         cur.execute("""
-            SELECT cef.domain, cef.company_name AS naive_name, c.name AS enriched_name
+            SELECT cef.domain, cef.company_name AS current_name, c.name AS candidate_name
             FROM company_email_formats cef
             JOIN companies c ON LOWER(c.domain) = cef.domain
-            WHERE c.name IS NOT NULL AND c.name != '' AND c.name != cef.company_name
+            WHERE c.name IS NOT NULL AND c.name != ''
         """)
-        backfill_rows = cur.fetchall()
+        join_rows = cur.fetchall()
 
         cur.execute("SELECT DISTINCT domain, company_name FROM company_email_formats")
         all_rows = cur.fetchall()
 
-    backfill_map = {r["domain"]: r["enriched_name"] for r in backfill_rows}
+    backfill_map: dict[str, str] = {}
+    for r in join_rows:
+        domain, current, candidate = r["domain"], r["current_name"], r["candidate_name"]
+        if candidate == current:
+            continue
+        if not _is_bad(current, domain):
+            continue  # current name is already fine — don't touch it
+        if _is_bad(candidate, domain):
+            continue  # companies.name is itself junk — nothing to gain
+        backfill_map[domain] = candidate
+
+    exact_map: dict[str, str] = {}
     strip_map: dict[str, str] = {}
     for r in all_rows:
-        domain = r["domain"]
+        domain, name = r["domain"], r["company_name"]
         if domain in backfill_map:
             continue  # backfill takes priority for this domain
-        cleaned = _strip_tld_fragment(r["company_name"], domain)
-        if cleaned != r["company_name"]:
+        if name.strip().lower() == domain.strip().lower():
+            exact_map[domain] = domain.split(".")[0].title()
+            continue
+        cleaned = _strip_tld_fragment(name, domain)
+        if cleaned != name:
             strip_map[domain] = cleaned
 
-    print(f"Backfill from companies table: {len(backfill_map):,} domains")
-    print(f"TLD-fragment strip:            {len(strip_map):,} domains")
+    print(f"Backfill from companies table:  {len(backfill_map):,} domains")
+    print(f"Exact-domain-string fix:        {len(exact_map):,} domains")
+    print(f"TLD-fragment strip:             {len(strip_map):,} domains")
 
     if dry_run:
         print("\n--dry-run: showing a sample, writing nothing.")
         for domain, name in list(backfill_map.items())[:10]:
             print(f"  [backfill] {domain}: -> {name}")
+        for domain, name in list(exact_map.items())[:10]:
+            print(f"  [exact]    {domain}: -> {name}")
         for domain, name in list(strip_map.items())[:10]:
             print(f"  [strip]    {domain}: -> {name}")
         return
 
-    updates = {**backfill_map, **strip_map}
+    updates = {**backfill_map, **exact_map, **strip_map}
     with db.db_cursor() as cur:
         for domain, new_name in updates.items():
             cur.execute(
                 "UPDATE company_email_formats SET company_name = %s WHERE domain = %s",
                 (new_name, domain),
             )
-    print(f"\nDONE — {len(updates):,} domains updated ({len(backfill_map):,} backfilled, {len(strip_map):,} TLD-stripped).")
+    print(f"\nDONE — {len(updates):,} domains updated "
+          f"({len(backfill_map):,} backfilled, {len(exact_map):,} exact-domain-fixed, {len(strip_map):,} TLD-stripped).")
 
 
 if __name__ == "__main__":
