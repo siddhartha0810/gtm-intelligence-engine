@@ -49,20 +49,20 @@ function buildNavGroups(user?: User): NavGroup[] {
     { label: 'PIPELINE', stage: 2, items: [
       { to: '/companies',    icon: Building2,     label: 'Companies',    min: 1 },
       { to: '/contacts',     icon: Users,         label: 'Contacts',     min: 1 },
+      { to: '/list-import',  icon: Upload,        label: 'List Import',  min: 2 },
       { to: '/review-queue', icon: ClipboardCheck, label: 'Review Queue', min: 2 },
     ]},
     { label: 'REACH', stage: 3, items: [
       { to: '/people-search',      icon: Search,    label: 'People Search',      min: 1 },
       { to: '/prediction-engine',  icon: Wand2,     label: 'Prediction Engine',  min: 1 },
-      { to: '/list-import',        icon: Upload,    label: 'List Import',        min: 2 },
       { to: '/hubspot-sync',       icon: RefreshCw, label: 'HubSpot Sync',       min: 3 },
     ]},
     { label: 'INTELLIGENCE', items: [
-      { to: '/reporting',            icon: BarChart3,     label: 'Reporting',      min: 2 },
-      { to: '/metrics',              icon: Activity,      label: 'System Metrics', min: 2 },
       { to: '/product-intelligence', icon: PackageSearch, label: 'Product Intel',  min: 1 },
       { to: '/intent-data',          icon: Target,        label: 'Intent Data',    min: 1 },
       { to: '/events',               icon: CalendarDays,  label: 'Events',         min: 1 },
+      { to: '/reporting',            icon: BarChart3,     label: 'Reporting',      min: 2 },
+      { to: '/metrics',              icon: Activity,      label: 'System Metrics', min: 2 },
     ]},
     { label: 'CONFIGURE', items: [
       { to: '/technology-profiles', icon: Layers,     label: 'Technology Profiles', min: 2 },
