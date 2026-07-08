@@ -598,6 +598,7 @@ def main() -> None:
     args    = sys.argv[1:]
     restart = "--restart" in args
     resume  = "--resume"  in args
+    force_low_credits = "--force-low-credits" in args or os.environ.get("FORCE_LOW_CREDITS") == "1"
 
     if "--credits" in args:
         _show_credits()
@@ -729,6 +730,11 @@ def main() -> None:
         if opening_balance < existing_emails:
             print(f"\n  !! WARNING: balance ({opening_balance:,}) < known emails to validate ({existing_emails:,}).")
             print(f"  !! Top up at zerobounce.net before continuing.")
+            if not force_low_credits:
+                print(f"  !! Aborting — insufficient ZeroBounce credits for this run.")
+                print(f"  !! Pass --force-low-credits (or set FORCE_LOW_CREDITS=1) to run anyway and")
+                print(f"  !! accept that some emails will go unvalidated once credits run out.")
+                sys.exit(1)
     else:
         print(f"  Balance now          : not checked (no ZEROBOUNCE_API_KEY in .env)")
         print(f"  Emails will be marked 'not_validated' until a key is set.")

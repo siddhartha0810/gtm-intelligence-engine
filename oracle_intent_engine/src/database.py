@@ -230,6 +230,13 @@ _DDL = [
     """,
     "CREATE INDEX IF NOT EXISTS idx_cef_domain ON company_email_formats(domain)",
     "CREATE INDEX IF NOT EXISTS idx_cef_company_name ON company_email_formats(LOWER(company_name))",
+    # search_company_email_formats() does leading-wildcard LIKE '%query%' on
+    # both columns — a plain btree index (above) can't service that; only a
+    # trigram GIN index can. pg_trgm ships with Postgres contrib, safe to
+    # enable idempotently.
+    "CREATE EXTENSION IF NOT EXISTS pg_trgm",
+    "CREATE INDEX IF NOT EXISTS idx_cef_company_name_trgm ON company_email_formats USING GIN (LOWER(company_name) gin_trgm_ops)",
+    "CREATE INDEX IF NOT EXISTS idx_cef_domain_trgm ON company_email_formats USING GIN (LOWER(domain) gin_trgm_ops)",
     """
     CREATE TABLE IF NOT EXISTS enrichment_cache (
         lead_id                     TEXT PRIMARY KEY,
@@ -247,6 +254,11 @@ _DDL = [
     "CREATE INDEX IF NOT EXISTS idx_signals_company  ON oracle_signals(company_id)",
     "CREATE INDEX IF NOT EXISTS idx_signals_phase    ON oracle_signals(phase)",
     "CREATE INDEX IF NOT EXISTS idx_signals_product  ON oracle_signals(oracle_product)",
+    # scan_run_id / first_scan_run_id are what the main companies-dashboard
+    # query filters on directly (get_all_companies_with_signals) — without
+    # these, every dashboard load is a sequential scan on both tables.
+    "CREATE INDEX IF NOT EXISTS idx_signals_scan_run ON oracle_signals(scan_run_id)",
+    "CREATE INDEX IF NOT EXISTS idx_companies_first_scan_run ON companies(first_scan_run_id)",
     "CREATE INDEX IF NOT EXISTS idx_contacts_company ON company_contacts(company_id)",
     """
     CREATE UNIQUE INDEX IF NOT EXISTS idx_contacts_company_email
@@ -811,6 +823,32 @@ def init_db():
     logger.info("PostgreSQL schema initialised")
     _backfill_unique_keys()
     _backfill_signal_counts()
+    _ensure_contacts_trgm_indexes()
+
+
+def _ensure_contacts_trgm_indexes():
+    """Best-effort GIN trigram indexes on the external 280K `contacts` table
+    (owned by csv_contacts.py, not this module's DDL — it may not exist in
+    every environment). Its lookups do leading-wildcard LIKE on "Domain" and
+    "Existing_Company", which a plain index can't serve. Run outside the main
+    DDL transaction so a missing table can't roll back schema init."""
+    try:
+        with db_cursor() as cur:
+            cur.execute("SELECT to_regclass('public.contacts') AS reg")
+            if not cur.fetchone()["reg"]:
+                return
+            cur.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm")
+            cur.execute(
+                'CREATE INDEX IF NOT EXISTS idx_contacts_domain_trgm '
+                'ON contacts USING GIN (LOWER("Domain") gin_trgm_ops)'
+            )
+            cur.execute(
+                'CREATE INDEX IF NOT EXISTS idx_contacts_existing_company_trgm '
+                'ON contacts USING GIN (LOWER("Existing_Company") gin_trgm_ops)'
+            )
+        logger.info("contacts trigram indexes ensured")
+    except Exception as e:
+        logger.warning("Skipping contacts trigram indexes: %s", e)
 
 def _backfill_unique_keys():
     """One-time backfill: assign unique_key to any existing rows that have an empty value."""
@@ -2516,10 +2554,12 @@ def get_audit_logs_list(limit: int = 100, entity_type: str = None) -> list:
 
 def log_outcome(outcome: str, company: str = "", email: str = "",
                 contact_id: int = None, campaign_id: int = None,
-                notes: str = "") -> dict:
+                notes: str = "", hook_id: int = None) -> dict:
     """Record a real outreach result. Resolves company_id/contact_id from the
     company name or email the user knows post-send. Never overwrites — each
-    logged outcome is an event (a contact can be contacted, then reply)."""
+    logged outcome is an event (a contact can be contacted, then reply).
+    hook_id (optional) traces this outcome back to the campaign_hooks row
+    that produced the send, so reply/meeting rates can be sliced by angle."""
     with db_cursor() as cur:
         resolved_company_id = None
         resolved_contact_id = contact_id
@@ -2538,11 +2578,11 @@ def log_outcome(outcome: str, company: str = "", email: str = "",
                     resolved_company_id = row["company_id"]
 
         cur.execute("""
-            INSERT INTO outcomes (company_id, contact_id, campaign_id, email, outcome, notes)
-            VALUES (%s, %s, %s, %s, %s, %s)
+            INSERT INTO outcomes (company_id, contact_id, campaign_id, email, outcome, notes, hook_id)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
             RETURNING *
         """, (resolved_company_id, resolved_contact_id, campaign_id,
-              email.strip(), outcome.strip(), notes.strip()))
+              email.strip(), outcome.strip(), notes.strip(), hook_id))
         return dict(cur.fetchone())
 
 
@@ -2574,6 +2614,22 @@ def get_outcome_totals() -> dict:
     with db_cursor(commit=False) as cur:
         cur.execute("SELECT outcome, COUNT(*) AS n FROM outcomes GROUP BY outcome")
         return {r["outcome"]: int(r["n"]) for r in cur.fetchall()}
+
+
+def get_outcome_hook_rows() -> list:
+    """One row per outcome that traces back to a campaign_hooks row (hook_id
+    set) — the input to angle/personalization-bucket attribution. Unlike
+    get_outcome_signal_rows(), this is 1:1 (an outcome has at most one hook),
+    so no dedup is needed downstream."""
+    with db_cursor(commit=False) as cur:
+        cur.execute("""
+            SELECT o.id AS outcome_id, o.outcome,
+                   ch.angle, ch.personalization_bucket, ch.personalization_label
+            FROM outcomes o
+            JOIN campaign_hooks ch ON ch.id = o.hook_id
+            WHERE o.hook_id IS NOT NULL
+        """)
+        return [dict(r) for r in cur.fetchall()]
 
 
 # ── Campaign hooks — persists the Signal -> Angle -> Hook step ───────────────

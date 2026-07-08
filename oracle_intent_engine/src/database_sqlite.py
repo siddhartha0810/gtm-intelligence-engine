@@ -537,6 +537,8 @@ _DDL = [
     "CREATE INDEX IF NOT EXISTS idx_signals_phase       ON oracle_signals(phase)",
     "CREATE INDEX IF NOT EXISTS idx_signals_product     ON oracle_signals(oracle_product)",
     "CREATE INDEX IF NOT EXISTS idx_signals_tier        ON oracle_signals(signal_tier)",
+    "CREATE INDEX IF NOT EXISTS idx_signals_scan_run    ON oracle_signals(scan_run_id)",
+    "CREATE INDEX IF NOT EXISTS idx_companies_first_scan_run ON companies(first_scan_run_id)",
     # Migrations for existing DBs — ADD COLUMN is idempotent via IF NOT EXISTS equivalent
     "ALTER TABLE oracle_signals ADD COLUMN signal_tier TEXT DEFAULT 'P2'",
     "ALTER TABLE technology_profiles ADD COLUMN competitor_domains TEXT NOT NULL DEFAULT ''",
@@ -1435,41 +1437,12 @@ def update_engine_config(engine_type: str, is_enabled: bool = None,
 
 
 # ── Users ─────────────────────────────────────────────────────────────────────
-
-def get_user_by_email(email: str) -> Optional[dict]:
-    with db_cursor(commit=False) as cur:
-        cur.execute("SELECT * FROM users WHERE email = ?", (email.lower(),))
-        return cur.fetchone()
-
-
-def get_user_by_id(user_id: int) -> Optional[dict]:
-    with db_cursor(commit=False) as cur:
-        cur.execute("SELECT * FROM users WHERE id = ?", (user_id,))
-        return cur.fetchone()
-
-
-def create_user(email: str, name: str, password_hash: str, role: str = "analyst") -> int:
-    with db_cursor() as cur:
-        cur.execute("""
-            INSERT INTO users (email, name, password_hash, role)
-            VALUES (?, ?, ?, ?) RETURNING id
-        """, (email.lower(), name, password_hash, role))
-        row = cur.fetchone()
-        return row["id"] if row else cur.lastrowid
-
-
-def list_users() -> list:
-    with db_cursor(commit=False) as cur:
-        cur.execute(
-            "SELECT id, email, name, role, is_active, last_login, created_at FROM users ORDER BY created_at DESC"
-        )
-        return cur.fetchall()
-
-
-def update_user_last_login(user_id: int):
-    with db_cursor() as cur:
-        cur.execute("UPDATE users SET last_login = datetime('now') WHERE id = ?", (user_id,))
-
+# No functions here — auth.py owns user-management (get_user_by_email,
+# create_user, list_users, update_last_login, etc.) and calls through
+# db.db_cursor(), which this module already monkey-patches on fallback. A
+# parallel set of user functions used to live here but had zero callers
+# (auth.py never routes through this module by name) — removed to avoid a
+# second, silently-unused implementation drifting from the real one.
 
 # ── Audit logs ────────────────────────────────────────────────────────────────
 
@@ -1667,7 +1640,7 @@ def get_audit_logs_list(limit: int = 100, entity_type: str = None) -> list:
 
 def log_outcome(outcome: str, company: str = "", email: str = "",
                 contact_id: int = None, campaign_id: int = None,
-                notes: str = "") -> dict:
+                notes: str = "", hook_id: int = None) -> dict:
     with db_cursor() as cur:
         resolved_company_id = None
         resolved_contact_id = contact_id
@@ -1686,10 +1659,10 @@ def log_outcome(outcome: str, company: str = "", email: str = "",
                     resolved_company_id = row["company_id"]
 
         cur.execute("""
-            INSERT INTO outcomes (company_id, contact_id, campaign_id, email, outcome, notes)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO outcomes (company_id, contact_id, campaign_id, email, outcome, notes, hook_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
         """, (resolved_company_id, resolved_contact_id, campaign_id,
-              email.strip(), outcome.strip(), notes.strip()))
+              email.strip(), outcome.strip(), notes.strip(), hook_id))
         new_id = cur.lastrowid
         cur.execute("SELECT * FROM outcomes WHERE id = ?", (new_id,))
         return dict(cur.fetchone())
@@ -1721,6 +1694,20 @@ def get_outcome_totals() -> dict:
     with db_cursor(commit=False) as cur:
         cur.execute("SELECT outcome, COUNT(*) AS n FROM outcomes GROUP BY outcome")
         return {r["outcome"]: int(r["n"]) for r in cur.fetchall()}
+
+
+def get_outcome_hook_rows() -> list:
+    """Mirrors database.py — one row per outcome traced back to a campaign_hooks
+    row, the input to angle/personalization-bucket attribution."""
+    with db_cursor(commit=False) as cur:
+        cur.execute("""
+            SELECT o.id AS outcome_id, o.outcome,
+                   ch.angle, ch.personalization_bucket, ch.personalization_label
+            FROM outcomes o
+            JOIN campaign_hooks ch ON ch.id = o.hook_id
+            WHERE o.hook_id IS NOT NULL
+        """)
+        return [dict(r) for r in cur.fetchall()]
 
 
 # ── Campaign hooks — mirrors database.py ──────────────────────────────────────

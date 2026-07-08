@@ -6,6 +6,7 @@ oracle_intent_engine/.env
 lead_enrichment_engine/.env
 *.pem
 *.key
+.jwt_fallback_key
 secrets/
 
 # ── Python ────────────────────────────────────────────────────────────────────

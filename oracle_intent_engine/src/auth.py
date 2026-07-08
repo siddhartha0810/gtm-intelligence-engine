@@ -251,3 +251,23 @@ def change_password(user_id: int, new_password: str) -> None:
             "UPDATE users SET password_hash = %s, updated_at = NOW() WHERE id = %s",
             (pw_hash, user_id),
         )
+
+
+def admin_reset_password(user_id: int, new_password: str, caller_role: str) -> None:
+    """Admin/owner force-sets another user's password — the only recovery
+    path for a locked-out user, since self-service change-password requires
+    knowing the old one. Same privilege guard as update_user's role change:
+    a caller can't reset the password of a user with equal or higher rank."""
+    target = get_user_by_id(user_id)
+    if not target:
+        from fastapi import HTTPException, status as http_status
+        raise HTTPException(status_code=http_status.HTTP_404_NOT_FOUND, detail="User not found")
+    caller_rank = ROLE_HIERARCHY.get(caller_role, 0)
+    target_rank = ROLE_HIERARCHY.get(target["role"], 4)
+    if caller_rank <= target_rank:
+        from fastapi import HTTPException, status as http_status
+        raise HTTPException(
+            status_code=http_status.HTTP_403_FORBIDDEN,
+            detail="Cannot reset the password of a user with equal or higher privilege",
+        )
+    change_password(user_id, new_password)

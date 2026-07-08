@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Radio, Target, MessageSquareText, Mail, ShieldCheck, ChevronDown, ChevronRight,
-         Loader2, CheckCircle2, PauseCircle, ArrowRight } from 'lucide-react'
+         Loader2, CheckCircle2, PauseCircle, ArrowRight, TrendingUp } from 'lucide-react'
 import { toast } from '../components/Toast'
 
 const authH = (): Record<string, string> => ({
@@ -53,12 +53,76 @@ interface HookStats {
   total_touches: number
 }
 interface RecentHook {
-  id: number; contact_name: string; company_name: string; contact_title: string
+  id: number; contact_name: string; contact_email: string; company_name: string; contact_title: string
   angle: string; subject: string; body: string
   personalization_bucket: number | null; personalization_label: string
   grounded: boolean | null; grounded_on: string
   hold_back: boolean; ok: boolean; error: string
   created_at: string
+}
+interface AttributionBucket { value: string; total: number; positive: number; meetings: number; negative: number; positive_rate: number; meeting_rate: number; label?: string }
+interface Attribution {
+  by_angle: AttributionBucket[]; by_personalization_bucket: AttributionBucket[]
+  headline: { total_outcomes: number; replies: number; meetings: number; reply_rate: number; meeting_rate: number }
+}
+
+const OUTCOME_OPTIONS = [
+  { value: 'contacted',    label: 'Contacted' },
+  { value: 'replied',      label: 'Replied' },
+  { value: 'meeting',      label: 'Meeting booked' },
+  { value: 'bounced',      label: 'Bounced' },
+  { value: 'bad',          label: 'Bad contact' },
+  { value: 'unsubscribed', label: 'Unsubscribed' },
+]
+
+function LogOutcome({ h, onLogged }: { h: RecentHook; onLogged: () => void }) {
+  const [outcome, setOutcome] = useState('contacted')
+  const [saving, setSaving] = useState(false)
+  const [logged, setLogged] = useState(false)
+
+  const submit = async () => {
+    setSaving(true)
+    try {
+      const r = await fetch('/api/outcomes', {
+        method: 'POST',
+        headers: { ...authH(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ outcome, hook_id: h.id, company: h.company_name, email: h.contact_email }),
+      })
+      if (!r.ok) throw new Error(`HTTP ${r.status}`)
+      setLogged(true)
+      toast.success(`Logged "${outcome}" for this hook`)
+      onLogged()
+    } catch {
+      toast.error('Failed to log outcome')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (logged) {
+    return (
+      <div style={{ marginTop: 10, fontSize: 11.5, color: C.success, display: 'flex', alignItems: 'center', gap: 5 }}>
+        <CheckCircle2 size={12} /> Outcome logged — feeds angle performance below.
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
+      <select value={outcome} onChange={e => setOutcome(e.target.value)} style={{
+        fontSize: 11.5, padding: '4px 8px', borderRadius: 6, border: `1px solid ${C.border}`,
+        background: C.card, color: C.text, cursor: 'pointer',
+      }}>
+        {OUTCOME_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+      <button onClick={submit} disabled={saving} style={{
+        fontSize: 11.5, fontWeight: 600, padding: '4px 10px', borderRadius: 6, border: 'none',
+        background: saving ? C.textFaint : C.primary, color: '#fff', cursor: saving ? 'default' : 'pointer',
+      }}>
+        {saving ? 'Logging…' : 'Log outcome'}
+      </button>
+    </div>
+  )
 }
 
 function StepCard({ icon, step, title, desc }: { icon: React.ReactNode; step: number; title: string; desc: string }) {
@@ -92,7 +156,22 @@ function Bar({ label, count, total, color }: { label: string; count: number; tot
   )
 }
 
-function HookRow({ h }: { h: RecentHook }) {
+function RateBar({ rate, color }: { rate: number; color: string }) {
+  const pct = Math.round(rate * 100)
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      <div style={{ flex: 1, height: 16, background: '#f1f5f9', borderRadius: 8, overflow: 'hidden' }}>
+        <div style={{ width: `${pct}%`, minWidth: pct > 0 ? 4 : 0, height: '100%', background: color,
+          borderRadius: 8, transition: 'width 200ms ease-out' }} />
+      </div>
+      <span style={{ fontSize: 12, fontWeight: 700, color: C.text, width: 60, textAlign: 'right', flexShrink: 0 }}>
+        reply {pct}%
+      </span>
+    </div>
+  )
+}
+
+function HookRow({ h, onLogged }: { h: RecentHook; onLogged: () => void }) {
   const [open, setOpen] = useState(false)
   return (
     <div style={{ border: `1px solid ${C.border}`, borderRadius: 8, overflow: 'hidden' }}>
@@ -131,6 +210,7 @@ function HookRow({ h }: { h: RecentHook }) {
                   </span>
                 )}
               </div>
+              <LogOutcome h={h} onLogged={onLogged} />
             </>
           ) : (
             <p style={{ margin: '10px 0 0', fontSize: 12.5, color: C.textFaint, fontStyle: 'italic' }}>
@@ -146,7 +226,12 @@ function HookRow({ h }: { h: RecentHook }) {
 export default function CampaignEmails() {
   const [stats, setStats] = useState<HookStats | null>(null)
   const [hooks, setHooks] = useState<RecentHook[]>([])
+  const [attribution, setAttribution] = useState<Attribution | null>(null)
   const [loading, setLoading] = useState(true)
+
+  const loadAttribution = () => {
+    fetch('/api/outcomes/attribution', { headers: authH() }).then(r => r.json()).then(setAttribution).catch(() => {})
+  }
 
   useEffect(() => {
     Promise.all([
@@ -156,6 +241,7 @@ export default function CampaignEmails() {
       .then(([s, h]) => { setStats(s); setHooks(h.hooks || []) })
       .catch(() => toast.error('Could not load campaign email data'))
       .finally(() => setLoading(false))
+    loadAttribution()
   }, [])
 
   const total = stats?.total_hooks ?? 0
@@ -279,13 +365,46 @@ export default function CampaignEmails() {
             </div>
           </div>
 
+          {/* Angle performance — real reply/meeting rates, once outcomes are logged */}
+          {attribution && attribution.headline.total_outcomes > 0 && (
+            <div style={{ ...card, marginBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 4 }}>
+                <TrendingUp size={14} color={C.success} />
+                <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>Angle performance</div>
+              </div>
+              <p style={{ margin: '0 0 14px', fontSize: 12, color: C.textMute }}>
+                Reply/meeting rate by angle, from outcomes logged against a specific hook below —
+                the part of the pipeline that says whether Risk actually out-converts Cost, not just how often each was tried.
+              </p>
+              {attribution.by_angle.length === 0 ? (
+                <div style={{ fontSize: 12.5, color: C.textFaint, fontStyle: 'italic' }}>
+                  {attribution.headline.total_outcomes} outcome(s) logged, but none tied to a specific hook yet —
+                  use "Log outcome" on a hook below to start attributing by angle.
+                </div>
+              ) : (
+                attribution.by_angle.map(a => (
+                  <div key={a.value} style={{ marginBottom: 10 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+                      <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 999,
+                        background: `${ANGLE_COLORS[a.value] || C.textMute}18`, color: ANGLE_COLORS[a.value] || C.textMute }}>
+                        {a.value}
+                      </span>
+                      <span style={{ fontSize: 11.5, color: C.textFaint }}>{a.total} outcome(s)</span>
+                    </div>
+                    <RateBar rate={a.positive_rate} color={ANGLE_COLORS[a.value] || C.primary} />
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+
           {/* Recent hooks */}
           <div style={card}>
             <div style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 12 }}>
               Recent hooks <span style={{ color: C.textFaint, fontWeight: 500 }}>({hooks.length})</span>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {hooks.map(h => <HookRow key={h.id} h={h} />)}
+              {hooks.map(h => <HookRow key={h.id} h={h} onLogged={loadAttribution} />)}
             </div>
           </div>
         </>

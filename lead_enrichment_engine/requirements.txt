@@ -1,16 +1,16 @@
-pandas          # DataFrame processing for all pipeline stages
-requests        # HTTP calls to Apollo, ZeroBounce, Apify, Clearbit, etc.
-python-dotenv   # Reads API keys from the .env file
-tenacity        # Automatic retry with exponential back-off for API calls
-rapidfuzz       # Fuzzy string matching (used internally by cleaner)
-pyarrow         # Fast Parquet read/write for checkpoint files
-tqdm            # Progress bar shown during enrichment
-openpyxl        # Read/write Excel .xlsx files (input conversion + write-back)
-dnspython       # DNS MX record lookups — validates email domains, infers true email domain from MX host
-sqlalchemy      # PostgreSQL input/output support (optional — only needed if PG_CONNECTION_STRING is set)
-psycopg2-binary # PostgreSQL driver used by SQLAlchemy
-fastapi         # Web framework for the app UI
-uvicorn         # ASGI server to run FastAPI
-python-multipart # Required by FastAPI for file upload / form handling
-beautifulsoup4  # HTML parser for Google search result scraping
-lxml            # Fast HTML/XML parser backend for BeautifulSoup
+pandas==3.0.3            # DataFrame processing for all pipeline stages
+requests==2.34.2         # HTTP calls to Apollo, ZeroBounce, Apify, Clearbit, etc.
+python-dotenv==1.2.2     # Reads API keys from the .env file
+tenacity==9.1.4          # Automatic retry with exponential back-off for API calls
+rapidfuzz==3.14.5        # Fuzzy string matching (used internally by cleaner)
+pyarrow==24.0.0          # Fast Parquet read/write for checkpoint files
+tqdm==4.68.3             # Progress bar shown during enrichment
+openpyxl==3.1.5          # Read/write Excel .xlsx files (input conversion + write-back)
+dnspython==2.8.0         # DNS MX record lookups — validates email domains, infers true email domain from MX host
+sqlalchemy==2.0.51       # PostgreSQL input/output support (optional — only needed if PG_CONNECTION_STRING is set)
+psycopg2-binary==2.9.12  # PostgreSQL driver used by SQLAlchemy
+fastapi==0.139.0         # Web framework for the app UI
+uvicorn==0.49.0          # ASGI server to run FastAPI
+python-multipart==0.0.32 # Required by FastAPI for file upload / form handling
+beautifulsoup4==4.15.0   # HTML parser for Google search result scraping
+lxml==6.1.1              # Fast HTML/XML parser backend for BeautifulSoup

@@ -198,18 +198,21 @@ DATA TOOL/
 | `/review` | ReviewQueue.tsx | Human review queue for flagged leads |
 | `/intent` | IntentData.tsx | Raw intent signals browser |
 | `/reporting` | Reporting.tsx | Charts and analytics |
+| `/metrics` | Metrics.tsx | System-level pipeline metrics |
 | `/technology-profiles` | TechnologyProfiles.tsx | Company tech stack intelligence |
 | `/list-import` | ListImport.tsx | CSV import for bulk lead enrichment |
 | `/events` | Events.tsx | Oracle events signal data |
-| `/manufacturer-intel` | ManufacturerIntel.tsx | Manufacturing vertical intelligence |
 | `/audit-logs` | AuditLogs.tsx | System audit trail |
 | `/user-management` | UserManagement.tsx | Admin-only: manage users and roles |
 | `/hubspot-sync` | HubSpotSync.tsx | HubSpot CRM integration |
 | `/product-intelligence` | ProductIntelligence.tsx | Oracle product adoption analytics |
-| `/recruitment` | Recruitment.tsx | Talent intelligence (admin/owner/recruitment roles) |
+| `/decision-intelligence` | DecisionIntelligence.tsx | InRule glass-box lead scoring, contacts, outreach |
+| `/prediction-engine` | PredictionEngine.tsx | Search a company, see its learned email format + contacts |
 | `/profile` | Profile.tsx | User profile |
 | `/settings` | Settings.tsx | App settings |
 | `/campaign-builder` | CampaignBuilder.tsx | 4-step ICP → Contacts → AI Hooks → Export wizard |
+| `/campaign-emails` | CampaignEmails.tsx | Signal → Angle → Hook → Email methodology + live campaign metrics |
+| `/campaigns` | Campaigns.tsx | Signal-driven campaign management |
 | `/people-search` | PeopleSearch.tsx | Apollo-powered people search with email status |
 
 ---
@@ -275,14 +278,12 @@ venv\Scripts\pip show flask
 | DB_NAME | ✅ | `oracle_intent` |
 | DB_USER | ✅ | `postgres` |
 | DB_PASSWORD | ✅ | the postgres password |
-| FLASK_SECRET_KEY | ✅ | random string for JWT signing |
-| FLASK_PORT | ✅ | `5001` |
+| JWT_SECRET | ✅ | random string for JWT signing (auth.py) — falls back to a persisted random key at `oracle_intent_engine/.jwt_fallback_key` if unset, but set this explicitly in production |
 | APOLLO_API_KEY | ✅ | from app.apollo.io → Settings → API |
 | ZEROBOUNCE_API_KEY | ✅ | from app.zerobounce.net |
 | HUNTER_API_KEY | ✅ | from hunter.io/api |
 | ADZUNA_APP_ID | ✅ | from developer.adzuna.com |
 | ADZUNA_APP_KEY | ✅ | from developer.adzuna.com |
-| SERPAPI_KEY | optional | Google Jobs + general search |
 | NEWSAPI_KEY | optional | News signal source |
 | BING_NEWS_KEY | optional | Bing news search |
 | SCRAPEGRAPH_MODEL | optional | `anthropic/claude-haiku-4-5-20251001` or `ollama/llama3.1` |

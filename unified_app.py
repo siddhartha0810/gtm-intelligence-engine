@@ -986,7 +986,7 @@ async def api_companies(
         return JSONResponse({"total": total, "offset": offset, "limit": page_limit, "rows": rows})
     except Exception as e:
         logger.exception("Unhandled error in GET /api/companies")
-        return JSONResponse({"error": str(e)}, status_code=500)
+        return JSONResponse({"error": "Internal server error"}, status_code=500)
 
 @app.get("/api/stats")
 async def api_stats(show_all: int = 0, current_user: dict = Depends(oracle_auth.require_user)):
@@ -1321,8 +1321,12 @@ async def api_predict_contact_email(contact_id: int, current_user: dict = Depend
             "_contact_id": contact_id,
         })
 
-        updated, n_predicted = oracle_apollo._predict_and_fill_emails(
-            batch, ZEROBOUNCE_API_KEY, domain, log=logger.info
+        # _predict_and_fill_emails makes blocking ZeroBounce HTTP calls (urllib,
+        # up to 120s with retries) — run off the event loop or every other
+        # request on this process stalls until ZeroBounce responds.
+        updated, n_predicted = await asyncio.to_thread(
+            oracle_apollo._predict_and_fill_emails,
+            batch, ZEROBOUNCE_API_KEY, domain, log=logger.info,
         )
 
         target = updated[target_idx]
@@ -1500,8 +1504,9 @@ async def api_enrich_contacts(company_id: int, request: Request,
 
     try:
         company = oracle_db.get_company_by_id(company_id)
-    except Exception as e:
-        return JSONResponse({"error": f"DB lookup failed: {e}"}, status_code=500)
+    except Exception:
+        logger.exception(f"company lookup failed for company_id={company_id}")
+        return JSONResponse({"error": "Internal server error"}, status_code=500)
     if not company:
         return JSONResponse({"error": "Company not found"}, status_code=404)
 
@@ -1955,6 +1960,7 @@ async def run_pipeline(
     restart:  bool = Form(False),
     use_db:   bool = Form(False),
     filename: str  = Form(""),
+    force_low_credits: bool = Form(False),
     current_user: dict = Depends(oracle_auth.require_analyst),
 ):
     running = _running_jobs()
@@ -1973,6 +1979,8 @@ async def run_pipeline(
         suffix = Path(filename).suffix.lower()
         cmd.append(f"input/leads{suffix}")
     cmd.append("--restart" if restart else "--resume")
+    if force_low_credits:
+        cmd.append("--force-low-credits")
 
     env = os.environ.copy()
     if not use_db:
@@ -2444,7 +2452,7 @@ async def api_contacts(
         return JSONResponse({"total": total, "offset": offset, "limit": page_limit, "rows": rows})
     except Exception as e:
         logger.exception("Unhandled error in GET /api/contacts")
-        return JSONResponse({"error": str(e)}, status_code=500)
+        return JSONResponse({"error": "Internal server error"}, status_code=500)
 
 # ═══ STARTUP ══════════════════════════════════════════════════════════════════
 # SIGNALS  /  REVIEW QUEUE  /  REPORTING
@@ -2468,7 +2476,7 @@ async def api_signals(limit: int = 200, current_user: dict = Depends(oracle_auth
         return JSONResponse(rows)
     except Exception as e:
         logger.exception("Unhandled error in GET /api/signals")
-        return JSONResponse({"error": str(e)}, status_code=500)
+        return JSONResponse({"error": "Internal server error"}, status_code=500)
 
 @app.post("/api/contacts/push-hubspot")
 async def push_contact_to_hubspot_endpoint(
@@ -2689,7 +2697,7 @@ async def scan_enrichment_plan(
         }
     except Exception as e:
         logger.exception("scan enrichment-plan failed for run_id=%s", run_id)
-        return JSONResponse({"error": str(e)}, status_code=500)
+        return JSONResponse({"error": "Internal server error"}, status_code=500)
 
 
 # enrichment endpoints
@@ -2743,7 +2751,7 @@ async def enrich_preflight(current_user: dict = Depends(oracle_auth.require_anal
         }
     except Exception as e:
         logger.exception("Unhandled error in GET /api/enrich/preflight")
-        return JSONResponse({"error": str(e)}, status_code=500)
+        return JSONResponse({"error": "Internal server error"}, status_code=500)
 
 @app.post("/api/enrich/start")
 async def enrich_start(request: Request, current_user: dict = Depends(oracle_auth.require_analyst)):
@@ -2893,6 +2901,40 @@ async def deactivate_user(user_id: int,
     oracle_auth.update_user(user_id, {"is_active": False}, caller_role=current_user["role"])
     log_audit(current_user, "deactivate_user", "user", str(user_id))
     return {"ok": True}
+
+@app.post("/api/users/{user_id}/reset-password")
+async def admin_reset_password(user_id: int, request: Request,
+                                current_user: dict = Depends(oracle_auth.require_admin)):
+    """
+    Force-set another user's password — the only recovery path for a locked-out
+    user (self-service change-password requires the old one). Body may include
+    { "new_password": "..." }; if omitted, a random one is generated and
+    returned once so the admin can hand it to the user out of band.
+    """
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+    new_password = (data.get("new_password") or "").strip()
+    generated = False
+    if not new_password:
+        import secrets as _secrets
+        new_password = _secrets.token_urlsafe(9)  # ~12 chars, URL-safe
+        generated = True
+    if len(new_password) < 8:
+        return JSONResponse({"error": "New password must be at least 8 characters"}, status_code=400)
+    try:
+        oracle_auth.admin_reset_password(user_id, new_password, caller_role=current_user["role"])
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception(f"admin_reset_password failed for user_id={user_id}")
+        return JSONResponse({"error": "Internal server error"}, status_code=500)
+    log_audit(current_user, "admin_reset_password", "user", str(user_id))
+    resp = {"ok": True}
+    if generated:
+        resp["new_password"] = new_password
+    return resp
 
 # ═══ AUDIT LOGS ═══════════════════════════════════════════════════════════════
 @app.get("/api/audit-logs")
@@ -3539,8 +3581,9 @@ async def enrich_linkedin_urls(
         log_audit(current_user, "maigret_linkedin_enrich", "master_leads",
                   "batch", new_value=result)
         return result
-    except Exception as e:
-        return JSONResponse({"error": str(e)}, status_code=500)
+    except Exception:
+        logger.exception("maigret LinkedIn enrichment failed")
+        return JSONResponse({"error": "Internal server error"}, status_code=500)
 
 
 # ── GTM Agent Team ────────────────────────────────────────────────────────────
@@ -3657,7 +3700,10 @@ async def log_outcome_endpoint(
     """
     Log a real outreach result.
     Body: { "outcome": "replied"|"meeting"|"bounced"|"bad"|"contacted"|"unsubscribed",
-            "company": "Acme" (or) "email": "x@acme.com", "notes": "" }
+            "company": "Acme" (or) "email": "x@acme.com", "notes": "",
+            "hook_id": 123 (optional — traces this outcome back to the
+            campaign_hooks row that produced the send, so reply/meeting
+            rates can be sliced by angle) }
     """
     try:
         body = await request.json()
@@ -3677,12 +3723,13 @@ async def log_outcome_endpoint(
             contact_id=body.get("contact_id"),
             campaign_id=body.get("campaign_id"),
             notes=body.get("notes", ""),
+            hook_id=body.get("hook_id"),
         )
         log_audit(current_user, "log_outcome", "outcome", str(row.get("id", "")), new_value={"outcome": outcome})
         return row
     except Exception as e:
         logger.exception("log_outcome failed")
-        return JSONResponse({"error": str(e)}, status_code=500)
+        return JSONResponse({"error": "Internal server error"}, status_code=500)
 
 
 @app.get("/api/outcomes")
@@ -3698,11 +3745,13 @@ async def outcome_attribution_endpoint(
     current_user: dict = Depends(oracle_auth.require_user),
 ):
     """Which signals actually convert — reply/meeting rate by signal type,
-    product, phase, and source. Powers the Analyst view + Recalibrator."""
+    product, phase, source, angle, and personalization bucket. Powers the
+    Analyst view + Recalibrator."""
     from src import attribution
     rows = oracle_db.get_outcome_signal_rows()
     totals = oracle_db.get_outcome_totals()
-    return attribution.rollup_attribution(rows, totals)
+    hook_rows = oracle_db.get_outcome_hook_rows()
+    return attribution.rollup_attribution(rows, totals, hook_rows)
 
 
 @app.post("/api/outcomes/recalibrate")
@@ -4164,7 +4213,7 @@ async def refresh_product_intelligence(
         return {"ok": True, **result}
     except Exception as e:
         logger.exception("Unhandled error in POST /api/product-intelligence/refresh")
-        return JSONResponse({"error": str(e)}, status_code=500)
+        return JSONResponse({"error": "Internal server error"}, status_code=500)
 
 @app.post("/api/people-search")
 async def people_search(
@@ -4251,7 +4300,7 @@ async def people_search(
 
     except Exception as e:
         logger.exception("Unhandled error in POST /api/people-search")
-        return JSONResponse({"error": str(e)}, status_code=500)
+        return JSONResponse({"error": "Internal server error"}, status_code=500)
 
 
 # ── Campaign Builder ─────────────────────────────────────────────────────────
@@ -4277,7 +4326,7 @@ async def campaign_icp_companies(
         return {"companies": companies, "count": len(companies)}
     except Exception as e:
         logger.exception("ICP fetch failed")
-        return JSONResponse({"error": str(e)}, status_code=500)
+        return JSONResponse({"error": "Internal server error"}, status_code=500)
 
 
 @app.post("/api/campaign/research-company")
@@ -4297,7 +4346,7 @@ async def campaign_research_company(
         return result
     except Exception as e:
         logger.exception("Company research failed")
-        return JSONResponse({"error": str(e)}, status_code=500)
+        return JSONResponse({"error": "Internal server error"}, status_code=500)
 
 
 @app.post("/api/campaign/find-contacts")
@@ -4367,7 +4416,7 @@ async def campaign_find_contacts(
         return {"contacts": contacts_out, "count": len(contacts_out)}
     except Exception as e:
         logger.exception("Contact find failed")
-        return JSONResponse({"error": str(e)}, status_code=500)
+        return JSONResponse({"error": "Internal server error"}, status_code=500)
 
 
 @app.post("/api/campaign/generate-hooks")
@@ -4444,7 +4493,7 @@ async def campaign_generate_hooks(
         return {"hooks": hooks, "count": len(hooks)}
     except Exception as e:
         logger.exception("Hook generation failed")
-        return JSONResponse({"error": str(e)}, status_code=500)
+        return JSONResponse({"error": "Internal server error"}, status_code=500)
 
 
 @app.get("/api/campaign/hook-stats")
@@ -4455,7 +4504,7 @@ async def campaign_hook_stats(current_user: dict = Depends(oracle_auth.require_u
         return oracle_db.get_campaign_hook_stats()
     except Exception as e:
         logger.exception("campaign hook stats failed")
-        return JSONResponse({"error": str(e)}, status_code=500)
+        return JSONResponse({"error": "Internal server error"}, status_code=500)
 
 
 @app.get("/api/campaign/recent-hooks")
@@ -4465,7 +4514,7 @@ async def campaign_recent_hooks(limit: int = 50, current_user: dict = Depends(or
         return {"hooks": oracle_db.get_recent_campaign_hooks(limit)}
     except Exception as e:
         logger.exception("campaign recent hooks failed")
-        return JSONResponse({"error": str(e)}, status_code=500)
+        return JSONResponse({"error": "Internal server error"}, status_code=500)
 
 
 @app.get("/api/campaign/export-csv")
@@ -4522,7 +4571,7 @@ async def campaign_export_csv_post(
         )
     except Exception as e:
         logger.exception("CSV export failed")
-        return JSONResponse({"error": str(e)}, status_code=500)
+        return JSONResponse({"error": "Internal server error"}, status_code=500)
 
 
 # ── Cadence Builder ────────────────────────────────────────────────────────────
@@ -4575,7 +4624,7 @@ async def build_cadence(
 
     except Exception as e:
         logger.exception("Cadence build failed")
-        return JSONResponse({"error": str(e)}, status_code=500)
+        return JSONResponse({"error": "Internal server error"}, status_code=500)
 
 
 @app.post("/api/campaign/export-cadence")
@@ -4613,7 +4662,7 @@ async def export_cadence(
         )
     except Exception as e:
         logger.exception("Cadence export failed")
-        return JSONResponse({"error": str(e)}, status_code=500)
+        return JSONResponse({"error": "Internal server error"}, status_code=500)
 
 
 # ── Apollo Credit Log ──────────────────────────────────────────────────────────
@@ -4632,8 +4681,9 @@ async def get_credit_log(
             "log":     oracle_db.get_credit_log(limit=limit),
             "summary": oracle_db.get_credit_summary(),
         }
-    except Exception as e:
-        return JSONResponse({"error": str(e)}, status_code=500)
+    except Exception:
+        logger.exception("credit log fetch failed")
+        return JSONResponse({"error": "Internal server error"}, status_code=500)
 
 
 @app.post("/api/metrics/credits/log")
@@ -4655,8 +4705,9 @@ async def post_credit_log(
             credits_after=body.get("credits_after"),
         )
         return {"ok": True}
-    except Exception as e:
-        return JSONResponse({"error": str(e)}, status_code=500)
+    except Exception:
+        logger.exception("manual credit log write failed")
+        return JSONResponse({"error": "Internal server error"}, status_code=500)
 
 
 # static assets (js/css chunks)

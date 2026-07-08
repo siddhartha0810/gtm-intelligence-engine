@@ -20,6 +20,15 @@ from typing import Optional
 import pandas as pd
 
 
+def _quote_ident(name: str) -> str:
+    """Quote a Postgres identifier (table/column name) safely — doubles any
+    embedded double-quote per standard SQL identifier-escaping rules, so a
+    stray `"` in a CSV header (table/column names here ultimately trace back
+    to user-uploaded file columns, not just env-configured table names)
+    can't break out of the quoted identifier and inject SQL."""
+    return '"' + name.replace('"', '""') + '"'
+
+
 def _engine(connection_string: str):
     """Create a SQLAlchemy engine. Raises ImportError if dependencies are missing."""
     try:
@@ -42,7 +51,7 @@ def load_leads(connection_string: str, table: str) -> Optional[pd.DataFrame]:
     """
     engine = _engine(connection_string)
     try:
-        df = pd.read_sql(f'SELECT * FROM "{table}"', engine)
+        df = pd.read_sql(f'SELECT * FROM {_quote_ident(table)}', engine)
     except Exception as exc:
         raise RuntimeError(
             f"Could not read from Postgres table '{table}'.\n"
@@ -70,34 +79,36 @@ def save_results(df: pd.DataFrame, connection_string: str, table: str) -> int:
         with engine.begin() as conn:
             cols = list(df.columns)
             tmp  = f"_stg_{table}"
+            q_table = _quote_ident(table)
+            q_tmp   = _quote_ident(tmp)
 
             # Write to a disposable staging table (replace is fine here — it's temporary)
             df.to_sql(tmp, conn, if_exists="replace", index=False, method="multi")
 
             # Ensure main table exists with lead_id as primary key
             col_defs = ", ".join(
-                f'"{c}" TEXT{"  PRIMARY KEY" if c == "lead_id" else ""}'
+                f'{_quote_ident(c)} TEXT{"  PRIMARY KEY" if c == "lead_id" else ""}'
                 for c in cols
             )
-            conn.execute(text(f'CREATE TABLE IF NOT EXISTS "{table}" ({col_defs})'))
+            conn.execute(text(f'CREATE TABLE IF NOT EXISTS {q_table} ({col_defs})'))
 
-            col_sql = ", ".join(f'"{c}"' for c in cols)
+            col_sql = ", ".join(_quote_ident(c) for c in cols)
             if "lead_id" in cols:
                 update_set = ", ".join(
-                    f'"{c}" = EXCLUDED."{c}"' for c in cols if c != "lead_id"
+                    f'{_quote_ident(c)} = EXCLUDED.{_quote_ident(c)}' for c in cols if c != "lead_id"
                 )
                 conn.execute(text(
-                    f'INSERT INTO "{table}" ({col_sql}) '
-                    f'SELECT {col_sql} FROM "{tmp}" '
+                    f'INSERT INTO {q_table} ({col_sql}) '
+                    f'SELECT {col_sql} FROM {q_tmp} '
                     f'ON CONFLICT (lead_id) DO UPDATE SET {update_set}'
                 ))
             else:
                 # No lead_id — plain append (no dedup possible)
                 conn.execute(text(
-                    f'INSERT INTO "{table}" ({col_sql}) SELECT {col_sql} FROM "{tmp}"'
+                    f'INSERT INTO {q_table} ({col_sql}) SELECT {col_sql} FROM {q_tmp}'
                 ))
 
-            conn.execute(text(f'DROP TABLE IF EXISTS "{tmp}"'))
+            conn.execute(text(f'DROP TABLE IF EXISTS {q_tmp}'))
     except Exception as exc:
         raise RuntimeError(
             f"Could not write to Postgres table '{table}'.\n"

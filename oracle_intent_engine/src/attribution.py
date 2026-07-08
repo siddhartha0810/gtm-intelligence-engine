@@ -67,13 +67,38 @@ def _rollup_one(rows: list[dict], field: str) -> list[dict]:
     return out
 
 
-def rollup_attribution(rows: list[dict], totals: dict | None = None) -> dict:
+def _rollup_bucket(rows: list[dict]) -> list[dict]:
+    """Like _rollup_one but keys on personalization_bucket (an int, not a
+    string) — dedup and math are identical, just labeled by bucket number."""
+    out = _rollup_one(
+        [{"_bucket": str(r.get("personalization_bucket") or ""), "outcome_id": r.get("outcome_id"),
+          "outcome": r.get("outcome"), "personalization_label": r.get("personalization_label")} for r in rows],
+        "_bucket",
+    )
+    label_by_bucket = {str(r.get("personalization_bucket") or ""): r.get("personalization_label", "")
+                        for r in rows}
+    for b in out:
+        b["label"] = label_by_bucket.get(b["value"], "")
+    return out
+
+
+def rollup_attribution(rows: list[dict], totals: dict | None = None,
+                        hook_rows: list[dict] | None = None) -> dict:
     """
     rows: from db.get_outcome_signal_rows() — one per (outcome, signal) pair.
     totals: from db.get_outcome_totals() — counts by outcome type.
+    hook_rows: from db.get_outcome_hook_rows() — one per outcome that traces
+    back to a campaign_hooks row (Signal -> Angle -> Hook -> Email pipeline).
+    Optional and separate from `rows` because not every outcome has a hook_id
+    yet, and hook attribution (angle, personalization bucket) doesn't come
+    from the signal join.
     Returns per-dimension conversion tables plus headline numbers.
     """
     result = {dim: _rollup_one(rows, field) for dim, field in _DIMENSIONS.items()}
+
+    hook_rows = hook_rows or []
+    result["by_angle"] = _rollup_one(hook_rows, "angle")
+    result["by_personalization_bucket"] = _rollup_bucket(hook_rows)
 
     totals = totals or {}
     contacted = sum(totals.values())

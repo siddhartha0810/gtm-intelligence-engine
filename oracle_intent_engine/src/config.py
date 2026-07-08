@@ -34,27 +34,26 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-DB_HOST = os.getenv("DB_HOST", "localhost")
-DB_PORT = os.getenv("DB_PORT", "5432")
-DB_NAME = os.getenv("DB_NAME", "Inoapps-Data-DB")
-DB_USER = os.getenv("DB_USER", "postgres")
-DB_PASSWORD = os.getenv("DB_PASSWORD", "")
+DB_HOST = os.getenv("DB_HOST", "localhost").strip()
+DB_PORT = os.getenv("DB_PORT", "5432").strip()
+DB_NAME = os.getenv("DB_NAME", "Inoapps-Data-DB").strip()
+DB_USER = os.getenv("DB_USER", "postgres").strip()
+DB_PASSWORD = os.getenv("DB_PASSWORD", "").strip()
 
-NEWSAPI_KEY = os.getenv("NEWSAPI_KEY", "")
-SERPAPI_KEY = os.getenv("SERPAPI_KEY", "")
-BING_NEWS_KEY = os.getenv("BING_NEWS_KEY", "")
+NEWSAPI_KEY = os.getenv("NEWSAPI_KEY", "").strip()
+BING_NEWS_KEY = os.getenv("BING_NEWS_KEY", "").strip()
 
 # Hunter.io — free tier: 25 domain searches/month → decision-maker contacts
 # Get key at: https://hunter.io/api (free signup)
-HUNTER_API_KEY = os.getenv("HUNTER_API_KEY", "")
+HUNTER_API_KEY = os.getenv("HUNTER_API_KEY", "").strip()
 
 # Apollo.io — people search + email reveal
 # Get key at: https://developer.apollo.io/
-APOLLO_API_KEY = os.getenv("APOLLO_API_KEY", "")
+APOLLO_API_KEY = os.getenv("APOLLO_API_KEY", "").strip()
 
 # ZeroBounce — email validation (1 credit per email)
 # Get key at: https://app.zerobounce.net/
-ZEROBOUNCE_API_KEY = os.getenv("ZEROBOUNCE_API_KEY", "")
+ZEROBOUNCE_API_KEY = os.getenv("ZEROBOUNCE_API_KEY", "").strip()
 
 # ZoomInfo — alternative contact-discovery provider (enterprise API)
 # Auth: POST /authenticate with username+password → JWT (60 min)
@@ -63,20 +62,20 @@ ZOOMINFO_PASSWORD = os.getenv("ZOOMINFO_PASSWORD", "").strip()
 
 # Adzuna — free job board API (250 calls/day free)
 # Register at: https://developer.adzuna.com/
-ADZUNA_APP_ID  = os.getenv("ADZUNA_APP_ID",  "")
-ADZUNA_APP_KEY = os.getenv("ADZUNA_APP_KEY", "")
+ADZUNA_APP_ID  = os.getenv("ADZUNA_APP_ID",  "").strip()
+ADZUNA_APP_KEY = os.getenv("ADZUNA_APP_KEY", "").strip()
 
 # ScrapeGraphAI — set SCRAPEGRAPH_MODEL to enable LLM scraping
 # Free/local:  SCRAPEGRAPH_MODEL=ollama/llama3.1
 # Paid/better: SCRAPEGRAPH_MODEL=anthropic/claude-haiku-4-5-20251001  (set SCRAPEGRAPH_API_KEY too)
-SCRAPEGRAPH_MODEL     = os.getenv("SCRAPEGRAPH_MODEL", "")
-SCRAPEGRAPH_API_KEY   = os.getenv("SCRAPEGRAPH_API_KEY", "")
-SCRAPEGRAPH_OLLAMA_URL = os.getenv("SCRAPEGRAPH_OLLAMA_URL", "http://localhost:11434")
+SCRAPEGRAPH_MODEL     = os.getenv("SCRAPEGRAPH_MODEL", "").strip()
+SCRAPEGRAPH_API_KEY   = os.getenv("SCRAPEGRAPH_API_KEY", "").strip()
+SCRAPEGRAPH_OLLAMA_URL = os.getenv("SCRAPEGRAPH_OLLAMA_URL", "http://localhost:11434").strip()
 
 # Ollama local LLM — company extraction fallback (free, runs locally)
 # Install Ollama from ollama.ai, then: ollama pull llama3.2
-OLLAMA_URL   = os.getenv("OLLAMA_URL",   "http://localhost:11434")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2")
+OLLAMA_URL   = os.getenv("OLLAMA_URL",   "http://localhost:11434").strip()
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2").strip()
 
 SCAN_DELAY_MIN = float(os.getenv("SCAN_DELAY_MIN", "2"))
 SCAN_DELAY_MAX = float(os.getenv("SCAN_DELAY_MAX", "6"))
@@ -88,8 +87,6 @@ CONTACTS_CSV_PATH = os.getenv(
     r"C:\Users\sidhartha\OneDrive\Desktop\280K\ALL_CONTACTS_CONSOLIDATED.csv"
 )
 
-FLASK_SECRET_KEY = os.getenv("FLASK_SECRET_KEY", "oracle-intent-secret")
-FLASK_PORT = int(os.getenv("FLASK_PORT", "5001"))
 
 # agentic_harvester_signal.py watch list — comma-separated URLs, e.g. a
 # procurement portal's open-tenders page or an Oracle partner directory.

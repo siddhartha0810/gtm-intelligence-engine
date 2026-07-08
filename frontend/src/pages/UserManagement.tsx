@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Plus, RefreshCw, X, Shield, UserCheck, UserX, ChevronDown, Search } from 'lucide-react'
+import { Plus, RefreshCw, X, Shield, UserCheck, UserX, ChevronDown, Search, KeyRound, Copy, Check } from 'lucide-react'
 import { toast } from '../components/Toast'
 
 type Role = 'owner' | 'admin' | 'analyst' | 'viewer' | 'recruitment'
@@ -235,6 +235,56 @@ function InviteModal({ onClose, onSave }: { onClose: () => void; onSave: () => v
   )
 }
 
+// ── Reset-password result modal ────────────────────────────────────────────
+// Shown once, right after a reset — this is the only place the temporary
+// password is ever visible, so the admin can hand it to the user out of band.
+function ResetPasswordModal({ email, password, onClose }: { email: string; password: string; onClose: () => void }) {
+  const [copied, setCopied] = useState(false)
+
+  const copy = () => {
+    navigator.clipboard.writeText(password).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    })
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 500, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(2px)' }} />
+      <div style={{ position: 'relative', width: 420, background: '#ffffff', borderRadius: 16, border: '1px solid #e2e8f0', zIndex: 1, boxShadow: '0 20px 60px rgba(0,0,0,0.15)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px', borderBottom: '1px solid #e2e8f0' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(16,185,129,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <KeyRound size={16} color="#10b981" />
+            </div>
+            <div>
+              <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#0f172a' }}>Password reset</h2>
+              <p style={{ margin: 0, fontSize: 12, color: '#64748b' }}>{email}</p>
+            </div>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: 4, borderRadius: 6 }}>
+            <X size={18} />
+          </button>
+        </div>
+        <div style={{ padding: '20px 24px' }}>
+          <p style={{ margin: '0 0 10px', fontSize: 12.5, color: '#64748b' }}>
+            Shown once — copy it now and hand it to the user out of band. It won't be shown again.
+          </p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', borderRadius: 8, background: '#f8fafc', border: '1px solid #d1d5db' }}>
+            <code style={{ flex: 1, fontSize: 14, fontFamily: 'monospace', color: '#0f172a', wordBreak: 'break-all' }}>{password}</code>
+            <button onClick={copy} title="Copy" style={{ background: 'none', border: 'none', cursor: 'pointer', color: copied ? '#10b981' : '#64748b', display: 'flex', flexShrink: 0 }}>
+              {copied ? <Check size={16} /> : <Copy size={16} />}
+            </button>
+          </div>
+        </div>
+        <div style={{ padding: '16px 24px', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'flex-end' }}>
+          <button onClick={onClose} style={{ padding: '9px 20px', borderRadius: 8, border: 'none', background: '#3b82f6', color: 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Done</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Main page ──────────────────────────────────────────────────────────────
 export default function UserManagement() {
   const [users, setUsers]       = useState<AppUser[]>([])
@@ -244,6 +294,7 @@ export default function UserManagement() {
   const [search, setSearch]     = useState('')
   const [roleFilter, setRoleFilter] = useState<Role | ''>('')
   const [saving, setSaving]     = useState<number | null>(null)   // which user id is being saved
+  const [resetResult, setResetResult] = useState<{ email: string; password: string } | null>(null)
 
   const loadMe = useCallback(async () => {
     try {
@@ -294,6 +345,19 @@ export default function UserManagement() {
     finally { setSaving(null) }
   }
 
+  const resetPassword = async (u: AppUser) => {
+    if (!window.confirm(`Reset ${u.email}'s password? A new temporary password will be generated.`)) return
+    setSaving(u.id)
+    try {
+      const r = await fetch(`/api/users/${u.id}/reset-password`, { method: 'POST', headers: authH(), body: '{}' })
+      const data = await r.json().catch(() => ({}))
+      if (!r.ok) throw new Error(data.detail || data.error || `HTTP ${r.status}`)
+      setResetResult({ email: u.email, password: data.new_password })
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Password reset failed')
+    } finally { setSaving(null) }
+  }
+
   // Filters
   const filtered = users.filter(u => {
     const q = search.toLowerCase()
@@ -316,6 +380,9 @@ export default function UserManagement() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 22, width: '100%' }}>
       {inviteOpen && (
         <InviteModal onClose={() => setInviteOpen(false)} onSave={() => { setInviteOpen(false); load() }} />
+      )}
+      {resetResult && (
+        <ResetPasswordModal email={resetResult.email} password={resetResult.password} onClose={() => setResetResult(null)} />
       )}
 
       {/* Page header */}
@@ -385,7 +452,7 @@ export default function UserManagement() {
       {/* Table */}
       <div style={{ border: '1px solid #e2e8f0', borderRadius: 14, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', background: '#fff' }}>
         <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 780 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 880 }}>
             <thead>
               <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
                 <th style={thStyle}>USER</th>
@@ -393,7 +460,7 @@ export default function UserManagement() {
                 <th style={thStyle}>STATUS</th>
                 <th style={thStyle}>LAST LOGIN</th>
                 <th style={thStyle}>JOINED</th>
-                <th style={{ ...thStyle, width: 110 }}>ACTIONS</th>
+                <th style={{ ...thStyle, width: 230 }}>ACTIONS</th>
               </tr>
             </thead>
             <tbody>
@@ -462,24 +529,43 @@ export default function UserManagement() {
 
                     {/* Actions */}
                     <td style={tdStyle}>
-                      {!isSelf && (
-                        <button
-                          onClick={() => toggleActive(u)}
-                          disabled={isSaving}
-                          title={u.is_active ? 'Deactivate user' : 'Reactivate user'}
-                          style={{
-                            display: 'flex', alignItems: 'center', gap: 5,
-                            padding: '6px 12px', borderRadius: 7, fontSize: 12, fontWeight: 500, cursor: isSaving ? 'not-allowed' : 'pointer',
-                            border: `1px solid ${u.is_active ? 'rgba(239,68,68,0.25)' : 'rgba(16,185,129,0.25)'}`,
-                            background: 'transparent',
-                            color: u.is_active ? '#ef4444' : '#10b981',
-                            transition: 'background 0.12s',
-                          }}
-                          onMouseEnter={e => e.currentTarget.style.background = u.is_active ? 'rgba(239,68,68,0.07)' : 'rgba(16,185,129,0.07)'}
-                          onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                          {u.is_active ? <><UserX size={12} /> Deactivate</> : <><UserCheck size={12} /> Reactivate</>}
-                        </button>
-                      )}
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        {canChange && (
+                          <button
+                            onClick={() => resetPassword(u)}
+                            disabled={isSaving}
+                            title="Reset password"
+                            style={{
+                              display: 'flex', alignItems: 'center', gap: 5,
+                              padding: '6px 12px', borderRadius: 7, fontSize: 12, fontWeight: 500, cursor: isSaving ? 'not-allowed' : 'pointer',
+                              border: '1px solid rgba(59,130,246,0.25)',
+                              background: 'transparent', color: '#3b82f6',
+                              transition: 'background 0.12s',
+                            }}
+                            onMouseEnter={e => e.currentTarget.style.background = 'rgba(59,130,246,0.07)'}
+                            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                            <KeyRound size={12} /> Reset password
+                          </button>
+                        )}
+                        {!isSelf && (
+                          <button
+                            onClick={() => toggleActive(u)}
+                            disabled={isSaving}
+                            title={u.is_active ? 'Deactivate user' : 'Reactivate user'}
+                            style={{
+                              display: 'flex', alignItems: 'center', gap: 5,
+                              padding: '6px 12px', borderRadius: 7, fontSize: 12, fontWeight: 500, cursor: isSaving ? 'not-allowed' : 'pointer',
+                              border: `1px solid ${u.is_active ? 'rgba(239,68,68,0.25)' : 'rgba(16,185,129,0.25)'}`,
+                              background: 'transparent',
+                              color: u.is_active ? '#ef4444' : '#10b981',
+                              transition: 'background 0.12s',
+                            }}
+                            onMouseEnter={e => e.currentTarget.style.background = u.is_active ? 'rgba(239,68,68,0.07)' : 'rgba(16,185,129,0.07)'}
+                            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                            {u.is_active ? <><UserX size={12} /> Deactivate</> : <><UserCheck size={12} /> Reactivate</>}
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 )
