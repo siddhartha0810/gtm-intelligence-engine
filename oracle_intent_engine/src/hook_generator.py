@@ -55,9 +55,10 @@ HOOK RULES (non-negotiable):
     Time: a window is closing, a competitor is gaining
     Cost: specific dollars or deals bleeding monthly
     Identity: their credibility or board standing is at risk
-    TwoTimelines: two futures exist for their role — one still stuck in the
-      current pain, one that fixed it by changing one thing this quarter;
-      the reader has to place themselves on one side
+    TwoTimelines: their peers split into two groups — most still stuck in the
+      pain, a few who already fixed it; the reader has to place themselves
+      on one side. Runs long — keep this one to 14 words max, no timestamps
+      ("six months from now" etc.)
 - PHRASING (apply regardless of which angle you picked):
     External villain: blame a shared enemy, not the reader — "the spreadsheet,"
       "the manual process," "the legacy system," never "you." The reader should
@@ -75,7 +76,7 @@ EXAMPLES of perfect hooks (one sentence, names the problem, stops):
   "Priya, most operations leads at your stage can't tell finance where the budget is actually leaking."
   "Marcus, half your team's week goes into a report that's outdated the moment it's shared."
   "Elena, the compliance deadline lands before your current process can catch up."
-  "Dan, six months from now some teams still fight the same manual report — yours doesn't have to."
+  "Dan, most ops leads still reconcile this by hand — the ones who don't already fixed it."
 
 OUTPUT FORMAT (return exactly this JSON, nothing else):
 {{
@@ -131,13 +132,14 @@ _ANGLE_INSTRUCTIONS: dict[str, str] = {
         "them a single metric that proves it.'"
     ),
     "TwoTimelines": (
-        "REQUIRED ANGLE: TwoTimelines — future-pace a near-term split: one version of their "
-        "team/role is still stuck in the pain a few months from now, the other fixed it by changing "
-        "one specific thing this quarter. Ground the 'stuck' side in the same real signal/evidence "
-        "you'd use for any other angle — do not invent a generic future. The reader should place "
-        "themselves on one side without being told which. "
-        "Example: 'Dan, six months out some ops leads are still reconciling this by hand — the ones "
-        "who aren't changed one thing this quarter.'"
+        "REQUIRED ANGLE: TwoTimelines — split their peers into two groups: most still stuck in "
+        "the pain, a few who already fixed it. Ground the 'stuck' side in the same real "
+        "signal/evidence you'd use for any other angle — do not invent a generic future. The "
+        "reader should place themselves on one side without being told which. "
+        "THIS ANGLE RUNS LONG BY NATURE — budget 14 words or fewer after the name, not the usual "
+        "20, or it blows the one-sentence cap. Cut every scaffolding word ('six months from now', "
+        "'this quarter', 'a few months out') — state the split directly, no timestamp needed. "
+        "Example: 'Dan, most ops leads still reconcile this by hand — the ones who don't already fixed it.'"
     ),
 }
 
