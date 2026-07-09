@@ -55,6 +55,7 @@ interface Campaign {
   description: string
   keywords: string[]
   extra_job_suffixes: string[]
+  exclude_companies: string[]
   extra_news_templates: string[]
   custom_job_queries: string[]
   custom_news_queries: string[]
@@ -84,6 +85,7 @@ const EMPTY_FORM = {
   description: '',
   keywords: '',
   extra_job_suffixes: '',
+  exclude_companies: '',
   location: '',
   max_pages: 3,
   sources: [] as string[],
@@ -128,6 +130,7 @@ export default function Campaigns() {
       description: c.description,
       keywords: (c.keywords || []).join(', '),
       extra_job_suffixes: (c.extra_job_suffixes || []).join(', '),
+      exclude_companies: (c.exclude_companies || []).join(', '),
       location: c.location,
       max_pages: c.max_pages,
       sources: c.sources || [],
@@ -156,6 +159,7 @@ export default function Campaigns() {
       description: form.description.trim(),
       keywords: form.keywords.split(',').map(k => k.trim()).filter(Boolean),
       extra_job_suffixes: form.extra_job_suffixes.split(',').map(s => s.trim()).filter(Boolean),
+      exclude_companies: form.exclude_companies.split(',').map(s => s.trim()).filter(Boolean),
       location: form.location.trim(),
       max_pages: form.max_pages,
       sources: form.sources,
@@ -355,6 +359,21 @@ export default function Campaigns() {
               placeholder="revenue operations manager, sales ops analyst, RevOps lead"
               value={form.extra_job_suffixes}
               onChange={e => setForm(f => ({ ...f, extra_job_suffixes: e.target.value }))}
+            />
+          </div>
+
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ fontSize: 13, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 6 }}>
+              Exclude Companies{' '}
+              <span style={{ fontWeight: 400, color: '#64748b' }}>
+                (always include your own company — otherwise its own press releases get saved as it showing buying intent for its own product)
+              </span>
+            </label>
+            <input
+              style={INPUT}
+              placeholder="Your Company Name"
+              value={form.exclude_companies}
+              onChange={e => setForm(f => ({ ...f, exclude_companies: e.target.value }))}
             />
           </div>
 

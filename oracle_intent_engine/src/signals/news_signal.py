@@ -55,7 +55,8 @@ logger = get_logger(__name__)
 class NewsSignal(BaseSignal):
     source_name = "news"
 
-    def fetch(self, query: str, location: str = "", max_pages: int = None) -> list[dict]:
+    def fetch(self, query: str, location: str = "", max_pages: int = None,
+              campaign_keywords: list[str] | None = None) -> list[dict]:
         # Step 1: collect raw articles from all available sources
         raw: list[dict] = []
 
@@ -70,9 +71,13 @@ class NewsSignal(BaseSignal):
             return []
 
         # Step 2: extract company names
-        # LLM batch first; regex fallback for any article the LLM couldn't resolve
+        # LLM batch first; regex fallback for any article the LLM couldn't resolve.
+        # campaign_keywords tells the extractor what this scan is actually about —
+        # without it (default Oracle scan), the prompt keeps its Oracle framing;
+        # with it, the prompt asks for the headline's real subject instead of
+        # free-associating any company name mentioned nearby.
         if llm_extractor.is_available():
-            names = llm_extractor.extract_companies_batch(raw)
+            names = llm_extractor.extract_companies_batch(raw, vendor_context=campaign_keywords)
             # Pad to raw length in case LLM returns fewer items than articles
             if len(names) < len(raw):
                 names = names + [""] * (len(raw) - len(names))

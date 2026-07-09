@@ -113,6 +113,9 @@ def main() -> None:
     parser.add_argument("--campaign-keywords", nargs="+", default=None,
                         help="Campaign keywords — switches classify_signals to generic keyword "
                              "matching instead of the Oracle-product taxonomy (non-Oracle ICPs)")
+    parser.add_argument("--exclude-companies", nargs="+", default=None,
+                        help="Company names to never persist as a prospect — always include the "
+                             "vendor's own name, or its own PR gets classified as a lead")
     args = parser.parse_args()
 
     status_path = Path(args.status_file)
@@ -157,6 +160,7 @@ def main() -> None:
         news_queries=args.news_queries,
         campaign_id=args.campaign_id,
         campaign_keywords=args.campaign_keywords,
+        exclude_companies=args.exclude_companies,
     )
 
     # Flush final status

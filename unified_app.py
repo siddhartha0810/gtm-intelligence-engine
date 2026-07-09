@@ -399,7 +399,8 @@ def _start_scan_subprocess(sources: list, location: str, max_pages: int,
                            enrich_params: Optional[dict] = None,
                            news_queries: Optional[list] = None,
                            campaign_id: Optional[int] = None,
-                           campaign_keywords: Optional[list] = None) -> bool:
+                           campaign_keywords: Optional[list] = None,
+                           exclude_companies: Optional[list] = None) -> bool:
     """Runs scan_worker.py — via the RQ queue if REDIS_URL is configured
     (job executes in a separate worker.py process, scales horizontally),
     otherwise spawns it directly in this process. Returns False if a scan
@@ -441,6 +442,8 @@ def _start_scan_subprocess(sources: list, location: str, max_pages: int,
             cmd += ["--campaign-id", str(campaign_id)]
         if campaign_keywords:
             cmd += ["--campaign-keywords"] + list(campaign_keywords)
+        if exclude_companies:
+            cmd += ["--exclude-companies"] + list(exclude_companies)
 
         if use_queue:
             job_queue.enqueue("scan", cmd, str(BASE_DIR), os.environ.copy())
@@ -3896,6 +3899,11 @@ async def create_campaign(
       extra_news_templates Additional news query templates
       custom_job_queries  Override auto-generation with your own job queries
       custom_news_queries Override auto-generation with your own news queries
+      exclude_companies   Names to never persist as a prospect for this
+                          campaign — always include the vendor's own name,
+                          or its own PR wire announcements get classified
+                          as the vendor showing buying intent for its own
+                          product
       location            Geographic filter (default: "United States")
       max_pages           Pages per signal source (default: 3)
       sources             Which signal sources to use (default: all)
@@ -3919,6 +3927,7 @@ async def create_campaign(
         max_pages=int(body.get("max_pages", 3)),
         sources=body.get("sources", []),
         query_tier=int(body.get("query_tier", 1)),
+        exclude_companies=body.get("exclude_companies", []),
     )
     log_audit(current_user, "create_campaign", "campaign",
               str(campaign.get("id", "")), new_value=campaign)
@@ -3936,6 +3945,7 @@ async def update_campaign(
         "name", "description", "keywords", "extra_job_suffixes",
         "extra_news_templates", "custom_job_queries", "custom_news_queries",
         "location", "max_pages", "sources", "query_tier", "is_active",
+        "exclude_companies",
     }
     updates = {k: v for k, v in body.items() if k in allowed}
     campaign = oracle_db.update_campaign(campaign_id, **updates)
@@ -4055,6 +4065,7 @@ async def launch_campaign_scan(
     location   = body.get("location") or campaign.get("location") or ""
     max_pages  = int(body.get("max_pages") or campaign.get("max_pages") or 3)
     sources    = body.get("sources") or campaign.get("sources") or []
+    exclude_companies = campaign.get("exclude_companies") or []
 
     if custom_jq or custom_nq:
         job_queries  = custom_jq or []
@@ -4069,6 +4080,7 @@ async def launch_campaign_scan(
         sources=sources or [], location=location, max_pages=max_pages,
         job_queries=job_queries, news_queries=news_queries,
         campaign_id=campaign_id, campaign_keywords=keywords,
+        exclude_companies=exclude_companies,
     )
     if not started:
         return JSONResponse({"error": "Scan already running."}, status_code=409)

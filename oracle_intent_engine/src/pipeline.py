@@ -103,6 +103,7 @@ def run_scan(
     industry_filter: str | None = None,
     campaign_id: int | None = None,
     campaign_keywords: list[str] | None = None,
+    exclude_companies: list[str] | None = None,
 ) -> dict:
     """
     industry_filter: LinkedIn industry-code filter (e.g. "96,4,80,22,10,74,57"
@@ -233,7 +234,8 @@ def run_scan(
                 if _is_stopped():
                     break
                 try:
-                    results = scrapers["news"].fetch(query, location=location)
+                    results = scrapers["news"].fetch(query, location=location,
+                                                      campaign_keywords=campaign_keywords)
                     for r in results:
                         r["signal_type"] = r.get("signal_type", "news_article")
                     raw_signals.extend(results)
@@ -516,7 +518,7 @@ def run_scan(
         _current_scan["progress"] = "Saving to database..."
         _log("▶ Saving to database...")
         _stage("persist", "running")
-        new_count, known_count = _persist(companies, run_id=run_id)
+        new_count, known_count = _persist(companies, run_id=run_id, exclude_companies=exclude_companies)
         _log(f"✓ Database save complete — {new_count} NEW leads, {known_count} already known (skipped)")
 
         # Set target_product (JD Edwards, Oracle Fusion, ...) from each company's
@@ -655,8 +657,14 @@ def run_scan(
     finally:
         _scan_lock.release()
 
-def _persist(companies: list[dict], run_id: int = None) -> tuple[int, int]:
-    """Persist companies and signals. Returns (new_count, known_count)."""
+def _persist(companies: list[dict], run_id: int = None,
+             exclude_companies: list[str] | None = None) -> tuple[int, int]:
+    """Persist companies and signals. Returns (new_count, known_count).
+
+    exclude_companies: names to skip entirely (fuzzy-matched, same 85%
+    threshold as dedup) — a campaign's own vendor name, so the vendor's own
+    PR wire announcements never get persisted as the vendor showing buying
+    intent for its own product."""
     from rapidfuzz import fuzz as _fuzz
 
     new_count = known_count = 0
@@ -672,6 +680,12 @@ def _persist(companies: list[dict], run_id: int = None) -> tuple[int, int]:
         # produce headline fragments — this is the last line of defence.
         if not is_valid_company_name(company.get("company_name", "")):
             _log(f"  Skipped invalid company name: '{company.get('company_name')}'")
+            continue
+        if exclude_companies and any(
+            _fuzz.token_sort_ratio(company["company_name"], excluded) >= 85
+            for excluded in exclude_companies
+        ):
+            _log(f"  Excluded '{company['company_name']}' (matches campaign exclude_companies)")
             continue
         try:
             # Fuzzy-match scraped name against existing DB names (85% threshold).

@@ -649,6 +649,7 @@ CREATE TABLE IF NOT EXISTS review_queue (
         extra_news_templates  JSONB NOT NULL DEFAULT '[]',
         custom_job_queries    JSONB NOT NULL DEFAULT '[]',
         custom_news_queries   JSONB NOT NULL DEFAULT '[]',
+        exclude_companies     JSONB NOT NULL DEFAULT '[]',
         location              TEXT NOT NULL DEFAULT '',
         max_pages             INTEGER NOT NULL DEFAULT 3,
         sources               JSONB NOT NULL DEFAULT '[]',
@@ -663,6 +664,13 @@ CREATE TABLE IF NOT EXISTS review_queue (
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_campaigns_active ON campaigns(is_active)",
+    # exclude_companies — companies to never persist as a prospect for this
+    # campaign, e.g. the vendor's own name. Without this, a vendor's own PR
+    # wire announcements get classified as the vendor showing buying intent
+    # for its own product (confirmed on a live InRule scan: InRule's own
+    # "InRule Launches irAuthor Web" press release was saved as an InRule
+    # lead).
+    "ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS exclude_companies JSONB NOT NULL DEFAULT '[]'",
 
     # apollo_credit_log table — tracks Apollo credit consumption per pipeline step
     """
@@ -2396,7 +2404,8 @@ def _serialize_campaign(row: Optional[dict]) -> Optional[dict]:
         return row
     import json
     for field in ("keywords", "extra_job_suffixes", "extra_news_templates",
-                  "custom_job_queries", "custom_news_queries", "sources"):
+                  "custom_job_queries", "custom_news_queries", "sources",
+                  "exclude_companies"):
         val = row.get(field)
         if isinstance(val, str):
             try:
@@ -2434,6 +2443,7 @@ def create_campaign(
     max_pages: int = 3,
     sources: list = None,
     query_tier: int = 1,
+    exclude_companies: list = None,
 ) -> dict:
     import json
     with db_cursor() as cur:
@@ -2441,8 +2451,8 @@ def create_campaign(
             INSERT INTO campaigns
                 (name, description, keywords, extra_job_suffixes, extra_news_templates,
                  custom_job_queries, custom_news_queries, location, max_pages,
-                 sources, query_tier)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                 sources, query_tier, exclude_companies)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
         """, (
             name.strip(),
@@ -2456,6 +2466,7 @@ def create_campaign(
             max_pages,
             json.dumps(sources or []),
             query_tier,
+            json.dumps(exclude_companies or []),
         ))
         cid = cur.fetchone()["id"]
     return get_campaign(cid)
@@ -2464,7 +2475,8 @@ def create_campaign(
 def update_campaign(campaign_id: int, **kwargs) -> dict:
     import json
     json_fields = {"keywords", "extra_job_suffixes", "extra_news_templates",
-                   "custom_job_queries", "custom_news_queries", "sources"}
+                   "custom_job_queries", "custom_news_queries", "sources",
+                   "exclude_companies"}
     parts, vals = [], []
     for k, v in kwargs.items():
         if k in json_fields:

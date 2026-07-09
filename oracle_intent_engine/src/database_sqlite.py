@@ -413,6 +413,9 @@ _DDL = [
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_campaigns_active ON campaigns(is_active)",
+    # Mirrors database.py — companies to never persist as a prospect for this
+    # campaign (e.g. the vendor's own name).
+    "ALTER TABLE campaigns ADD COLUMN exclude_companies TEXT NOT NULL DEFAULT '[]'",
     """
     CREATE TABLE IF NOT EXISTS import_batches (
         id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1640,7 +1643,8 @@ def _serialize_campaign(row: dict) -> dict:
     if not row:
         return row
     for field in ("keywords", "extra_job_suffixes", "extra_news_templates",
-                  "custom_job_queries", "custom_news_queries", "sources"):
+                  "custom_job_queries", "custom_news_queries", "sources",
+                  "exclude_companies"):
         val = row.get(field)
         if isinstance(val, str):
             try:
@@ -1677,14 +1681,15 @@ def create_campaign(
     max_pages: int = 3,
     sources: list = None,
     query_tier: int = 1,
+    exclude_companies: list = None,
 ) -> dict:
     with db_cursor() as cur:
         cur.execute("""
             INSERT INTO campaigns
                 (name, description, keywords, extra_job_suffixes, extra_news_templates,
                  custom_job_queries, custom_news_queries, location, max_pages,
-                 sources, query_tier)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 sources, query_tier, exclude_companies)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             RETURNING id
         """, (
             name.strip(),
@@ -1698,6 +1703,7 @@ def create_campaign(
             max_pages,
             json.dumps(sources or []),
             query_tier,
+            json.dumps(exclude_companies or []),
         ))
         row = cur.fetchone()
         cid = row["id"] if row else cur.lastrowid
@@ -1706,7 +1712,8 @@ def create_campaign(
 
 def update_campaign(campaign_id: int, **kwargs) -> dict:
     json_fields = {"keywords", "extra_job_suffixes", "extra_news_templates",
-                   "custom_job_queries", "custom_news_queries", "sources"}
+                   "custom_job_queries", "custom_news_queries", "sources",
+                   "exclude_companies"}
     parts, vals = [], []
     for k, v in kwargs.items():
         if k in json_fields:
