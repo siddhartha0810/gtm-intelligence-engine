@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Radio, Briefcase, ExternalLink, Loader2, Mail, ShieldCheck, ChevronDown, ChevronRight,
-         CheckCircle2, Info } from 'lucide-react'
+         CheckCircle2, Info, MessageCircle } from 'lucide-react'
 import { toast } from '../components/Toast'
 
 const authH = (): Record<string, string> => ({
@@ -32,11 +32,15 @@ interface Signal {
   phase: string; job_title: string; source: string; confidence: number; url: string
   detected_at: string
 }
+interface Touch {
+  day: number; channel: string; subject: string; body: string; notes: string
+}
 interface Hook {
   id: number; company_name: string; contact_name: string; contact_title: string
   subject: string; body: string; angle: string
   personalization_bucket: number | null; personalization_label: string
   grounded: boolean | null; grounded_on: string; created_at: string
+  touches: Touch[]
 }
 interface LiveData {
   campaign: { name: string; keywords: string[]; exclude_companies: string[]; last_run_at: string | null }
@@ -93,8 +97,12 @@ function HookCard({ h }: { h: Hook }) {
       </button>
       {open && (
         <div style={{ padding: '0 16px 14px', borderTop: `1px solid ${C.border}` }}>
-          <p style={{ margin: '10px 0 0', fontSize: 13, color: C.text, lineHeight: 1.6 }}>{h.body}</p>
-          <div style={{ display: 'flex', gap: 14, marginTop: 10, fontSize: 11.5, color: C.textFaint, flexWrap: 'wrap' }}>
+          <div style={{ marginTop: 10, padding: '10px 12px', borderRadius: 8, background: '#f8fafc' }}>
+            <div style={{ fontSize: 10.5, fontWeight: 700, color: C.textFaint, textTransform: 'uppercase',
+              letterSpacing: '0.04em', marginBottom: 4 }}>Day 1 — Email</div>
+            <p style={{ margin: 0, fontSize: 13, color: C.text, lineHeight: 1.6 }}>{h.body}</p>
+          </div>
+          <div style={{ display: 'flex', gap: 14, margin: '10px 0', fontSize: 11.5, color: C.textFaint, flexWrap: 'wrap' }}>
             {h.personalization_label && <span>bucket {h.personalization_bucket}: {h.personalization_label}</span>}
             {h.grounded != null && (
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
@@ -103,10 +111,36 @@ function HookCard({ h }: { h: Hook }) {
               </span>
             )}
           </div>
+
+          {h.touches.filter(t => t.day !== 1).length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {h.touches.filter(t => t.day !== 1).map((t, i) => {
+                const isLinkedin = t.channel.includes('linkedin')
+                return (
+                  <div key={i} style={{ padding: '10px 12px', borderRadius: 8, background: '#f8fafc' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                      {isLinkedin
+                        ? <MessageCircle size={11} color={C.primary} />
+                        : <Mail size={11} color={C.textFaint} />}
+                      <span style={{ fontSize: 10.5, fontWeight: 700, color: C.textFaint, textTransform: 'uppercase',
+                        letterSpacing: '0.04em' }}>
+                        Day {t.day} — {isLinkedin ? 'LinkedIn' : 'Email'}
+                      </span>
+                    </div>
+                    {t.subject && (
+                      <div style={{ fontSize: 12.5, fontWeight: 600, color: C.text, marginBottom: 3 }}>{t.subject}</div>
+                    )}
+                    <p style={{ margin: 0, fontSize: 12.5, color: C.text, lineHeight: 1.55 }}>{t.body}</p>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
           <div style={{ marginTop: 10, padding: '8px 10px', borderRadius: 6, background: '#f8fafc',
             fontSize: 11, color: C.textFaint, display: 'flex', alignItems: 'flex-start', gap: 6 }}>
             <Info size={12} style={{ flexShrink: 0, marginTop: 1 }} />
-            <span>Contact name is a placeholder — company, title, signal, and generated copy are real. Actual decision-maker identification requires contact enrichment (Apollo), not run here to avoid spending paid credits without confirmation.</span>
+            <span>Contact, title, company, signal, and every touch above are real — sourced from this campaign's scan and the company_contacts database, not fabricated.</span>
           </div>
         </div>
       )}

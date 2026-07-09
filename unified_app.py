@@ -1176,6 +1176,10 @@ async def api_decision_intelligence_live(current_user: dict = Depends(oracle_aut
         hooks = oracle_db.get_recent_campaign_hooks(limit=20)
         hooks = [h for h in hooks if h.get("ok") and not h.get("hold_back")]
 
+        touches_by_hook = oracle_db.get_touches_for_hooks([h["id"] for h in hooks])
+        for h in hooks:
+            h["touches"] = touches_by_hook.get(h["id"], [])
+
         campaign = oracle_db.get_campaign(1)
 
         return jsonable_encoder({

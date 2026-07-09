@@ -2717,6 +2717,25 @@ def save_campaign_touches(hook_id: int, touches: list) -> None:
                   t.get("subject", ""), t.get("body", ""), t.get("notes", "")))
 
 
+def get_touches_for_hooks(hook_ids: list) -> dict:
+    """Batch-fetch touches 2-5 for a set of hook ids, keyed by hook_id, each
+    list ordered by day. Powers any UI that needs to show a hook's full
+    cadence, not just the touch-1 opener."""
+    if not hook_ids:
+        return {}
+    with db_cursor(commit=False) as cur:
+        cur.execute("""
+            SELECT hook_id, day, channel, subject, body, notes
+            FROM campaign_touches
+            WHERE hook_id = ANY(%s)
+            ORDER BY hook_id, day
+        """, (list(hook_ids),))
+        out: dict = {}
+        for row in cur.fetchall():
+            out.setdefault(row["hook_id"], []).append(dict(row))
+        return out
+
+
 def get_campaign_hook_stats() -> dict:
     """Angle distribution, bucket distribution, hold-back rate — the metrics
     half of the Signal -> Angle -> Hook -> Email page."""
