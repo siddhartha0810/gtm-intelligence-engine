@@ -55,10 +55,15 @@ HOOK RULES (non-negotiable):
     Time: a window is closing, a competitor is gaining
     Cost: specific dollars or deals bleeding monthly
     Identity: their credibility or board standing is at risk
-    TwoTimelines: their peers split into two groups — most still stuck in the
-      pain, a few who already fixed it; the reader has to place themselves
-      on one side. Runs long — keep this one to 14 words max, no timestamps
-      ("six months from now" etc.)
+    TwoTimelines: most of their peers are still stuck, a few already aren't (14-word budget)
+- ANGLE SELECTION: default to whichever angle the evidence most directly supports.
+  TwoTimelines is ELIGIBLE ONLY IF the evidence itself is a peer-group or industry-wide
+  claim — phrases like "companies are evaluating X", "the market is moving to Y",
+  "regional insurers still...", an analyst/benchmarking report. If the evidence is a
+  single fact about this one company only (a job posting, a specific hire, a specific
+  press release about THEM) — TwoTimelines is NOT ELIGIBLE, pick from the other five.
+  Do not generalize a single-company fact into an invented industry-wide pattern just
+  to justify using TwoTimelines — that is a hallucinated claim, not a hook.
 - PHRASING (apply regardless of which angle you picked):
     External villain: blame a shared enemy, not the reader — "the spreadsheet,"
       "the manual process," "the legacy system," never "you." The reader should
