@@ -4749,6 +4749,7 @@ async def build_cadence(
         hooks = body.get("hooks", [])
         if not hooks:
             return JSONResponse({"error": "No hooks provided"}, status_code=400)
+        product_context = body.get("product_context", "")
 
         from oracle_intent_engine.src.cadence_builder import batch_build_sequences
         from oracle_intent_engine.src import llm_gateway
@@ -4760,7 +4761,7 @@ async def build_cadence(
             )
         api_key = os.getenv("ANTHROPIC_API_KEY", "").strip()  # legacy param only
 
-        sequences = batch_build_sequences(hooks, api_key=api_key)
+        sequences = batch_build_sequences(hooks, api_key=api_key, product_context=product_context)
         ok_count  = sum(1 for s in sequences if s.get("ok"))
 
         # Persist touches 2-5 against the hook already saved in generate-hooks.

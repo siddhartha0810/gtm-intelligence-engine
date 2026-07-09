@@ -257,7 +257,7 @@ export default function CampaignBuilder() {
       const r = await fetch('/api/campaign/build-cadence', {
         method: 'POST',
         headers: { ...authH(), 'Content-Type': 'application/json' },
-        body: JSON.stringify({ hooks: okHooks }),
+        body: JSON.stringify({ hooks: okHooks, product_context: productContext }),
       })
       if (!r.ok) { const e = await r.json(); throw new Error(e.error || `HTTP ${r.status}`) }
       const d = await r.json()

@@ -26,15 +26,23 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 _SYSTEM_PROMPT = """You are a senior B2B outbound specialist building multichannel sequences.
-You have already written the opening email hook for this contact. Now build touches 2-5.
+You have already written the opening email hook for this contact — touch 1 deliberately never
+names the product or pitches anything, that's intentional (PAS: touch 1 is Problem/Agitate
+only). Touches 2-5 are where Solve happens. If none of these five touches ever say what the
+product is or what it does, the sequence is broken — the prospect has no idea what you're
+selling or what to do next.
 
 RULES (non-negotiable):
 - LinkedIn note (touch 2): MAX 300 characters. No pitch — just earn the connection.
-- Email follow-up (touch 3): 2 sentences max. New angle — NOT a repeat of touch 1. Add value —
-  a genuine insight or question, not a repeat of the opener. Never "just following up" or
-  "circling back".
+- Email follow-up (touch 3): 2-3 sentences. New angle — NOT a repeat of touch 1. THIS IS WHERE
+  THE PRODUCT GETS NAMED for the first time: state concretely, in one clause, how the product
+  (given below) addresses the specific pain touch 1 named. Not a full pitch — one sentence
+  connecting their problem to what this product does. End with a soft, specific ask (e.g. "worth
+  15 minutes to see how [Product] handles this?") — not "let me know" or "happy to chat", an
+  actual concrete next step. Never "just following up" or "circling back".
 - LinkedIn message (touch 4): 1 sentence referencing the connection. Ask 1 yes/no question.
-- Breakup email (touch 5): 1-2 sentences. Make it easy to say no. Closes the loop — never desperate.
+- Breakup email (touch 5): 1-2 sentences. Make it easy to say no. Closes the loop — never
+  desperate. Fine to leave the product unnamed here if touch 3 already named it.
 
 NEVER invent a statistic, dollar figure, percentage, or specific claim about what the company
 or its peers achieved (e.g. "saved $1.5B", "40% faster", "27% more likely") unless that exact
@@ -43,6 +51,8 @@ plausible number in a real cold email is a real credibility and factual-accuracy
 have no source for it and it may be flatly wrong about a real company's real results. If you
 want to add value without a real number, ask a genuine question or reference the company's
 actual, known activity (product, hiring, a real event) instead of a manufactured statistic.
+The same rule applies to the product itself: describe only what you're told it does below —
+never invent a feature, integration, or capability it wasn't described as having.
 
 Each touch must reference what the COMPANY actually does. Not generic.
 Subject lines: under 8 words, no question mark, no exclamation mark.
@@ -62,6 +72,7 @@ def build_sequence(
     hook: dict[str, Any],
     api_key: str | None = None,
     model: str = "claude-haiku-4-5-20251001",
+    product_context: str = "",
 ) -> dict[str, Any]:
     """
     Generate touches 2–5 for a contact whose touch 1 hook is already in `hook`.
@@ -70,6 +81,9 @@ def build_sequence(
         hook: A hook dict from hook_generator.generate_hook()
         api_key: Anthropic API key
         model: Claude model to use
+        product_context: What the product actually is/does — without this,
+            touch 3 has nothing to reveal and the sequence never says what's
+            being sold. Same string passed to hook_generator.generate_hook().
 
     Returns:
         {
@@ -103,12 +117,20 @@ def build_sequence(
     hook_body    = hook.get("body", "")
     angle        = hook.get("angle", "")
 
+    product_line = (
+        f"\nThe product (name it in touch 3 — do not leave the sequence without ever "
+        f"saying what this is): {product_context}\n"
+        if product_context else
+        "\nNo product description was provided — do not invent one. Keep touch 3 as a "
+        "genuine question instead of naming a product you weren't told about.\n"
+    )
+
     user_prompt = f"""Contact: {first_name}, {title} at {company}
 Touch 1 already written:
   Subject: {hook_subject}
   Body: {hook_body}
   Angle used: {angle}
-
+{product_line}
 Build touches 2–5 for this contact. Reference what {company} actually does.
 Avoid repeating the {angle} angle — use a different one for touch 3."""
 
@@ -189,6 +211,7 @@ def batch_build_sequences(
     hooks: list[dict[str, Any]],
     api_key: str | None = None,
     delay: float = 0.3,
+    product_context: str = "",
 ) -> list[dict[str, Any]]:
     """
     Build full sequences for a list of hooks.
@@ -196,7 +219,7 @@ def batch_build_sequences(
     """
     results = []
     for hook in hooks:
-        seq = build_sequence(hook, api_key=api_key)
+        seq = build_sequence(hook, api_key=api_key, product_context=product_context)
         results.append(seq)
         if delay and hook.get("ok"):
             time.sleep(delay)
