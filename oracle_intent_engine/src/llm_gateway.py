@@ -261,11 +261,20 @@ def _call_openai_compatible(name: str, tier: str, system: str, user: str,
     if system:
         messages.append({"role": "system", "content": system})
     messages.append({"role": "user", "content": user})
+    body = {"model": p["models"][tier], "messages": messages,
+            "temperature": 0.2, "max_tokens": max_tokens}
+    if name == "glm":
+        # GLM models think by default and burn most of max_tokens on hidden
+        # reasoning_content before ever emitting the answer — confirmed live:
+        # a 400-token budget left near-zero room for actual output, silently
+        # truncating hook bodies to "" or a single character. Disabling
+        # reasoning costs nothing in quality for these short, structured
+        # extraction/copy tasks and gets the full budget spent on the answer.
+        body["thinking"] = {"type": "disabled"}
     resp = requests.post(
         f"{p['base']}/chat/completions",
         headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-        json={"model": p["models"][tier], "messages": messages,
-              "temperature": 0.2, "max_tokens": max_tokens},
+        json=body,
         timeout=_HTTP_TIMEOUT,
     )
     if resp.status_code == 429:
