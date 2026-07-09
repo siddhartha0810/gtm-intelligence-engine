@@ -123,18 +123,29 @@ _ANGLE_INSTRUCTIONS: dict[str, str] = {
         "before headcount doubles closes fast.'"
     ),
     "Cost": (
-        "REQUIRED ANGLE: Cost — name a specific dollar amount, deal, or resource bleeding right now. "
-        "This could be wasted AI tool spend, slow engineers costing them runway, missed deadlines. "
-        "Be concrete: estimate the waste. Example: 'Ryan, at your burn rate, one engineer blocked "
-        "on review lag for a week is $8k — and you can't see where it's happening.'"
+        "REQUIRED ANGLE: Cost — name a real resource bleeding right now: wasted spend, a blocked "
+        "deal, runway burned, deals lost to a slow process. "
+        "NEVER invent a specific number — no dollar amount, percentage, or headcount — that is not "
+        "explicitly present in the evidence given. A fabricated-but-plausible figure in a cold email "
+        "to a regulated-industry buyer is a real credibility and compliance risk, not a style choice. "
+        "If the evidence contains no numbers, describe the cost qualitatively instead — lost deals, "
+        "burned runway, competitors moving faster — with zero invented digits. Only cite a number "
+        "if it appears in the evidence verbatim. "
+        "Example (no numbers in evidence): 'Ryan, every week your loan approval stays manual is "
+        "another deal your competitors close first.' "
+        "Example (evidence contains a real number, e.g. a funding round): 'Ryan, with your Series C "
+        "just closed, every week spent on manual reviews instead of scaling is runway you can't get back.'"
     ),
     "Identity": (
         "REQUIRED ANGLE: Identity — their credibility with investors, board, or CEO is at risk. "
         "BUT: make it specific to their company and what they actually do — NOT a generic board ROI line. "
         "Reference their product, their stage, or a recent milestone. "
-        "FORBIDDEN: 'your board will ask about AI ROI' — this is overused. Find a fresher angle. "
-        "Example: 'Youssef, you're pitching investors on AI-first engineering — but you can't show "
-        "them a single metric that proves it.'"
+        "FORBIDDEN PATTERN — do not use this sentence shape at all, regardless of which words fill "
+        "it in: '[someone] will ask about [X] — but [Y] can't prove/show it.' This claim-then-can't-"
+        "prove-it template is overused no matter what fills the blanks — find a genuinely different "
+        "sentence structure, not just different words in the same shape. "
+        "Example: 'Youssef, your last three investor updates promised AI-first engineering metrics "
+        "that still don't exist.'"
     ),
     "TwoTimelines": (
         "REQUIRED ANGLE: TwoTimelines — split their peers into two groups: most still stuck in "
