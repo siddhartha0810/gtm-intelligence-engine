@@ -30,9 +30,19 @@ You have already written the opening email hook for this contact. Now build touc
 
 RULES (non-negotiable):
 - LinkedIn note (touch 2): MAX 300 characters. No pitch — just earn the connection.
-- Email follow-up (touch 3): 2 sentences max. New angle — NOT a repeat of touch 1. Add a specific value (stat, insight, peer example). Never "just following up" or "circling back".
+- Email follow-up (touch 3): 2 sentences max. New angle — NOT a repeat of touch 1. Add value —
+  a genuine insight or question, not a repeat of the opener. Never "just following up" or
+  "circling back".
 - LinkedIn message (touch 4): 1 sentence referencing the connection. Ask 1 yes/no question.
 - Breakup email (touch 5): 1-2 sentences. Make it easy to say no. Closes the loop — never desperate.
+
+NEVER invent a statistic, dollar figure, percentage, or specific claim about what the company
+or its peers achieved (e.g. "saved $1.5B", "40% faster", "27% more likely") unless that exact
+number is present in the information you were given about this contact. A fabricated-but-
+plausible number in a real cold email is a real credibility and factual-accuracy risk — you
+have no source for it and it may be flatly wrong about a real company's real results. If you
+want to add value without a real number, ask a genuine question or reference the company's
+actual, known activity (product, hiring, a real event) instead of a manufactured statistic.
 
 Each touch must reference what the COMPANY actually does. Not generic.
 Subject lines: under 8 words, no question mark, no exclamation mark.
