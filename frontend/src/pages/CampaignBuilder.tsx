@@ -97,7 +97,7 @@ interface Sequence {
 
 const ANGLE_COLORS: Record<string, string> = {
   Risk: '#ef4444', Effort: '#f59e0b', Time: '#8b5cf6',
-  Cost: '#10b981', Identity: '#3b82f6',
+  Cost: '#10b981', Identity: '#3b82f6', TwoTimelines: '#14b8a6',
 }
 
 export default function CampaignBuilder() {

@@ -5,7 +5,7 @@ Generates personalised cold email hooks for a given contact + company
 using Claude Haiku via the Anthropic API.
 
 Framework: PAS (Problem → Agitate → Solution), grounded in real ICP research.
-Five tension categories: Risk, Effort, Time, Cost, Identity.
+Six tension categories: Risk, Effort, Time, Cost, Identity, TwoTimelines.
 Output: subject line + 3-sentence email body, under 75 words.
 
 Usage:
@@ -49,12 +49,24 @@ HOOK RULES (non-negotiable):
 - Start with their first name
 - Maximum 20 words after the name
 - Plain vocabulary — every word a 14-year-old understands
-- Pick ONE angle from these five tension categories:
+- Pick ONE angle from these six tension categories:
     Risk: they've been burned by a past solution
     Effort: they're doing something manually they resent
     Time: a window is closing, a competitor is gaining
     Cost: specific dollars or deals bleeding monthly
     Identity: their credibility or board standing is at risk
+    TwoTimelines: two futures exist for their role — one still stuck in the
+      current pain, one that fixed it by changing one thing this quarter;
+      the reader has to place themselves on one side
+- PHRASING (apply regardless of which angle you picked):
+    External villain: blame a shared enemy, not the reader — "the spreadsheet,"
+      "the manual process," "the legacy system," never "you." The reader should
+      feel on the same side as the sender against the real cause.
+    BUT / THEREFORE, not AND: state the setup, then a contradiction ("but"),
+      then its consequence ("therefore" — implied is fine, don't literally
+      write the word). A flat list of facts reads dead; contrast reads as a
+      real observation. One sentence still — this is about internal structure,
+      not adding length.
 - NEVER use: "leverage", "synergy", "quick question", "I wanted to reach out",
   "love what you're building", "hope this finds you", "just checking in"
 - Subject line: under 8 words, no question mark, no exclamation mark
@@ -63,12 +75,13 @@ EXAMPLES of perfect hooks (one sentence, names the problem, stops):
   "Priya, most operations leads at your stage can't tell finance where the budget is actually leaking."
   "Marcus, half your team's week goes into a report that's outdated the moment it's shared."
   "Elena, the compliance deadline lands before your current process can catch up."
+  "Dan, six months from now some teams still fight the same manual report — yours doesn't have to."
 
 OUTPUT FORMAT (return exactly this JSON, nothing else):
 {{
   "subject": "...",
   "body": "...",
-  "angle": "Risk|Effort|Time|Cost|Identity",
+  "angle": "Risk|Effort|Time|Cost|Identity|TwoTimelines",
   "word_count": 0
 }}
 """
@@ -117,6 +130,15 @@ _ANGLE_INSTRUCTIONS: dict[str, str] = {
         "Example: 'Youssef, you're pitching investors on AI-first engineering — but you can't show "
         "them a single metric that proves it.'"
     ),
+    "TwoTimelines": (
+        "REQUIRED ANGLE: TwoTimelines — future-pace a near-term split: one version of their "
+        "team/role is still stuck in the pain a few months from now, the other fixed it by changing "
+        "one specific thing this quarter. Ground the 'stuck' side in the same real signal/evidence "
+        "you'd use for any other angle — do not invent a generic future. The reader should place "
+        "themselves on one side without being told which. "
+        "Example: 'Dan, six months out some ops leads are still reconciling this by hand — the ones "
+        "who aren't changed one thing this quarter.'"
+    ),
 }
 
 
@@ -142,7 +164,7 @@ def _build_user_prompt(
     angle_instruction = (
         _ANGLE_INSTRUCTIONS[force_angle]
         if force_angle and force_angle in _ANGLE_INSTRUCTIONS
-        else "Pick the strongest angle from the five tension categories based on what you know about this company."
+        else "Pick the strongest angle from the six tension categories based on what you know about this company."
     )
 
     return f"""Write one cold email hook for this contact.

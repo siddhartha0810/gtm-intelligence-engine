@@ -20,11 +20,13 @@ const card: React.CSSProperties = {
 
 // Same mapping CampaignBuilder.tsx uses for angle chips — kept identical so
 // an angle reads as the same color everywhere in the product. Colorblind-safe
-// (validated: worst adjacent-pair ΔE 22.9 tritan / 32.7 deutan) but the
-// contrast-vs-surface WARN on amber/green means these are never the only way
-// to tell angles apart — every bar below carries a direct text label too.
+// (re-validated with the 6th slot added: worst adjacent-pair ΔE 20.9 tritan /
+// 32.7 deutan) but the contrast-vs-surface WARN on amber/green/teal means
+// these are never the only way to tell angles apart — every bar below
+// carries a direct text label too.
 const ANGLE_COLORS: Record<string, string> = {
   Risk: '#ef4444', Effort: '#f59e0b', Time: '#8b5cf6', Cost: '#10b981', Identity: '#3b82f6',
+  TwoTimelines: '#14b8a6',
 }
 
 // Mirrors _ANGLE_INSTRUCTIONS in hook_generator.py — real methodology, not
@@ -35,6 +37,7 @@ const ANGLE_DEFS = [
   { key: 'Time',     desc: 'A window closing — a competitor moving faster, a hiring surge, a funding milestone that changes the timing pressure.' },
   { key: 'Cost',     desc: 'A specific dollar figure bleeding monthly — wasted spend, a blocked deal, runway burned on the wrong thing.' },
   { key: 'Identity', desc: 'Their credibility with the board, investors, or CEO is on the line — specific to their stage, never a generic "board will ask" line.' },
+  { key: 'TwoTimelines', desc: 'Two near-term futures for their role — one still stuck in the pain, one that fixed it by changing one thing this quarter. The reader places themselves on a side.' },
 ]
 
 // Mirrors BUCKET_LABELS + compute_personalization_bucket in hook_generator.py.
