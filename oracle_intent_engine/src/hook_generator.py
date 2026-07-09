@@ -73,6 +73,13 @@ HOOK RULES (non-negotiable):
       write the word). A flat list of facts reads dead; contrast reads as a
       real observation. One sentence still — this is about internal structure,
       not adding length.
+- GROUNDING (applies to every angle, not just Cost): never invent a specific
+  detail — a report name, a meeting type, a dollar figure, a deadline, a
+  named process — that is not present in the evidence given. If the evidence
+  is thin, describe the problem more generally instead of manufacturing a
+  plausible-sounding specific to fill the gap. A generic-but-true sentence
+  beats a specific-but-invented one; the specific one gets rejected downstream
+  regardless, so it wastes the attempt.
 - NEVER use: "leverage", "synergy", "quick question", "I wanted to reach out",
   "love what you're building", "hope this finds you", "just checking in"
 - Subject line: under 8 words, no question mark, no exclamation mark
@@ -287,6 +294,16 @@ def generate_hook(
         if match:
             body = body[:match.start() + 1].strip()
 
+        # Hard word-cap enforcement — the 20-word rule above is a prompt
+        # instruction, not a guarantee. Under thin evidence the model has
+        # produced 22-word bodies trying to sound specific (confirmed in a
+        # stress test). Truncate mechanically rather than ship over-length.
+        words = body.split()
+        if len(words) > 20:
+            body = " ".join(words[:20]).rstrip(",;:—- ")
+            if body and body[-1] not in ".!?":
+                body += "."
+
         # ── Grounding gate ────────────────────────────────────────────────────
         # An opener must reference a REAL, observed specific — not generic
         # flattery or a hallucinated fact. Verify the body quotes a distinctive
@@ -298,6 +315,26 @@ def generate_hook(
             company_research.get("research", {}).get("summary", ""),
         ]
         grounded, matched_term = guards.grounding_check(body, evidence_sources)
+
+        if not grounded:
+            # Ungrounded means the body's specifics don't trace to any real
+            # evidence we hold — likely fabricated under thin context. Hold
+            # back rather than ship silently; same signal the bucket gate
+            # uses above, just discovered after generation instead of before.
+            return {
+                **_error_result(contact, company_research,
+                                "Generated body failed the grounding check — no distinctive "
+                                "evidence term matched, likely fabricated specifics — held back"),
+                "subject":                parsed.get("subject", ""),
+                "body":                   body,
+                "angle":                  parsed.get("angle", ""),
+                "word_count":             len(body.split()),
+                "personalization_bucket": bucket,
+                "personalization_label":  bucket_label,
+                "grounded":               False,
+                "grounded_on":            "",
+                "hold_back":              True,
+            }
 
         return {
             "subject":      parsed.get("subject", ""),
