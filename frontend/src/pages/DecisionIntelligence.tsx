@@ -3,6 +3,7 @@ import { Sparkles, ShieldCheck, Target, Users, Ban, Zap, Check, X,
          TrendingUp, TrendingDown, Mail, ChevronRight, ChevronDown, GitBranch, Loader2,
          AtSign, Link as LinkIcon, ExternalLink, UserCircle2, AlertTriangle } from 'lucide-react'
 import { toast } from '../components/Toast'
+import LiveSignalDemo from './DecisionIntelligenceLive'
 
 const authH = (): Record<string, string> => ({
   Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
@@ -207,6 +208,7 @@ function EmailRow({ m }: { m: DraftEmail }) {
 }
 
 export default function DecisionIntelligence() {
+  const [tab, setTab] = useState<'glassbox' | 'live'>('glassbox')
   const [data, setData] = useState<DIResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -223,8 +225,38 @@ export default function DecisionIntelligence() {
       .finally(() => setLoading(false))
   }, [])
 
+  const TabButton = ({ id, label }: { id: 'glassbox' | 'live'; label: string }) => (
+    <button onClick={() => setTab(id)} style={{
+      padding: '8px 16px', borderRadius: 8, border: 'none', cursor: 'pointer',
+      fontSize: 13, fontWeight: 600, transition: 'background 150ms ease-out, color 150ms ease-out',
+      background: tab === id ? C.card : 'transparent',
+      color: tab === id ? C.primary : C.textMute,
+      boxShadow: tab === id ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+    }}>{label}</button>
+  )
+
+  const tabsHeader = (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 22, flexWrap: 'wrap' }}>
+      <Sparkles size={22} color={C.violet} />
+      <h1 style={{ fontSize: 24, fontWeight: 700, color: C.text, margin: 0, marginRight: 8 }}>Decision Intelligence</h1>
+      <div style={{ display: 'flex', gap: 4, background: '#f1f5f9', padding: 3, borderRadius: 10 }}>
+        <TabButton id="glassbox" label="Glassbox Scoring" />
+        <TabButton id="live" label="Live Signal Demo" />
+      </div>
+    </div>
+  )
+
   const sel = useMemo(
     () => data?.prospects.find(p => p.name === selected) || null, [data, selected])
+
+  if (tab === 'live') {
+    return (
+      <div style={{ paddingBottom: 40 }}>
+        {tabsHeader}
+        <LiveSignalDemo />
+      </div>
+    )
+  }
 
   if (loading) return (
     <div style={{ padding: 60, textAlign: 'center', color: C.textMute }}>
@@ -243,17 +275,11 @@ export default function DecisionIntelligence() {
 
   return (
     <div style={{ paddingBottom: 40 }}>
-      {/* Header */}
-      <div style={{ marginBottom: 22 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-          <Sparkles size={22} color={C.violet} />
-          <h1 style={{ fontSize: 24, fontWeight: 700, color: C.text, margin: 0 }}>Decision Intelligence</h1>
-        </div>
-        <p style={{ color: C.textMute, marginTop: 5, fontSize: 14 }}>
-          Every prospect scored by a transparent, auditable rule set — the way {target.company}'s
-          own product makes a decision. Rules live as data; weights adapt from outcomes.
-        </p>
-      </div>
+      {tabsHeader}
+      <p style={{ color: C.textMute, marginTop: -14, marginBottom: 22, fontSize: 14 }}>
+        Every prospect scored by a transparent, auditable rule set — the way {target.company}'s
+        own product makes a decision. Rules live as data; weights adapt from outcomes.
+      </p>
 
       {/* Auto-derived ICP card */}
       <div style={{ ...card, marginBottom: 16 }}>

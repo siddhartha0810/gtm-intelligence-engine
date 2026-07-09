@@ -1126,6 +1126,79 @@ async def api_decision_intelligence(current_user: dict = Depends(oracle_auth.req
     }
 
 
+@app.get("/api/decision-intelligence/live")
+async def api_decision_intelligence_live(current_user: dict = Depends(oracle_auth.require_user)):
+    """
+    The real-data counterpart to /api/decision-intelligence — that endpoint
+    reads static glassbox demo artifacts (inrule_glassbox.json etc). This one
+    reads live signals and hooks that actually ran through the pipeline this
+    session: real companies from a live scan, real generated hooks tied to
+    them, persisted in the database like any other campaign hook.
+
+    Signals are restricted to job-board sources (linkedin/indeed/adzuna/ats)
+    only — structured posting data, not LLM-extracted from article prose, so
+    it carries no risk of the company-attribution noise a news-source
+    extraction can produce. See hook_generator.py / llm_extractor.py history
+    for why that distinction matters.
+    """
+    try:
+        with oracle_db.db_cursor(commit=False) as cur:
+            cur.execute("""
+                SELECT c.id AS company_id, c.name, c.domain, s.oracle_product, s.phase,
+                       s.job_title, s.source, s.confidence, s.url, s.detected_at
+                FROM oracle_signals s JOIN companies c ON c.id = s.company_id
+                WHERE s.source IN ('linkedin', 'indeed', 'adzuna', 'ats')
+                ORDER BY s.confidence DESC, s.detected_at DESC
+                LIMIT 30
+            """)
+            signals = [dict(r) for r in cur.fetchall()]
+
+            cur.execute("""
+                SELECT source, COUNT(*) AS n FROM oracle_signals
+                WHERE source IN ('linkedin', 'indeed', 'adzuna', 'ats')
+                GROUP BY source ORDER BY n DESC
+            """)
+            by_source = {r["source"]: r["n"] for r in cur.fetchall()}
+
+            cur.execute("""
+                SELECT phase, COUNT(*) AS n FROM oracle_signals
+                WHERE source IN ('linkedin', 'indeed', 'adzuna', 'ats')
+                GROUP BY phase ORDER BY n DESC
+            """)
+            by_phase = {r["phase"]: r["n"] for r in cur.fetchall()}
+
+            cur.execute("""
+                SELECT COUNT(DISTINCT company_id) AS n FROM oracle_signals
+                WHERE source IN ('linkedin', 'indeed', 'adzuna', 'ats')
+            """)
+            total_companies = cur.fetchone()["n"]
+
+        hooks = oracle_db.get_recent_campaign_hooks(limit=20)
+        hooks = [h for h in hooks if h.get("ok") and not h.get("hold_back")]
+
+        campaign = oracle_db.get_campaign(1)
+
+        return jsonable_encoder({
+            "campaign": {
+                "name": campaign.get("name") if campaign else "InRule ICP",
+                "keywords": campaign.get("keywords") if campaign else [],
+                "exclude_companies": campaign.get("exclude_companies") if campaign else [],
+                "last_run_at": campaign.get("last_run_at") if campaign else None,
+            },
+            "summary": {
+                "total_signals": len(signals),
+                "total_companies": total_companies,
+                "by_source": by_source,
+                "by_phase": by_phase,
+            },
+            "signals": signals,
+            "hooks": hooks,
+        })
+    except Exception:
+        logger.exception("decision-intelligence live-demo failed")
+        return JSONResponse({"error": "Internal server error"}, status_code=500)
+
+
 @app.get("/api/company/{company_id}/signals")
 async def api_company_signals(company_id: int, current_user: dict = Depends(oracle_auth.require_user)):
     return JSONResponse(jsonable_encoder([dict(s) for s in oracle_db.get_signals_for_company(company_id)]))
