@@ -76,11 +76,10 @@ function SignalRow({ s }: { s: Signal }) {
   )
 }
 
-function HookCard({ h }: { h: Hook }) {
-  const [open, setOpen] = useState(false)
+function HookCard({ h, open, onToggle }: { h: Hook; open: boolean; onToggle: () => void }) {
   return (
     <div style={{ border: `1px solid ${C.border}`, borderRadius: 10, overflow: 'hidden' }}>
-      <button onClick={() => setOpen(o => !o)} style={{
+      <button onClick={onToggle} style={{
         width: '100%', textAlign: 'left', border: 'none', cursor: 'pointer', background: 'transparent',
         padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
         <CheckCircle2 size={15} color={C.success} style={{ flexShrink: 0 }} />
@@ -101,6 +100,10 @@ function HookCard({ h }: { h: Hook }) {
             <div style={{ fontSize: 10.5, fontWeight: 700, color: C.textFaint, textTransform: 'uppercase',
               letterSpacing: '0.04em', marginBottom: 4 }}>Day 1 — Email</div>
             <p style={{ margin: 0, fontSize: 13, color: C.text, lineHeight: 1.6 }}>{h.body}</p>
+            <p style={{ margin: '8px 0 0', fontSize: 11, color: C.textFaint, fontStyle: 'italic' }}>
+              Deliberately no pitch — the opener's only job is a true, specific pain point. The
+              product gets named in Day 5, once there's a reply-worthy reason to open the next one.
+            </p>
           </div>
           <div style={{ display: 'flex', gap: 14, margin: '10px 0', fontSize: 11.5, color: C.textFaint, flexWrap: 'wrap' }}>
             {h.personalization_label && <span>bucket {h.personalization_bucket}: {h.personalization_label}</span>}
@@ -152,6 +155,7 @@ export default function DecisionIntelligenceLive() {
   const [data, setData] = useState<LiveData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [openHookId, setOpenHookId] = useState<number | null>(null)
 
   useEffect(() => {
     fetch('/api/decision-intelligence/live', { headers: authH() })
@@ -248,9 +252,16 @@ export default function DecisionIntelligenceLive() {
             Each one ran through the real pipeline — personalization gate, angle selection, grounding
             check — against a real company above. Click to expand.
           </p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 560, overflowY: 'auto' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 720, overflowY: 'auto' }}>
             {hooks.length
-              ? hooks.map(h => <HookCard key={h.id} h={h} />)
+              ? hooks.map(h => (
+                  <HookCard
+                    key={h.id}
+                    h={h}
+                    open={openHookId === h.id}
+                    onToggle={() => setOpenHookId(id => id === h.id ? null : h.id)}
+                  />
+                ))
               : <div style={{ fontSize: 12.5, color: C.textFaint, fontStyle: 'italic' }}>No hooks generated yet.</div>}
           </div>
         </div>
