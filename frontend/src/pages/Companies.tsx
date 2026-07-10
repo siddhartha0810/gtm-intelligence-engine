@@ -75,7 +75,133 @@ interface Contact {
   email_validation_status?: string
 }
 
+interface BriefKeySignal {
+  source: string
+  evidence: string
+  url: string
+  confidence: number
+  detected_at: string
+}
+interface Brief {
+  company: { id: number; name: string; domain?: string }
+  narrative: string | null
+  phase_trajectory: Array<{ phase: string; first_seen: string }>
+  current_phase: string | null
+  priority_score: number
+  priority_label: string
+  score_delta: number
+  key_signals: BriefKeySignal[]
+  contact_coverage: { total: number; targets: number }
+  staleness_days: number | null
+  signal_count: number
+}
+
+function BriefTab({ company }: { company: Company }) {
+  const [brief, setBrief]     = useState<Brief | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError]     = useState('')
+
+  useEffect(() => {
+    setLoading(true)
+    setError('')
+    fetch(`/api/company/${company.id}/brief`, { headers: authH() })
+      .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() })
+      .then(setBrief)
+      .catch(e => setError(e.message))
+      .finally(() => setLoading(false))
+  }, [company.id])
+
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 200, gap: 8, color: '#94a3b8', fontSize: 13 }}>
+        <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Building brief…
+      </div>
+    )
+  }
+  if (error || !brief) {
+    return <div style={{ padding: '48px 24px', textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>Couldn't load brief{error ? `: ${error}` : ''}</div>
+  }
+
+  const deltaColor = brief.score_delta > 0 ? '#10b981' : brief.score_delta < 0 ? '#ef4444' : '#94a3b8'
+
+  return (
+    <div style={{ flex: 1, padding: '20px 24px', overflowY: 'auto' }}>
+      {brief.narrative && (
+        <div style={{ padding: '12px 14px', borderRadius: 8, background: 'rgba(59,130,246,0.06)', border: '1px solid #dbeafe', fontSize: 13, color: '#1e3a8a', marginBottom: 20, lineHeight: 1.5 }}>
+          {brief.narrative}
+        </div>
+      )}
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
+        <div style={{ fontSize: 22, fontWeight: 700, color: '#0f172a' }}>{brief.priority_score}</div>
+        <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 5, background: '#f1f5f9', color: '#374151', fontWeight: 600 }}>{brief.priority_label}</span>
+        {brief.score_delta !== 0 && (
+          <span style={{ fontSize: 12, fontWeight: 600, color: deltaColor }}>
+            {brief.score_delta > 0 ? '+' : ''}{brief.score_delta} since last scan
+          </span>
+        )}
+      </div>
+
+      <div style={{ fontSize: 11, fontWeight: 600, color: '#374151', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>Phase Trajectory</div>
+      {brief.phase_trajectory.length === 0 ? (
+        <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 20 }}>No phase data yet</div>
+      ) : (
+        <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginBottom: 20 }}>
+          {brief.phase_trajectory.map((t, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{
+                fontSize: 11, padding: '3px 8px', borderRadius: 5, fontWeight: 600,
+                background: i === brief.phase_trajectory.length - 1 ? 'rgba(16,185,129,0.12)' : '#f1f5f9',
+                color: i === brief.phase_trajectory.length - 1 ? '#10b981' : '#64748b',
+              }}>
+                {t.phase}
+              </span>
+              {i < brief.phase_trajectory.length - 1 && <ChevronRight size={12} color="#cbd5e1" />}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div style={{ fontSize: 11, fontWeight: 600, color: '#374151', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>Top Signals</div>
+      {brief.key_signals.length === 0 ? (
+        <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 20 }}>No signals on file</div>
+      ) : (
+        <div style={{ marginBottom: 20 }}>
+          {brief.key_signals.map((s, i) => (
+            <div key={i} style={{ padding: '10px 0', borderBottom: i < brief.key_signals.length - 1 ? '1px solid #f1f5f9' : 'none' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: '#f1f5f9', color: '#64748b', fontWeight: 600 }}>{s.source}</span>
+                <span style={{ fontSize: 11, color: '#94a3b8' }}>{Math.round((s.confidence || 0) * 100)}% confidence</span>
+              </div>
+              <div style={{ fontSize: 12, color: '#374151', lineHeight: 1.4 }}>{s.evidence || '—'}</div>
+              {s.url && (
+                <a href={s.url} target="_blank" rel="noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#3b82f6', textDecoration: 'none', marginTop: 4 }}>
+                  <ExternalLink size={10} /> Source
+                </a>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div style={{ display: 'flex', gap: 12 }}>
+        <div style={{ flex: 1, padding: '10px 12px', background: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+          <div style={{ fontSize: 11, color: '#64748b', marginBottom: 3 }}>Contacts</div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: '#0f172a' }}>{brief.contact_coverage.total} found · {brief.contact_coverage.targets} target</div>
+        </div>
+        <div style={{ flex: 1, padding: '10px 12px', background: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+          <div style={{ fontSize: 11, color: '#64748b', marginBottom: 3 }}>Freshness</div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: brief.staleness_days !== null && brief.staleness_days > 30 ? '#f59e0b' : '#0f172a' }}>
+            {brief.staleness_days === null ? '—' : brief.staleness_days === 0 ? 'Today' : `${brief.staleness_days}d ago`}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function ContactsPanel({ company, onClose, onEnriched }: { company: Company; onClose: () => void; onEnriched?: () => void }) {
+  const [tab, setTab]                   = useState<'brief' | 'contacts'>('brief')
   const [contacts, setContacts]         = useState<Contact[]>([])
   const [loading, setLoading]           = useState(true)
   const [pushing, setPushing]           = useState<Record<string, boolean>>({})
@@ -234,6 +360,23 @@ function ContactsPanel({ company, onClose, onEnriched }: { company: Company; onC
             ))}
           </div>
         </div>
+
+        <div style={{ display: 'flex', gap: 4, padding: '10px 24px 0', borderBottom: '1px solid #f1f5f9', flexShrink: 0 }}>
+          {(['brief', 'contacts'] as const).map(t => (
+            <button key={t} onClick={() => setTab(t)}
+              style={{
+                padding: '8px 4px', marginRight: 20, background: 'none', border: 'none', cursor: 'pointer',
+                fontSize: 13, fontWeight: 600, color: tab === t ? '#3b82f6' : '#94a3b8',
+                borderBottom: tab === t ? '2px solid #3b82f6' : '2px solid transparent',
+              }}>
+              {t === 'brief' ? 'Brief' : `Contacts (${contacts.length})`}
+            </button>
+          ))}
+        </div>
+
+        {tab === 'brief' && <BriefTab company={company} />}
+
+        {tab === 'contacts' && <>
         <div style={{ padding: '12px 24px', borderBottom: '1px solid #f1f5f9', display: 'flex', gap: 10, flexShrink: 0 }}>
           <div style={{ position: 'relative', flex: 1 }}>
             <Search size={12} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
@@ -447,6 +590,7 @@ function ContactsPanel({ company, onClose, onEnriched }: { company: Company; onC
             </button>
           </div>
         )}
+        </>}
       </div>
     </>
   )

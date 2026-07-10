@@ -1213,6 +1213,20 @@ async def api_company_contacts(company_id: int, current_user: dict = Depends(ora
     rows = jsonable_encoder([dict(c) for c in oracle_db.get_contacts_for_company(company_id)])
     return JSONResponse(rows)
 
+@app.get("/api/company/{company_id}/brief")
+async def api_company_brief(company_id: int, current_user: dict = Depends(oracle_auth.require_user)):
+    """On-demand account brief: phase trajectory, score delta, top signals,
+    contact coverage, staleness, and an optional one-line LLM narrative."""
+    from src import account_brief
+    try:
+        brief = account_brief.build_brief(company_id)
+    except Exception:
+        logger.exception(f"api_company_brief company_id={company_id} failed")
+        raise HTTPException(status_code=500, detail="Internal server error")
+    if brief is None:
+        raise HTTPException(status_code=404, detail="Company not found")
+    return JSONResponse(jsonable_encoder(brief))
+
 @app.get("/api/companies/duplicates")
 async def api_find_duplicates(threshold: int = 85, current_user: dict = Depends(oracle_auth.require_user)):
     """Find pairs of companies with similar names using fuzzy matching."""
