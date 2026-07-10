@@ -49,6 +49,7 @@ interface Contact {
   one_liner?: string
   website?: string
   selected?: boolean
+  email_validation_status?: string  // ZeroBounce status, populated by the Step 2→3 deliverability check
 }
 
 interface Hook {
@@ -64,7 +65,22 @@ interface Hook {
   ok: boolean
   error?: string
   hook_id?: number  // set once the hook is persisted server-side; threaded through to build-cadence so touches 2-5 link back to it
+  personalization_bucket?: number
+  personalization_label?: string
+  hold_back?: boolean
 }
+
+interface ApolloPreflight {
+  source: 'api' | 'master_key_required' | 'no_key' | 'error'
+  credits_remaining?: number | null
+  credits_used?: number | null
+  credits_limit?: number | null
+  estimated_cost_min?: number
+  estimated_cost_max?: number
+}
+
+// ZeroBounce statuses that should never be sent to — auto-deselected after validation
+const ZB_DO_NOT_SEND = new Set(['invalid', 'spamtrap', 'abuse', 'do_not_mail'])
 
 type Step = 'icp' | 'contacts' | 'hooks' | 'export' | 'cadence'
 
@@ -121,6 +137,14 @@ export default function CampaignBuilder() {
   const [icpResearch,    setIcpResearch]    = useState('')
   const [llmAvailable,   setLlmAvailable]   = useState<boolean | null>(null)
 
+  // Checkpoint A — Apollo cost/credit preflight, shown before Step 2 spends credits
+  const [preflight,        setPreflight]        = useState<ApolloPreflight | null>(null)
+  const [preflightLoading, setPreflightLoading]  = useState(false)
+
+  // Checkpoint B — ZeroBounce deliverability summary, computed right after Step 2 returns
+  const [emailValidation, setEmailValidation] = useState<{ valid: number; uncertain: number; invalid: number } | null>(null)
+  const [validatingEmails, setValidatingEmails] = useState(false)
+
   // Surface a missing LLM key on page load instead of at generate time —
   // steps 1-2 work without it, so without this check the user only finds
   // out after doing all the selection work.
@@ -170,10 +194,26 @@ export default function CampaignBuilder() {
     }
   }
 
+  // ── Checkpoint A — Apollo cost/credit preflight, shown before findContacts() spends credits ──
+  async function openPreflight() {
+    if (!selectedCompanies) { toast.error('Select at least one company'); return }
+    setPreflightLoading(true)
+    try {
+      const r = await fetch(`/api/campaign/apollo-preflight?company_count=${selectedCompanies}`, { headers: authH() })
+      const d = await r.json()
+      setPreflight(r.ok ? d : { source: 'error' })
+    } catch {
+      setPreflight({ source: 'error' })
+    } finally {
+      setPreflightLoading(false)
+    }
+  }
+
   // ── Step 2 — find contacts ─────────────────────────────────────────────────
   async function findContacts() {
     const selected = companies.filter(c => c.selected)
     if (!selected.length) { toast.error('Select at least one company'); return }
+    setPreflight(null)
     setLoading(true)
     try {
       const titles = targetTitles.split(',').map(t => t.trim()).filter(Boolean)
@@ -184,13 +224,46 @@ export default function CampaignBuilder() {
       })
       if (!r.ok) throw new Error(`HTTP ${r.status}`)
       const d = await r.json()
-      setContacts((d.contacts || []).map((c: Contact) => ({ ...c, selected: true })))
+      const found: Contact[] = (d.contacts || []).map((c: Contact) => ({ ...c, selected: true }))
+      setContacts(found)
       setStep('hooks')
       toast.success(`Found ${d.count} contacts via Apollo`)
+      validateEmails(found)
     } catch (e: unknown) {
       toast.error((e as Error).message)
     } finally {
       setLoading(false)
+    }
+  }
+
+  // ── Checkpoint B — ZeroBounce deliverability check, runs right after Step 2 returns ──
+  async function validateEmails(found: Contact[]) {
+    const withEmail = found.filter(c => c.email)
+    if (!withEmail.length) { setEmailValidation(null); return }
+    setValidatingEmails(true)
+    try {
+      const r = await fetch('/api/campaign/validate-emails', {
+        method: 'POST',
+        headers: { ...authH(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contacts: withEmail }),
+      })
+      const d = await r.json()
+      const results: Record<string, { status: string; sub_status: string }> = d.results || {}
+      let valid = 0, uncertain = 0, invalid = 0
+      setContacts(cs => cs.map(c => {
+        const v = c.email ? results[c.email.toLowerCase()] : undefined
+        if (!v) return c
+        const doNotSend = ZB_DO_NOT_SEND.has(v.status)
+        if (v.status === 'valid') valid++
+        else if (doNotSend) invalid++
+        else uncertain++
+        return { ...c, email_validation_status: v.status, selected: doNotSend ? false : c.selected }
+      }))
+      setEmailValidation({ valid, uncertain, invalid })
+    } catch {
+      setEmailValidation(null)  // deliverability check is informational — never block Step 3 on failure
+    } finally {
+      setValidatingEmails(false)
     }
   }
 
@@ -299,6 +372,13 @@ export default function CampaignBuilder() {
   const selectedCompanies = companies.filter(c => c.selected).length
   const selectedContacts  = contacts.filter(c => c.selected).length
   const successHooks      = hooks.filter(h => h.ok).length
+  const heldBackHooks     = hooks.filter(h => h.hold_back).length
+  const otherFailedHooks  = hooks.length - successHooks - heldBackHooks
+  const bucketCounts = hooks.reduce<Record<string, number>>((acc, h) => {
+    if (!h.ok || !h.personalization_label) return acc
+    acc[h.personalization_label] = (acc[h.personalization_label] || 0) + 1
+    return acc
+  }, {})
 
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto' }}>
@@ -464,12 +544,36 @@ export default function CampaignBuilder() {
               <button onClick={() => setCompanies(cs => cs.map(c => ({ ...c, selected: true })))} style={btn('#64748b')}>
                 Select all
               </button>
-              <button onClick={findContacts} disabled={loading} style={btn('#3b82f6')}>
+              <button onClick={openPreflight} disabled={loading || preflightLoading} style={btn('#3b82f6')}>
                 <Users size={14} />
-                {loading ? 'Searching Apollo...' : `Find CTOs at ${selectedCompanies} companies`}
+                {preflightLoading ? 'Checking Apollo credits...' : loading ? 'Searching Apollo...' : `Find CTOs at ${selectedCompanies} companies`}
               </button>
             </div>
           </div>
+
+          {preflight && (
+            <div style={{ ...card, marginBottom: 12, borderColor: '#3b82f6', background: '#eff6ff' }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>
+                Confirm Apollo search
+              </div>
+              {preflight.source === 'api' ? (
+                <div style={{ fontSize: 12, color: '#374151', marginBottom: 10 }}>
+                  Estimated cost: <strong>{preflight.estimated_cost_min}–{preflight.estimated_cost_max} credits</strong> for {selectedCompanies} companies
+                  {preflight.credits_remaining != null && <> · {preflight.credits_remaining.toLocaleString()} credits remaining</>}
+                </div>
+              ) : (
+                <div style={{ fontSize: 12, color: '#64748b', marginBottom: 10 }}>
+                  Cost estimate unavailable ({preflight.source === 'no_key' ? 'no Apollo API key' : preflight.source === 'master_key_required' ? 'requires Apollo master key' : 'could not reach Apollo'}) — you can still proceed.
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={findContacts} disabled={loading} style={btn('#3b82f6')}>
+                  {loading ? 'Searching Apollo...' : 'Confirm & Find Contacts'}
+                </button>
+                <button onClick={() => setPreflight(null)} style={btn('#64748b')}>Cancel</button>
+              </div>
+            </div>
+          )}
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 10 }}>
             {companies.map(co => (
@@ -529,6 +633,18 @@ export default function CampaignBuilder() {
               </div>
             </div>
           )}
+          {(validatingEmails || emailValidation) && (
+            <div style={{ fontSize: 12, color: '#64748b', marginBottom: 10 }}>
+              {validatingEmails ? 'Checking deliverability via ZeroBounce...' : emailValidation && (
+                <>
+                  Deliverability: <strong style={{ color: '#10b981' }}>{emailValidation.valid} valid</strong>
+                  {' · '}<strong style={{ color: '#f59e0b' }}>{emailValidation.uncertain} uncertain</strong>
+                  {' · '}<strong style={{ color: '#ef4444' }}>{emailValidation.invalid} invalid</strong>
+                  {emailValidation.invalid > 0 && ' (deselected)'}
+                </>
+              )}
+            </div>
+          )}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
             <div style={{ fontSize: 13, color: '#64748b' }}>
               {selectedContacts} of {contacts.length} contacts selected
@@ -583,13 +699,18 @@ export default function CampaignBuilder() {
       {/* ── STEP 4: hooks + export ── */}
       {step === 'export' && hooks.length > 0 && (
         <div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
             <div>
               <span style={{ fontSize: 20, fontWeight: 700, color: '#0f172a' }}>{successHooks}</span>
               <span style={{ fontSize: 13, color: '#64748b', marginLeft: 6 }}>hooks generated</span>
-              {hooks.length - successHooks > 0 && (
+              {heldBackHooks > 0 && (
+                <span style={{ fontSize: 12, color: '#f59e0b', marginLeft: 12 }}>
+                  {heldBackHooks} held back — thin personalization
+                </span>
+              )}
+              {otherFailedHooks > 0 && (
                 <span style={{ fontSize: 12, color: '#ef4444', marginLeft: 12 }}>
-                  {hooks.length - successHooks} failed
+                  {otherFailedHooks} failed
                 </span>
               )}
             </div>
@@ -598,6 +719,11 @@ export default function CampaignBuilder() {
               Export CSV
             </button>
           </div>
+          {Object.keys(bucketCounts).length > 0 && (
+            <div style={{ fontSize: 12, color: '#64748b', marginBottom: 16 }}>
+              Personalization: {Object.entries(bucketCounts).map(([label, n]) => `${n} ${label}`).join(' · ')}
+            </div>
+          )}
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {hooks.map((h, i) => (

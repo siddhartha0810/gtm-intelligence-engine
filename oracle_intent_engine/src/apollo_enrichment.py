@@ -738,6 +738,71 @@ def _zb_validate_batch(emails: list, api_key: str) -> dict:
     return result
 
 
+# ── Pre-flight helpers for Campaign Builder ──────────────────────────────────
+# Thin public wrappers so callers outside this module (unified_app.py) don't
+# reach into the underscore-prefixed internals above.
+
+def zerobounce_credits(api_key: str) -> Optional[int]:
+    return _zb_credits(api_key)
+
+
+def validate_emails(emails: list, api_key: str) -> dict:
+    return _zb_validate_batch(emails, api_key)
+
+
+APOLLO_USAGE_URL            = "https://api.apollo.io/api/v1/usage_stats/api_usage_stats"
+APOLLO_CREDITS_PER_HIT      = 1   # 1 credit per successful match
+APOLLO_WATERFALL_CREDIT_EST = 2   # extra credits when Apollo searches external sources
+
+
+def get_apollo_credit_status(api_key: str) -> dict:
+    """
+    Fetch Apollo credit/usage stats for the pre-flight cost estimate in
+    Campaign Builder. Mirrors lead_enrichment_engine/src/orchestrator.py's
+    get_apollo_credits() — reimplemented here (not imported) because
+    cross-engine imports between lead_enrichment_engine and
+    oracle_intent_engine are forbidden.
+
+    Returns a dict with keys: source, credits_remaining, credits_used, credits_limit.
+    source values: "api" | "master_key_required" | "no_key" | "error"
+    """
+    empty = {"source": "no_key", "credits_remaining": None, "credits_used": None, "credits_limit": None}
+    if not api_key:
+        return empty
+
+    try:
+        req = urllib.request.Request(
+            APOLLO_USAGE_URL, data=json.dumps({}).encode(),
+            headers={"Content-Type": "application/json", "X-Api-Key": api_key},
+            method="POST",
+        )
+        def _do_request() -> bytes:
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                return resp.read()
+        data = json.loads(_http_with_retry(_do_request))
+    except urllib.error.HTTPError as e:
+        if e.code == 403:
+            return {**empty, "source": "master_key_required"}
+        return {**empty, "source": "error"}
+    except Exception as e:
+        logger.warning(f"Apollo usage stats fetch failed: {e}")
+        return {**empty, "source": "error"}
+
+    if not isinstance(data, dict):
+        return {**empty, "source": "error"}
+
+    payload = data.get("usage") or data.get("stats") or {}
+    if not payload:
+        return {**empty, "source": "error"}
+
+    return {
+        "source":            "api",
+        "credits_remaining": payload.get("credits_remaining"),
+        "credits_used":      payload.get("credits_used"),
+        "credits_limit":     payload.get("credits_limit"),
+    }
+
+
 def master_rows_to_contacts(master_rows: list) -> list:
     """Convert contacts_master rows (Salesforce export) into the standard
     pipeline contact shape. All rows passed the ZB_Valid_Email = 'Yes' filter,

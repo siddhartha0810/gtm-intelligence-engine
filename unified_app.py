@@ -4494,6 +4494,52 @@ async def campaign_research_company(
         return JSONResponse({"error": "Internal server error"}, status_code=500)
 
 
+@app.get("/api/campaign/apollo-preflight")
+async def campaign_apollo_preflight(
+    company_count: int,
+    current_user: dict = Depends(oracle_auth.require_user),
+):
+    """Pre-flight cost/credit check before Step 2 spends Apollo credits.
+    Informational only — never blocks the caller from proceeding."""
+    try:
+        from oracle_intent_engine.src.apollo_enrichment import (
+            get_apollo_credit_status, APOLLO_CREDITS_PER_HIT, APOLLO_WATERFALL_CREDIT_EST,
+        )
+        status = get_apollo_credit_status(oracle_cfg.APOLLO_API_KEY)
+        return {
+            **status,
+            "estimated_cost_min": company_count * APOLLO_CREDITS_PER_HIT,
+            "estimated_cost_max": company_count * APOLLO_WATERFALL_CREDIT_EST,
+        }
+    except Exception:
+        logger.exception("Apollo preflight failed")
+        return JSONResponse({"error": "Internal server error"}, status_code=500)
+
+
+@app.post("/api/campaign/validate-emails")
+async def campaign_validate_emails(
+    request: Request,
+    current_user: dict = Depends(oracle_auth.require_user),
+):
+    """Validate a batch of contact emails via ZeroBounce before hook generation.
+    Body: { contacts: [{email, ...}] }"""
+    try:
+        body = await request.json()
+        contacts: list = body.get("contacts", [])
+        emails = sorted({c.get("email", "").lower() for c in contacts if c.get("email")})
+
+        from oracle_intent_engine.src.apollo_enrichment import validate_emails, zerobounce_credits
+        if not oracle_cfg.ZEROBOUNCE_API_KEY or not emails:
+            return {"results": {}, "credits_remaining": None}
+
+        results = validate_emails(emails, oracle_cfg.ZEROBOUNCE_API_KEY)
+        credits = zerobounce_credits(oracle_cfg.ZEROBOUNCE_API_KEY)
+        return {"results": results, "credits_remaining": credits}
+    except Exception:
+        logger.exception("Email validation failed")
+        return JSONResponse({"error": "Internal server error"}, status_code=500)
+
+
 @app.post("/api/campaign/find-contacts")
 async def campaign_find_contacts(
     request: Request,
