@@ -77,17 +77,26 @@ def _clean_company(raw: str) -> str:
 class SECFilingSignal(BaseSignal):
     source_name = "sec_filing"
 
-    def fetch(self, query: str = "", location: str = "", max_pages: int = None) -> list[dict]:
+    def fetch(self, query: str = "", location: str = "", max_pages: int = None,
+              queries: list[str] | None = None) -> list[dict]:
+        """
+        queries: override the default Oracle-term search phrases with an
+        arbitrary list (e.g. an account's category_terms/competitor_products)
+        — lets any account's glassbox scoring reuse this same EDGAR full-text
+        search instead of hardcoded Oracle terms. Defaults to _QUERIES when
+        not supplied, so existing Oracle campaigns are unaffected.
+        """
         max_pages = max_pages or config.MAX_PAGES
+        search_terms = queries if queries is not None else _QUERIES
         results: list[dict] = []
         seen: set[str] = set()
 
-        for q in _QUERIES:
+        for q in search_terms:
             for form in _FORM_TYPES:
                 results.extend(self._search(q, form, max_pages, seen))
                 random_delay(0.5, 1.0)
 
-        logger.info(f"EDGAR total: {len(results)} filing signals from {len(_QUERIES)} queries")
+        logger.info(f"EDGAR total: {len(results)} filing signals from {len(search_terms)} queries")
         return results
 
     def _search(self, query: str, form: str, max_pages: int, seen: set) -> list[dict]:

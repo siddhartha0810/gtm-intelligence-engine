@@ -1285,6 +1285,10 @@ async def api_decision_intelligence_quadsci(current_user: dict = Depends(oracle_
                 hooks = [h for h in all_hooks
                          if h.get("ok") and not h.get("hold_back") and h.get("company_name") in company_names]
 
+        # Scored prospects from run_glassbox.py — empty until that's been run
+        # manually (real SEC/Apollo calls, a deliberate action, not automatic).
+        prospects = oracle_db.get_account_prospects(campaign["id"]) if campaign else []
+
         return jsonable_encoder({
             "icp": icp,
             "signal_rules": signal_rules,
@@ -1298,6 +1302,7 @@ async def api_decision_intelligence_quadsci(current_user: dict = Depends(oracle_
             "summary": summary,
             "signals": signals,
             "hooks": hooks,
+            "prospects": prospects,
         })
     except Exception:
         logger.exception("decision-intelligence quadsci failed")

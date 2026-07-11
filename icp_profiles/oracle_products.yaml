@@ -1,0 +1,112 @@
+# Fallback product taxonomy for phase_classifier.py's detect_oracle_product().
+# NOT the primary source of truth — that's the technology_profiles /
+# product_taxonomy DB tables (row id=1, name="Oracle / JDE"), editable live at
+# /technology-profiles in the app. This file is only read if that DB query
+# fails at boot, so a scan never silently runs with zero product taxonomy.
+# Mirrors DB row id=1 exactly — keep the two in sync if either changes.
+
+meta:
+  profile: Oracle / JDE
+
+products:
+  - canonical_name: JD Edwards
+    weight: 1.0
+    aliases:
+      - jd edwards enterpriseone
+      - jd edwards
+      - jde
+      - jde enterpriseone
+      - jde e1
+      - jde oneworld
+      - jd edwards oneworld
+      - jdedwards
+      - jde cnc
+      - jde cnc administrator
+      - jde basis administrator
+      - enterpriseone
+      - e1 developer
+      - e1 consultant
+
+  - canonical_name: JD Edwards World
+    weight: 1.0
+    aliases:
+      - jd edwards world
+      - jde world
+      - world software
+      - as/400 jde
+      - jde world to enterpriseone
+
+  - canonical_name: Oracle Cloud ERP
+    weight: 1.0
+    aliases:
+      - oracle cloud erp
+      - oracle fusion erp
+      - oracle erp cloud
+      - fusion financials
+      - oracle financials cloud
+      - oracle fusion financials
+      - oracle general ledger cloud
+      - oracle procurement cloud
+
+  - canonical_name: Oracle E-Business Suite
+    weight: 0.9
+    aliases:
+      - oracle e-business suite
+      - oracle ebs
+      - oracle apps
+      - oracle applications
+      - oracle r12
+      - oracle 11i
+      - apps dba
+      - oracle ebusiness
+
+  - canonical_name: Oracle PeopleSoft
+    weight: 0.9
+    aliases:
+      - peoplesoft
+      - oracle peoplesoft
+      - psft
+      - peopletools
+      - people tools
+      - hcm peoplesoft
+      - fscm
+      - campus solutions
+
+  - canonical_name: Oracle NetSuite
+    weight: 0.8
+    aliases:
+      - netsuite
+      - oracle netsuite
+      - netsuite erp
+      - netsuite implementation
+      - netsuite administrator
+      - netsuite developer
+      - netsuite consultant
+      - suitescript
+      - netsuite oneworld
+
+  - canonical_name: Oracle HCM Cloud
+    weight: 0.9
+    aliases:
+      - oracle hcm cloud
+      - oracle hcm
+      - oracle human capital management
+      - fusion hcm
+      - oracle global hr
+      - oracle payroll cloud
+      - oracle talent management
+      - oracle recruiting cloud
+      - oracle learning cloud
+      - oracle orc
+
+  - canonical_name: Oracle SCM Cloud
+    weight: 0.85
+    aliases:
+      - oracle scm cloud
+      - oracle scm
+      - oracle supply chain cloud
+      - oracle inventory cloud
+      - oracle order management cloud
+      - oracle manufacturing cloud
+      - oracle otm
+      - oracle warehouse management

@@ -60,6 +60,15 @@ interface Hook {
   subject: string; body: string; angle: string
   personalization_bucket: number | null; personalization_label: string
 }
+interface TraceEntry {
+  id: string; condition: string; state: 'fired' | 'not_fired' | 'no_evidence'
+  points: number; why?: string; source_url?: string
+}
+interface Prospect {
+  id: number; company_id: number; company_name: string; domain: string
+  total_score: number; evaluable_weight: number; tier: string
+  trace: TraceEntry[]; scored_at: string
+}
 interface QuadSciData {
   icp: ICP
   signal_rules: SignalRule[]
@@ -67,6 +76,7 @@ interface QuadSciData {
   summary: { total_signals: number; total_companies: number }
   signals: Signal[]
   hooks: Hook[]
+  prospects?: Prospect[]
 }
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
@@ -78,6 +88,60 @@ function TagList({ items, color = C.primary }: { items?: string[]; color?: strin
   return (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
       {items.map(i => <span key={i} style={pill(color)}>{i}</span>)}
+    </div>
+  )
+}
+
+const TIER_COLOR = (tier: string) =>
+  tier.includes('TIER 1') ? C.success :
+  tier.includes('TIER 2') ? C.primary :
+  tier.includes('TIER 3') ? C.warning : C.textFaint
+
+const TRACE_STATE: Record<TraceEntry['state'], { icon: string; color: string; label: string }> = {
+  fired:       { icon: '●', color: C.success,  label: 'fired' },
+  not_fired:   { icon: '○', color: C.textMute,  label: 'not fired' },
+  no_evidence: { icon: '–', color: C.textFaint, label: 'no evidence' },
+}
+
+function ProspectCard({ p }: { p: Prospect }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div style={{ border: `1px solid ${C.border}`, borderRadius: 10, overflow: 'hidden' }}>
+      <button onClick={() => setOpen(v => !v)} style={{
+        width: '100%', textAlign: 'left', border: 'none', cursor: 'pointer', background: 'transparent',
+        padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
+        <span style={{ fontSize: 13.5, fontWeight: 700, color: C.text, flexShrink: 0 }}>{p.company_name}</span>
+        <span style={pill(TIER_COLOR(p.tier))}>{p.tier}</span>
+        <span style={{ fontSize: 12, color: C.textMute, flex: 1 }}>
+          {p.total_score} / {p.evaluable_weight} pts
+        </span>
+      </button>
+      {open && (
+        <div style={{ padding: '0 16px 14px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {p.trace.map(t => {
+            const s = TRACE_STATE[t.state]
+            return (
+              <div key={t.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 12 }}>
+                <span style={{ color: s.color, flexShrink: 0, opacity: t.state === 'no_evidence' ? 0.5 : 1 }}>{s.icon}</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ fontWeight: 600, color: t.state === 'no_evidence' ? C.textFaint : C.text, textTransform: 'capitalize' }}>
+                    {t.condition.replace(/_/g, ' ')}
+                  </span>
+                  <span style={{ color: C.textFaint, marginLeft: 6 }}>
+                    {t.state === 'fired' ? `+${t.points}` : t.state === 'no_evidence' ? '(not evaluated)' : '(checked, absent)'}
+                  </span>
+                  {t.why && <div style={{ color: C.textMute, marginTop: 2 }}>{t.why}</div>}
+                  {t.source_url && (
+                    <a href={t.source_url} target="_blank" rel="noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: C.primary, textDecoration: 'none', marginTop: 2 }}>
+                      <ExternalLink size={10} /> Source
+                    </a>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }
@@ -196,6 +260,26 @@ export default function QuadSci() {
             </div>
           ))}
         </div>
+      </div>
+
+      {/* ── Scored prospects (run_glassbox.py output) ── */}
+      <div style={{ ...card, marginBottom: 16 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <SectionTitle>Scored Prospects</SectionTitle>
+          <span style={{ fontSize: 12, color: C.textMute }}>{(data.prospects || []).length} scored</span>
+        </div>
+        {!data.prospects?.length ? (
+          <div style={{ textAlign: 'center', padding: '32px 16px' }}>
+            <ShieldCheck size={28} color={C.textFaint} style={{ marginBottom: 8 }} />
+            <div style={{ fontSize: 13, color: C.textMute }}>
+              No companies scored yet — run <code>python run_glassbox.py --campaign-id {data.campaign.id}</code> after a scan has surfaced candidate companies.
+            </div>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {data.prospects.map(p => <ProspectCard key={p.id} p={p} />)}
+          </div>
+        )}
       </div>
 
       {/* ── Live signals ── */}

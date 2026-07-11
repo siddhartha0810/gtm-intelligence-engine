@@ -92,6 +92,13 @@ class NewsSignal(BaseSignal):
                 )
             if not company:
                 continue
+            # Numbered-digest feeds (e.g. "1. The Download: ... Pendo") leak the
+            # list marker into both LLM and regex extraction — strip it before
+            # this becomes the persisted company name, otherwise it silently
+            # dodges exact/fuzzy matching downstream (exclude_companies, dedup).
+            company = re.sub(r"^\d+\.\s*", "", company).strip()
+            if not company:
+                continue
             results.append(self._make_signal(
                 company_name=company,
                 job_title=article["title"],

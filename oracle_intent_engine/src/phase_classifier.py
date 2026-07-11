@@ -2,8 +2,10 @@
 phase_classifier.py
 ====================
 Classifies a raw signal (job posting, news article) into:
-  oracle_product — which Oracle product family is involved
-  phase          — where the company is in its Oracle journey
+  oracle_product — which product/keyword is involved (Oracle taxonomy by
+                   default; any campaign's own keywords when campaign_keywords
+                   is supplied — see detect_campaign_product() below)
+  phase          — where the company is in its buying/adoption cycle
   confidence     — 0.0 to 1.0 (how certain we are about the classification)
 
 PURPOSE:
@@ -32,84 +34,52 @@ CONFIDENCE SCORING:
     — Normalized by expected match count for the phase
   Combined: (product_conf + phase_conf) / 2
 
-  Per signals.md rules:
-    Never set confidence > 0.75 if you cannot confirm Oracle product by string match.
-    0.90 = explicit Oracle product + company in same post (set externally, not here)
-    0.80 = Oracle product in job title
-    0.75 = strong Oracle indicator in description
-    0.60 = generic Oracle context
+  Per signals.md rules (Oracle campaigns; generic campaigns use their own
+  detect_campaign_product() confidence formula instead):
+    Never set confidence > 0.75 if you cannot confirm the product by string match.
+    0.90 = explicit product + company in same post (set externally, not here)
+    0.80 = product named in job title
+    0.75 = strong product indicator in description
+    0.60 = generic/ambiguous product context
     0.50 = weak signal
     <0.40 = not stored (filtered before DB insert)
 
-PHASE DEFINITIONS:
-  researching   — early awareness stage (Oracle mentioned in passing)
+PHASE DEFINITIONS (source-agnostic — apply to any campaign's keywords):
+  researching   — early awareness stage (category/product mentioned in passing)
   evaluating    — actively comparing vendors (RFP, selection keywords)
   budgeting     — budget approval cycle (capex, approvals, business case)
-  hiring        — actively hiring Oracle staff = strongest implementation signal
+  hiring        — actively hiring staff for the category = strongest adoption signal
   implementing  — go-live underway (highest confidence, highest lead score)
-  post_live     — live on Oracle (support/admin roles = expansion opportunity)
+  post_live     — live on the product (support/admin roles = expansion opportunity)
 """
 
 import logging
+import re
+from pathlib import Path
 
 from src.utils import clean_text
 
 logger = logging.getLogger(__name__)
 
-# Fallback used when the DB is unavailable at startup.
-# Mirrors the 8-product taxonomy so signals are never silently lost.
-_FALLBACK_PRODUCTS: dict[str, list[str]] = {
-    "JD Edwards": [
-        "jd edwards enterpriseone", "jd edwards", "jde", "jde enterpriseone",
-        "jde e1", "jde oneworld", "jd edwards oneworld", "jdedwards",
-        "jde cnc", "jde cnc administrator", "jde basis administrator",
-        "enterpriseone", "e1 developer", "e1 consultant",
-    ],
-    "JD Edwards World": [
-        "jd edwards world", "jde world", "world software", "as/400 jde",
-        "jde world to enterpriseone",
-    ],
-    "Oracle Cloud ERP": [
-        "oracle cloud erp", "oracle fusion erp", "oracle erp cloud",
-        "fusion financials", "oracle financials cloud", "oracle fusion financials",
-        "oracle general ledger cloud", "oracle procurement cloud",
-    ],
-    "Oracle E-Business Suite": [
-        "oracle e-business suite", "oracle ebs", "oracle apps", "oracle applications",
-        "oracle r12", "oracle 11i", "apps dba", "oracle ebusiness",
-    ],
-    "Oracle PeopleSoft": [
-        "peoplesoft", "oracle peoplesoft", "psft", "peopletools", "people tools",
-        "hcm peoplesoft", "fscm", "campus solutions",
-    ],
-    "Oracle NetSuite": [
-        "netsuite", "oracle netsuite", "netsuite erp", "netsuite implementation",
-        "netsuite administrator", "netsuite developer", "netsuite consultant",
-        "suitescript", "netsuite oneworld",
-    ],
-    "Oracle HCM Cloud": [
-        "oracle hcm cloud", "oracle hcm", "oracle human capital management",
-        "fusion hcm", "oracle global hr", "oracle payroll cloud",
-        "oracle talent management", "oracle recruiting cloud",
-        "oracle learning cloud", "oracle orc",
-    ],
-    "Oracle SCM Cloud": [
-        "oracle scm cloud", "oracle scm", "oracle supply chain cloud",
-        "oracle inventory cloud", "oracle order management cloud",
-        "oracle manufacturing cloud", "oracle otm", "oracle warehouse management",
-    ],
-}
+# Fallback used only if the technology_profiles/product_taxonomy DB tables are
+# unreachable at boot — mirrors DB row id=1 ("Oracle / JDE") so a scan never
+# silently runs with zero product taxonomy. NOT the primary source of truth;
+# that's the DB, editable live at /technology-profiles. See
+# icp_profiles/oracle_products.yaml — keep the two in sync if either changes.
+_FALLBACK_YAML = Path(__file__).resolve().parent.parent.parent / "icp_profiles" / "oracle_products.yaml"
 
-_FALLBACK_WEIGHTS: dict[str, float] = {
-    "JD Edwards":               1.0,
-    "JD Edwards World":         1.0,
-    "Oracle Cloud ERP":         1.0,
-    "Oracle E-Business Suite":  0.9,
-    "Oracle PeopleSoft":        0.9,
-    "Oracle NetSuite":          0.8,
-    "Oracle HCM Cloud":         0.9,
-    "Oracle SCM Cloud":         0.85,
-}
+
+def _load_fallback_taxonomy() -> tuple[dict[str, list[str]], dict[str, float]]:
+    import yaml
+    data = yaml.safe_load(_FALLBACK_YAML.read_text())
+    products: dict[str, list[str]] = {}
+    weights:  dict[str, float] = {}
+    for p in data.get("products", []):
+        name = p["canonical_name"]
+        products[name] = list(p.get("aliases", []))
+        weights[name] = float(p.get("weight", 0.8))
+    return products, weights
+
 
 _products_cache: dict[str, list[str]] | None = None
 _weights_cache:  dict[str, float] | None = None
@@ -133,8 +103,8 @@ def _load_products() -> tuple[dict[str, list[str]], dict[str, float]]:
         logger.info(f"[phase_classifier] loaded {len(products)} products from taxonomy DB")
         return products, weights
     except Exception as exc:
-        logger.warning(f"[phase_classifier] DB unavailable, using fallback: {exc}")
-        return _FALLBACK_PRODUCTS, _FALLBACK_WEIGHTS
+        logger.warning(f"[phase_classifier] DB unavailable, using fallback YAML: {exc}")
+        return _load_fallback_taxonomy()
 
 
 def _get_products() -> tuple[dict[str, list[str]], dict[str, float]]:
@@ -241,7 +211,7 @@ PHASE_LABELS = {
     "researching":  "Researching",
     "evaluating":   "Evaluating",
     "budgeting":    "Budgeting / Approving",
-    "hiring":       "Hiring for Oracle",
+    "hiring":       "Hiring",
     "implementing": "Implementing",
     "post_live":    "Post Go-Live / Support",
 }
@@ -332,9 +302,13 @@ def detect_campaign_product(title: str, description: str,
         kw_l = kw.strip().lower()
         if not kw_l:
             continue
-        # Title match is worth more — title is the most reliable field
-        title_hits = title_l.count(kw_l)
-        desc_hits  = combined.count(kw_l) - title_hits
+        # Word-boundary match, not substring — plain .count() matched "Clari"
+        # inside "ClarityQ" (a real false positive seen in production). \b
+        # only anchors on the outer edges, so multi-word keywords like
+        # "Head of RevOps" still match as a phrase, not word-by-word.
+        pattern = re.compile(r"\b" + re.escape(kw_l) + r"\b")
+        title_hits = len(pattern.findall(title_l))
+        desc_hits  = len(pattern.findall(combined)) - title_hits
         score = (title_hits * 2.0) + (desc_hits * 1.0)
         if score > best_score:
             best_score = score

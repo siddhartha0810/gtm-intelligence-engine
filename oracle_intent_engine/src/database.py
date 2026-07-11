@@ -708,6 +708,25 @@ CREATE TABLE IF NOT EXISTS review_queue (
     "CREATE INDEX IF NOT EXISTS idx_outcomes_outcome ON outcomes(outcome)",
     "CREATE INDEX IF NOT EXISTS idx_outcomes_created ON outcomes(created_at DESC)",
 
+    # account_prospects — output of glassbox_scorer.py, rerunnable (upsert on
+    # campaign_id+company_id) rather than a one-off JSON file per account.
+    # trace stores the full 3-state (fired/not_fired/no_evidence) rule trace
+    # so a company is never penalized for evidence sources that don't cover it.
+    """
+    CREATE TABLE IF NOT EXISTS account_prospects (
+        id               BIGSERIAL PRIMARY KEY,
+        campaign_id      BIGINT REFERENCES campaigns(id) ON DELETE CASCADE,
+        company_id       BIGINT REFERENCES companies(id) ON DELETE CASCADE,
+        total_score      REAL NOT NULL DEFAULT 0,
+        evaluable_weight REAL NOT NULL DEFAULT 0,
+        tier             TEXT NOT NULL DEFAULT '',
+        trace            JSONB NOT NULL DEFAULT '[]',
+        scored_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE (campaign_id, company_id)
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_account_prospects_campaign ON account_prospects(campaign_id, total_score DESC)",
+
     # campaign_hooks — persists every hook hook_generator.py produces (the
     # Signal -> Angle -> Hook step). Contacts here come from Campaign
     # Builder's ICP flow (Apollo pass-through, not necessarily in
@@ -2510,6 +2529,40 @@ def update_campaign_run_stats(campaign_id: int, run_id: int,
                 updated_at       = NOW()
             WHERE id = %s
         """, (run_id, signals, companies, campaign_id))
+
+
+# ── Account prospects (generalized glassbox scoring, see glassbox_scorer.py) ──
+
+def upsert_account_prospect(campaign_id: int, company_id: int, total_score: float,
+                             evaluable_weight: float, tier: str, trace: list) -> dict:
+    import json
+    with db_cursor() as cur:
+        cur.execute("""
+            INSERT INTO account_prospects
+                (campaign_id, company_id, total_score, evaluable_weight, tier, trace, scored_at)
+            VALUES (%s, %s, %s, %s, %s, %s, NOW())
+            ON CONFLICT (campaign_id, company_id) DO UPDATE SET
+                total_score      = EXCLUDED.total_score,
+                evaluable_weight = EXCLUDED.evaluable_weight,
+                tier              = EXCLUDED.tier,
+                trace             = EXCLUDED.trace,
+                scored_at         = NOW()
+            RETURNING *
+        """, (campaign_id, company_id, total_score, evaluable_weight, tier, json.dumps(trace)))
+        return dict(cur.fetchone())
+
+
+def get_account_prospects(campaign_id: int, limit: int = 100) -> list:
+    with db_cursor(commit=False) as cur:
+        cur.execute("""
+            SELECT p.*, c.name AS company_name, c.domain
+            FROM account_prospects p
+            JOIN companies c ON c.id = p.company_id
+            WHERE p.campaign_id = %s
+            ORDER BY p.total_score DESC
+            LIMIT %s
+        """, (campaign_id, limit))
+        return [dict(r) for r in cur.fetchall()]
 
 
 # ── Apollo credit tracking ──────────────────────────────────────────────────

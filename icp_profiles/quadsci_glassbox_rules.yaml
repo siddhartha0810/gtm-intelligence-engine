@@ -1,0 +1,75 @@
+# Glassbox scoring rule config for the QuadSci account. Generalizes InRule's
+# glassbox_rules.yaml 7-condition schema — see glassbox_scorer.py for the
+# engine that reads this file (company-agnostic; this file is what makes it
+# QuadSci-specific).
+#
+# evidence_source values (consumed by run_glassbox.py's build_evidence()):
+#   sec_or_signals       — try SEC EDGAR full-text search first, fall back to
+#                           already-collected oracle_signals evidence text
+#   signals               — oracle_signals evidence text only (already flowing
+#                           in via the QuadSci ICP campaign's news/job sources)
+#   sec_or_firmographic   — SEC SIC code, else companies.industry field match
+#   always                — no external evidence source needed, always evaluable
+#
+# category_terms / competitor_products / target_industries referenced below
+# are read from icp_profiles/quadsci.yaml at run time — not duplicated here.
+
+meta:
+  company: QuadSci
+  version: "1.0"
+  note: >
+    Unlike InRule's SEC-only rule set, QuadSci's own reference customers are
+    majority-private (Clari, Reltio, Movable Ink have no SEC filings) — every
+    rule here degrades to a signals/firmographic evidence source instead of
+    going to no_evidence for companies SEC doesn't cover.
+
+rules:
+  - id: R1
+    name: Category buying-language in evidence
+    condition: category_language
+    weight: 10
+    evidence_source: sec_or_signals
+    rationale_template: "Uses category language (\"{term}\") — actively describing the capability QuadSci provides."
+
+  - id: R2
+    name: Competitor product named (displacement window)
+    condition: displacement
+    weight: 12
+    evidence_source: signals
+    rationale_template: "Names a competitor product (\"{term}\") — category budget already exists; a displacement opportunity, not a cold category-education sale."
+
+  - id: R3
+    name: Technographic/industry fit
+    condition: industry_fit
+    weight: 6
+    evidence_source: sec_or_firmographic
+    rationale_template: "Industry/technographic match: {term} — a core QuadSci target archetype."
+
+  - id: R4
+    name: Recent funding or IPO trigger
+    condition: recent_trigger_event
+    weight: 8
+    decay_days: 365
+    evidence_source: sec_or_signals
+    rationale_template: "Recent trigger event (\"{term}\") — fresh capital or governance scrutiny is the exact moment retention/expansion tooling gets budget."
+
+  - id: R5
+    name: Leadership change
+    condition: leadership_change
+    weight: 10
+    evidence_source: sec_or_signals
+    rationale_template: "Leadership change signal (\"{term}\") — new execs typically audit and refresh the GTM/CS stack within 90 days."
+
+  - id: R6
+    name: Live buying-window timing
+    condition: buying_window_timing
+    weight: 8
+    evidence_source: always
+    rationale_template: "{n} trigger events in the last 270 days (most recent {days} days ago) — signals cluster in time, an active buying motion."
+
+  - id: R7
+    name: Decision-maker identified
+    condition: decision_maker_found
+    weight: 4
+    evidence_source: always
+    rationale_template: "A persona-matched decision-maker was found via Apollo ({contact}) — the account is actionable today."
