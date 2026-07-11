@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  Loader2, Briefcase, ExternalLink, Users, Building2, Radar, ShieldCheck,
+  Briefcase, ExternalLink, Users, Building2, Radar, ShieldCheck,
   CheckCircle2, Rocket, Crosshair,
 } from 'lucide-react'
 import { toast } from '../components/Toast'
