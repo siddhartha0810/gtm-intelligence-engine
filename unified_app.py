@@ -1203,6 +1203,107 @@ async def api_decision_intelligence_live(current_user: dict = Depends(oracle_aut
         return JSONResponse({"error": "Internal server error"}, status_code=500)
 
 
+# The campaign row seeded by seed_quadsci_campaign.py — hardcoded the same way
+# get_campaign(1) is implicitly "InRule" above; there is only one QuadSci campaign.
+QUADSCI_CAMPAIGN_NAME = "QuadSci ICP"
+
+
+@app.get("/api/decision-intelligence/quadsci")
+async def api_decision_intelligence_quadsci(current_user: dict = Depends(oracle_auth.require_user)):
+    """QuadSci account page data: curated ICP/signal-rules reference content
+    (icp_profiles/quadsci*.yaml) plus real signals/hooks — correctly scoped to
+    this campaign's own scan_run_id, unlike /api/decision-intelligence/live
+    above which queries oracle_signals globally. Empty signals/hooks before a
+    scan has been run is an expected state, not an error."""
+    import json as _json
+    from pathlib import Path as _Path
+    try:
+        import yaml as _yaml
+    except Exception:
+        _yaml = None
+    root = _Path(__file__).parent
+
+    def _load_yaml(rel, default):
+        if not _yaml:
+            return default
+        try:
+            return _yaml.safe_load((root / rel).read_text())
+        except Exception:
+            return default
+
+    try:
+        icp = _load_yaml("icp_profiles/quadsci.yaml", {}) or {}
+        signal_rules = (_load_yaml("icp_profiles/quadsci_signal_rules.yaml", {}) or {}).get("signal_rules", [])
+
+        campaigns = [c for c in oracle_db.list_campaigns() if c.get("name") == QUADSCI_CAMPAIGN_NAME]
+        campaign = campaigns[0] if campaigns else None
+        last_run_id = campaign.get("last_run_id") if campaign else None
+
+        signals: list = []
+        hooks: list = []
+        summary = {"total_signals": 0, "total_companies": 0, "by_source": {}, "by_phase": {}}
+
+        if last_run_id:
+            with oracle_db.db_cursor(commit=False) as cur:
+                cur.execute("""
+                    SELECT c.id AS company_id, c.name, c.domain, s.oracle_product, s.phase,
+                           s.job_title, s.source, s.confidence, s.url, s.detected_at
+                    FROM oracle_signals s JOIN companies c ON c.id = s.company_id
+                    WHERE s.scan_run_id = %s
+                    ORDER BY s.confidence DESC, s.detected_at DESC
+                    LIMIT 30
+                """, (last_run_id,))
+                signals = [dict(r) for r in cur.fetchall()]
+
+                cur.execute("""
+                    SELECT source, COUNT(*) AS n FROM oracle_signals
+                    WHERE scan_run_id = %s GROUP BY source ORDER BY n DESC
+                """, (last_run_id,))
+                by_source = {r["source"]: r["n"] for r in cur.fetchall()}
+
+                cur.execute("""
+                    SELECT phase, COUNT(*) AS n FROM oracle_signals
+                    WHERE scan_run_id = %s GROUP BY phase ORDER BY n DESC
+                """, (last_run_id,))
+                by_phase = {r["phase"]: r["n"] for r in cur.fetchall()}
+
+                cur.execute("""
+                    SELECT COUNT(DISTINCT company_id) AS n FROM oracle_signals WHERE scan_run_id = %s
+                """, (last_run_id,))
+                total_companies = cur.fetchone()["n"]
+
+            summary = {
+                "total_signals": len(signals),
+                "total_companies": total_companies,
+                "by_source": by_source,
+                "by_phase": by_phase,
+            }
+
+            company_names = {s["name"] for s in signals}
+            if company_names:
+                all_hooks = oracle_db.get_recent_campaign_hooks(limit=100)
+                hooks = [h for h in all_hooks
+                         if h.get("ok") and not h.get("hold_back") and h.get("company_name") in company_names]
+
+        return jsonable_encoder({
+            "icp": icp,
+            "signal_rules": signal_rules,
+            "campaign": {
+                "id": campaign.get("id") if campaign else None,
+                "name": campaign.get("name") if campaign else QUADSCI_CAMPAIGN_NAME,
+                "keywords": campaign.get("keywords") if campaign else [],
+                "exclude_companies": campaign.get("exclude_companies") if campaign else [],
+                "last_run_at": campaign.get("last_run_at") if campaign else None,
+            },
+            "summary": summary,
+            "signals": signals,
+            "hooks": hooks,
+        })
+    except Exception:
+        logger.exception("decision-intelligence quadsci failed")
+        return JSONResponse({"error": "Internal server error"}, status_code=500)
+
+
 @app.get("/api/company/{company_id}/signals")
 async def api_company_signals(company_id: int, current_user: dict = Depends(oracle_auth.require_user)):
     return JSONResponse(jsonable_encoder([dict(s) for s in oracle_db.get_signals_for_company(company_id)]))

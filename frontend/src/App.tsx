@@ -33,6 +33,7 @@ const CampaignEmails      = lazy(() => import('./pages/CampaignEmails'))
 const Campaigns           = lazy(() => import('./pages/Campaigns'))
 const DecisionIntelligence = lazy(() => import('./pages/DecisionIntelligence'))
 const PredictionEngine     = lazy(() => import('./pages/PredictionEngine'))
+const QuadSci              = lazy(() => import('./pages/QuadSci'))
 
 function PageLoader() {
   return (
@@ -127,6 +128,7 @@ export default function App() {
                 {isViewer && <>
                   <Route path="/dashboard"                  element={<Dashboard />} />
                   <Route path="/decision-intelligence"      element={<DecisionIntelligence />} />
+                  <Route path="/accounts/quadsci"           element={<QuadSci />} />
                   <Route path="/prediction-engine"          element={<PredictionEngine />} />
                   <Route path="/companies"                  element={<Companies />} />
                   <Route path="/contacts"                   element={<Contacts />} />

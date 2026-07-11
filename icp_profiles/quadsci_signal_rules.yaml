@@ -1,0 +1,74 @@
+# Buying-signal taxonomy for the QuadSci ICP (customer-intelligence AI for B2B SaaS).
+# Confidence scale mirrors .claude/rules/signals.md's Oracle convention:
+#   0.75-0.90 explicit/high-confidence, 0.60-0.75 strong indicator,
+#   0.50-0.60 weak/context-dependent. Below 0.40 not worth storing.
+#
+# This file is the single source of truth for both the QuadSci page's
+# "signal rules & classification" display and the seed campaign's keyword
+# config (seed_quadsci_campaign.py) — do not duplicate these lists elsewhere.
+
+signal_rules:
+- type: hiring
+  description: Actively recruiting for RevOps/CS/retention-owning roles — direct
+    proof of budget and organizational ownership forming around churn/retention.
+  detect:
+  - Head of RevOps
+  - VP RevOps
+  - VP Customer Success
+  - Director of Retention
+  - Churn Analyst
+  - Revenue Operations Manager
+  confidence: 0.75
+
+- type: tech_stack_tell
+  description: Job description lists existing CS/analytics tooling as a requirement —
+    confirms the technographic fit (they already have telemetry infrastructure).
+  detect:
+  - Gainsight
+  - Pendo
+  - Mixpanel
+  - Amplitude
+  - Clari
+  context: job_description
+  confidence: 0.60
+
+- type: funding_event
+  description: Fresh capital raise, especially press citing efficient growth or NRR —
+    urgency signal for retention tooling investment.
+  detect:
+  - Series C
+  - Series D
+  - net revenue retention
+  - efficient growth
+  confidence: 0.70
+
+- type: leadership_change
+  description: New CRO/CCO/RevOps hire — new execs typically audit and refresh the
+    GTM tech stack within their first 90 days.
+  detect:
+  - new CRO
+  - new Chief Customer Officer
+  - joins as Head of RevOps
+  - appoints VP of Customer Success
+  confidence: 0.65
+
+- type: nrr_commentary
+  description: Public commentary (earnings calls, investor updates, exec posts)
+    flagging NRR softness or churn concerns — direct evidence of pain, highest-intent
+    signal available.
+  detect:
+  - NRR softness
+  - churn concerns
+  - retention challenges
+  - net revenue retention decline
+  confidence: 0.80
+
+- type: competitor_displacement
+  description: Evidence of active evaluation or migration away from existing CS/analytics
+    tooling — timing signal for an in-flight buying process.
+  detect:
+  - migrating from Gainsight
+  - switching from Pendo
+  - QBR prep
+  - manual churn analysis
+  confidence: 0.55

@@ -1,0 +1,63 @@
+meta:
+  company: QuadSci
+  domain: quadsci.ai
+  status: researched — verified via quadsci.ai, CB Insights, AlleyWatch, BusinessWire
+category_terms:
+- Customer Intelligence AI
+- Revenue Orchestration
+- Churn Prediction
+- Product Telemetry Analytics
+target_industries:
+- Infrastructure / DevTools SaaS
+- Data / MDM / Integration Platforms
+- Security SaaS
+- MarTech
+- RevOps Tooling
+current_clients:
+- Clari
+- Reltio
+- Movable Ink
+- Boomi
+- Tenable
+buyer_personas:
+  primary:
+  - Chief Revenue Officer (CRO)
+  - Head of RevOps / VP RevOps
+  secondary:
+  - Chief Customer Officer (CCO) / Head of Customer Success
+  - Chief Marketing Officer (CMO)
+  internal_ally:
+  - Chief Product Officer (CPO) / Head of Product
+identification_criteria:
+  firmographic:
+  - $20M-$500M+ ARR
+  - Series C or later (or later-stage private/public)
+  - Subscription or usage-based pricing model
+  - Genuine product-usage telemetry layer (not a services business)
+  technographic:
+  - Gainsight
+  - Pendo
+  - Mixpanel
+  - Amplitude
+  - ContentSquare
+  - Clari
+  - Salesforce
+excluded_segments:
+- Services businesses
+- Low-telemetry SaaS (thin usage data)
+- SMB / PLG-only companies without a formal CS motion
+- Non-software companies
+competitor_products:
+- Pendo
+- CustomerGauge
+- Swirl
+- Public Comps
+- Profisee
+_evidence:
+  sources:
+  - https://quadsci.ai/
+  - https://www.cbinsights.com/company/quadsciai
+  - https://www.alleywatch.com/2026/02/quadsci-customer-intelligence-ai-saas-churn-prediction-product-telemetry-analytics-revenue-retention-sean-murray-dan-harmeson/
+  - https://www.businesswire.com/news/home/20260217365560/en/QuadSci-the-Most-Predictive-and-Prescriptive-AI-For-Customer-Intelligence-Raises-$8m-Series-A
+  founders: Dan Harmeson and Sean Murray (both ex-Elastic, ex-MuleSoft)
+  funding: $10.1M total raised, $8M Series A (Feb 2026) led by Crosslink Capital
