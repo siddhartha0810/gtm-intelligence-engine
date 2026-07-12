@@ -1241,7 +1241,14 @@ async def api_decision_intelligence_quadsci(current_user: dict = Depends(oracle_
 
         signals: list = []
         hooks: list = []
+        contacts_by_company: dict = {}
         summary = {"total_signals": 0, "total_companies": 0, "by_source": {}, "by_phase": {}}
+
+        # Scored prospects from run_glassbox.py — fetched before the
+        # company_names union below so companies whose only signal predates
+        # the latest scan (e.g. Skydio, scored from an earlier run) still
+        # get their hooks/contacts surfaced instead of silently vanishing.
+        prospects = oracle_db.get_account_prospects(campaign["id"]) if campaign else []
 
         if last_run_id:
             with oracle_db.db_cursor(commit=False) as cur:
@@ -1279,17 +1286,29 @@ async def api_decision_intelligence_quadsci(current_user: dict = Depends(oracle_
                 "by_phase": by_phase,
             }
 
-            # Company names for hook filtering must come from ALL companies in
-            # this scan, not the `signals` list above — that's capped at
-            # LIMIT 30 for the signal-feed preview, so reusing it here dropped
-            # hooks for any company outside that arbitrary top-30 slice
-            # (this scan surfaced 72 companies; only some landed in the cap).
+            # Company names for hook/contact filtering must come from ALL
+            # companies in this scan, not the `signals` list above — that's
+            # capped at LIMIT 30 for the signal-feed preview, so reusing it
+            # here dropped hooks for any company outside that arbitrary
+            # top-30 slice (this scan surfaced 72 companies; only some
+            # landed in the cap).
             with oracle_db.db_cursor(commit=False) as cur:
                 cur.execute("""
                     SELECT DISTINCT c.name FROM oracle_signals s JOIN companies c ON c.id = s.company_id
                     WHERE s.scan_run_id = %s
                 """, (last_run_id,))
                 company_names = {r["name"] for r in cur.fetchall()}
+
+            # Also union in every scored prospect's company name — prospects
+            # accumulate across ALL scan runs a campaign has ever had (see
+            # get_candidate_companies() in run_glassbox.py), so a company
+            # like Skydio (only signal in an older run, but still this
+            # campaign's top-scored prospect) would otherwise be invisible
+            # here even though it's clearly still relevant. Scoping to
+            # last_run_id alone silently dropped both its hook and its 20
+            # real contacts.
+            company_names |= {p["company_name"] for p in prospects if p.get("company_name")}
+
             if company_names:
                 all_hooks = oracle_db.get_recent_campaign_hooks(limit=100)
                 seen_companies: set = set()
@@ -1302,9 +1321,21 @@ async def api_decision_intelligence_quadsci(current_user: dict = Depends(oracle_
                     seen_companies.add(h["company_name"])
                     hooks.append(h)
 
-        # Scored prospects from run_glassbox.py — empty until that's been run
-        # manually (real SEC/Apollo calls, a deliberate action, not automatic).
-        prospects = oracle_db.get_account_prospects(campaign["id"]) if campaign else []
+            # Contacts for every company this campaign has surfaced (same
+            # company_names set used for hooks above) — grouped by company_id
+            # so the frontend can show a "Contacts" button per prospect/signal
+            # row instead of a separate unscoped lookup.
+            if company_names:
+                with oracle_db.db_cursor(commit=False) as cur:
+                    cur.execute("""
+                        SELECT cc.company_id, c.name AS company_name, cc.full_name, cc.first_name,
+                               cc.last_name, cc.title, cc.email, cc.linkedin_url, cc.source, cc.is_target
+                        FROM company_contacts cc JOIN companies c ON c.id = cc.company_id
+                        WHERE c.name = ANY(%s)
+                        ORDER BY c.name, cc.is_target DESC, cc.confidence DESC
+                    """, (list(company_names),))
+                    for r in cur.fetchall():
+                        contacts_by_company.setdefault(r["company_id"], []).append(dict(r))
 
         # Touches 2-5 for whatever hooks made it through the filter above —
         # touch 1 is the hook itself (subject/body already on the hook dict).
@@ -1326,6 +1357,7 @@ async def api_decision_intelligence_quadsci(current_user: dict = Depends(oracle_
             "signals": signals,
             "hooks": hooks,
             "prospects": prospects,
+            "contacts_by_company": contacts_by_company,
         })
     except Exception:
         logger.exception("decision-intelligence quadsci failed")

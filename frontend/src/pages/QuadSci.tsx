@@ -73,6 +73,11 @@ interface Prospect {
   total_score: number; evaluable_weight: number; tier: string
   trace: TraceEntry[]; scored_at: string
 }
+interface Contact {
+  company_id: number; company_name: string; full_name: string; first_name: string
+  last_name: string; title: string; email: string; linkedin_url: string
+  source: string; is_target: number
+}
 interface QuadSciData {
   icp: ICP
   signal_rules: SignalRule[]
@@ -81,15 +86,17 @@ interface QuadSciData {
   signals: Signal[]
   hooks: Hook[]
   prospects?: Prospect[]
+  contacts_by_company?: Record<string, Contact[]>
 }
 
-type Tab = 'overview' | 'rules' | 'prospects' | 'signals' | 'emails' | 'sequences'
+type Tab = 'overview' | 'rules' | 'prospects' | 'signals' | 'contacts' | 'emails' | 'sequences'
 
 const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: 'overview',  label: 'Overview',        icon: <LayoutGrid size={14} /> },
   { id: 'rules',     label: 'Signal Rules',    icon: <ListChecks size={14} /> },
   { id: 'prospects', label: 'Scored Prospects', icon: <Target size={14} /> },
   { id: 'signals',   label: 'Live Signals',    icon: <Radar size={14} /> },
+  { id: 'contacts',  label: 'Contacts',        icon: <Users size={14} /> },
   { id: 'emails',    label: 'Emails',          icon: <Mail size={14} /> },
   { id: 'sequences', label: 'Sequences',       icon: <Layers size={14} /> },
 ]
@@ -118,19 +125,63 @@ const TRACE_STATE: Record<TraceEntry['state'], { icon: string; color: string; la
   no_evidence: { icon: '–', color: C.textFaint, label: 'no evidence' },
 }
 
-function ProspectCard({ p }: { p: Prospect }) {
+function ContactsList({ contacts }: { contacts: Contact[] }) {
+  if (!contacts.length) {
+    return <div style={{ fontSize: 12, color: C.textFaint, padding: '8px 0' }}>No contacts on file for this company yet.</div>
+  }
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      {contacts.map((c, i) => (
+        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', background: '#f8fafc', borderRadius: 8, fontSize: 12 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <span style={{ fontWeight: 600, color: C.text }}>{c.full_name || `${c.first_name} ${c.last_name}`.trim()}</span>
+            {!!c.is_target && <span style={{ ...pill(C.success), marginLeft: 6, fontSize: 10 }}>target</span>}
+            <div style={{ color: C.textMute, marginTop: 1 }}>{c.title || '—'}</div>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
+            {c.email && (
+              <a href={`mailto:${c.email}`} style={{ color: C.primary, textDecoration: 'none', fontSize: 11.5 }}>{c.email}</a>
+            )}
+            {c.linkedin_url && (
+              <a href={c.linkedin_url} target="_blank" rel="noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, color: C.textFaint, textDecoration: 'none', fontSize: 11 }}>
+                <ExternalLink size={9} /> LinkedIn
+              </a>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function ProspectCard({ p, contacts }: { p: Prospect; contacts: Contact[] }) {
   const [open, setOpen] = useState(false)
+  const [showContacts, setShowContacts] = useState(false)
   return (
     <div style={{ border: `1px solid ${C.border}`, borderRadius: 10, overflow: 'hidden' }}>
-      <button onClick={() => setOpen(v => !v)} style={{
-        width: '100%', textAlign: 'left', border: 'none', cursor: 'pointer', background: 'transparent',
-        padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
-        <span style={{ fontSize: 13.5, fontWeight: 700, color: C.text, flexShrink: 0 }}>{p.company_name}</span>
-        <span style={pill(TIER_COLOR(p.tier))}>{p.tier}</span>
-        <span style={{ fontSize: 12, color: C.textMute, flex: 1 }}>
-          {p.total_score} / {p.evaluable_weight} pts
-        </span>
-      </button>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px' }}>
+        <button onClick={() => setOpen(v => !v)} style={{
+          flex: 1, minWidth: 0, textAlign: 'left', border: 'none', cursor: 'pointer', background: 'transparent',
+          padding: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 13.5, fontWeight: 700, color: C.text, flexShrink: 0 }}>{p.company_name}</span>
+          <span style={pill(TIER_COLOR(p.tier))}>{p.tier}</span>
+          <span style={{ fontSize: 12, color: C.textMute, flex: 1 }}>
+            {p.total_score} / {p.evaluable_weight} pts
+          </span>
+        </button>
+        <button onClick={() => setShowContacts(v => !v)} style={{
+          display: 'flex', alignItems: 'center', gap: 5, border: `1px solid ${contacts.length ? C.primary : C.border}`,
+          background: showContacts ? (contacts.length ? '#eff6ff' : '#f8fafc') : 'transparent',
+          color: contacts.length ? C.primary : C.textFaint, borderRadius: 7, padding: '5px 10px',
+          fontSize: 11.5, fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}>
+          <Users size={12} /> Contacts {contacts.length > 0 && `(${contacts.length})`}
+        </button>
+      </div>
+      {showContacts && (
+        <div style={{ padding: '0 16px 14px' }}>
+          <ContactsList contacts={contacts} />
+        </div>
+      )}
       {open && (
         <div style={{ padding: '0 16px 14px', display: 'flex', flexDirection: 'column', gap: 6 }}>
           {p.trace.map(t => {
@@ -235,11 +286,14 @@ export default function QuadSci() {
   const idc = icp.identification_criteria || {}
 
   const sequencedHooks = data.hooks.filter(h => (h.touches || []).length > 0)
+  const contactsByCompany = data.contacts_by_company || {}
+  const contactCompanyIds = Object.keys(contactsByCompany)
 
   const counts: Partial<Record<Tab, number>> = {
     rules: data.signal_rules.length,
     prospects: visibleProspects.length,
     signals: data.signals.length,
+    contacts: contactCompanyIds.length,
     emails: data.hooks.length,
     sequences: sequencedHooks.length,
   }
@@ -400,7 +454,9 @@ export default function QuadSci() {
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {visibleProspects.map(p => <ProspectCard key={p.id} p={p} />)}
+            {visibleProspects.map(p => (
+              <ProspectCard key={p.id} p={p} contacts={data.contacts_by_company?.[String(p.company_id)] || []} />
+            ))}
           </div>
         )}
       </div>
@@ -445,6 +501,43 @@ export default function QuadSci() {
                       <ExternalLink size={11} /> Source
                     </a>
                   )}
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+      )}
+
+      {/* ── Contacts tab ── */}
+      {tab === 'contacts' && (
+      <div style={{ ...card, marginBottom: 16 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <SectionTitle>Contacts</SectionTitle>
+          <span style={{ fontSize: 12, color: C.textMute }}>
+            {contactCompanyIds.length} companies · {Object.values(contactsByCompany).reduce((n, c) => n + c.length, 0)} contacts
+          </span>
+        </div>
+        {contactCompanyIds.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '32px 16px' }}>
+            <Users size={28} color={C.textFaint} style={{ marginBottom: 8 }} />
+            <div style={{ fontSize: 13, color: C.textMute }}>
+              No contacts on file yet for companies in this campaign — run enrichment
+              (Apollo, via <code>run_glassbox.py --enrich-top N</code> or the Companies page) to populate this.
+            </div>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {contactCompanyIds.map(cid => {
+              const contacts = contactsByCompany[cid]
+              const companyName = contacts[0]?.company_name || cid
+              return (
+                <div key={cid} style={{ border: `1px solid ${C.border}`, borderRadius: 10, padding: '12px 16px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                    <span style={{ fontSize: 13.5, fontWeight: 700, color: C.text }}>{companyName}</span>
+                    <span style={pill(C.primary)}>{contacts.length} contact{contacts.length === 1 ? '' : 's'}</span>
+                  </div>
+                  <ContactsList contacts={contacts} />
                 </div>
               )
             })}
