@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import {
   Briefcase, ExternalLink, Users, Building2, Radar, ShieldCheck,
-  CheckCircle2, Rocket, Crosshair,
+  CheckCircle2, Rocket, Crosshair, LayoutGrid, ListChecks, Target, Mail, Layers,
 } from 'lucide-react'
 import { toast } from '../components/Toast'
 
@@ -55,10 +55,14 @@ interface Signal {
   phase: string; job_title: string; source: string; confidence: number; url: string
   detected_at: string
 }
+interface Touch {
+  day: number; channel: string; subject: string; body: string; notes: string
+}
 interface Hook {
   id: number; company_name: string; contact_name: string; contact_title: string
   subject: string; body: string; angle: string
   personalization_bucket: number | null; personalization_label: string
+  touches?: Touch[]
 }
 interface TraceEntry {
   id: string; condition: string; state: 'fired' | 'not_fired' | 'no_evidence'
@@ -78,6 +82,17 @@ interface QuadSciData {
   hooks: Hook[]
   prospects?: Prospect[]
 }
+
+type Tab = 'overview' | 'rules' | 'prospects' | 'signals' | 'emails' | 'sequences'
+
+const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
+  { id: 'overview',  label: 'Overview',        icon: <LayoutGrid size={14} /> },
+  { id: 'rules',     label: 'Signal Rules',    icon: <ListChecks size={14} /> },
+  { id: 'prospects', label: 'Scored Prospects', icon: <Target size={14} /> },
+  { id: 'signals',   label: 'Live Signals',    icon: <Radar size={14} /> },
+  { id: 'emails',    label: 'Emails',          icon: <Mail size={14} /> },
+  { id: 'sequences', label: 'Sequences',       icon: <Layers size={14} /> },
+]
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return <h2 style={{ fontSize: 15, fontWeight: 700, color: C.text, margin: '0 0 12px' }}>{children}</h2>
@@ -146,10 +161,55 @@ function ProspectCard({ p }: { p: Prospect }) {
   )
 }
 
+function SequenceCard({ h }: { h: Hook }) {
+  const [open, setOpen] = useState(false)
+  const touches = h.touches || []
+  return (
+    <div style={{ border: `1px solid ${C.border}`, borderRadius: 10, overflow: 'hidden' }}>
+      <button onClick={() => setOpen(v => !v)} style={{
+        width: '100%', textAlign: 'left', border: 'none', cursor: 'pointer', background: 'transparent',
+        padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
+        <span style={{ fontSize: 13.5, fontWeight: 700, color: C.text, flexShrink: 0 }}>{h.company_name}</span>
+        <span style={{ fontSize: 12, color: C.textMute, flex: 1 }}>{h.contact_name} · {h.contact_title}</span>
+        <span style={{ fontSize: 11.5, color: C.textFaint }}>{touches.filter(t => t.day !== 1).length + 1} touches</span>
+      </button>
+      {open && (
+        <div style={{ padding: '0 16px 14px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {/* Touch 1 is the hook itself, not a row in the touches table */}
+          <div style={{ padding: '10px 12px', background: '#f8fafc', borderRadius: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+              <span style={pill(C.primary)}>Day 1 · Email</span>
+            </div>
+            <div style={{ fontSize: 12.5, fontWeight: 600, color: C.text, marginBottom: 2 }}>{h.subject}</div>
+            <div style={{ fontSize: 12, color: C.textMute, lineHeight: 1.5 }}>{h.body}</div>
+          </div>
+          {touches.filter(t => t.day !== 1).map((t, i) => {
+            const isLinkedIn = t.channel.includes('linkedin')
+            return (
+            <div key={i} style={{ padding: '10px 12px', background: '#f8fafc', borderRadius: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                <span style={pill(isLinkedIn ? C.violet : C.primary)}>
+                  Day {t.day} · {isLinkedIn ? 'LinkedIn' : 'Email'}
+                </span>
+              </div>
+              {t.subject && <div style={{ fontSize: 12.5, fontWeight: 600, color: C.text, marginBottom: 2 }}>{t.subject}</div>}
+              <div style={{ fontSize: 12, color: C.textMute, lineHeight: 1.5 }}>{t.body}</div>
+              {t.notes && <div style={{ fontSize: 11, color: C.textFaint, marginTop: 4, fontStyle: 'italic' }}>{t.notes}</div>}
+            </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function QuadSci() {
   const [data, setData]       = useState<QuadSciData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState('')
+  const [tab, setTab]         = useState<Tab>('overview')
+  const [hideZero, setHideZero] = useState(true)
 
   useEffect(() => {
     fetch('/api/decision-intelligence/quadsci', { headers: authH() })
@@ -159,6 +219,14 @@ export default function QuadSci() {
       .finally(() => setLoading(false))
   }, [])
 
+  const allProspects = data?.prospects || []
+  const zeroCount = useMemo(() => allProspects.filter(p => p.total_score <= 0).length, [allProspects])
+  const visibleProspects = useMemo(
+    () => (hideZero ? allProspects.filter(p => p.total_score > 0) : allProspects)
+      .sort((a, b) => b.total_score - a.total_score),
+    [allProspects, hideZero]
+  )
+
   if (loading) return <div style={{ padding: 40, textAlign: 'center', color: C.textMute }}>Loading...</div>
   if (error || !data) return <div style={{ padding: 40, color: C.danger }}>Error: {error}</div>
 
@@ -166,9 +234,19 @@ export default function QuadSci() {
   const personas = icp.buyer_personas || {}
   const idc = icp.identification_criteria || {}
 
+  const sequencedHooks = data.hooks.filter(h => (h.touches || []).length > 0)
+
+  const counts: Partial<Record<Tab, number>> = {
+    rules: data.signal_rules.length,
+    prospects: visibleProspects.length,
+    signals: data.signals.length,
+    emails: data.hooks.length,
+    sequences: sequencedHooks.length,
+  }
+
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto' }}>
-      <div style={{ marginBottom: 24 }}>
+      <div style={{ marginBottom: 20 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <Radar size={22} color={C.primary} />
           <h1 style={{ fontSize: 24, fontWeight: 700, color: C.text, margin: 0 }}>
@@ -180,7 +258,33 @@ export default function QuadSci() {
         </p>
       </div>
 
-      {/* ── ICP overview ── */}
+      {/* ── Tab bar ── */}
+      <div style={{ display: 'flex', gap: 4, borderBottom: `1px solid ${C.border}`, marginBottom: 20, overflowX: 'auto' }}>
+        {TABS.map(t => {
+          const active = tab === t.id
+          const count = counts[t.id]
+          return (
+            <button key={t.id} onClick={() => setTab(t.id)} style={{
+              display: 'flex', alignItems: 'center', gap: 6, padding: '10px 14px',
+              background: 'none', border: 'none', cursor: 'pointer', whiteSpace: 'nowrap',
+              borderBottom: active ? `2px solid ${C.primary}` : '2px solid transparent',
+              color: active ? C.primary : C.textMute, fontWeight: active ? 700 : 500, fontSize: 13,
+              marginBottom: -1, transition: 'color 150ms ease-out',
+            }}>
+              {t.icon} {t.label}
+              {count !== undefined && (
+                <span style={{
+                  fontSize: 10.5, fontWeight: 700, padding: '1px 6px', borderRadius: 999,
+                  background: active ? `${C.primary}18` : '#f1f5f9', color: active ? C.primary : C.textFaint,
+                }}>{count}</span>
+              )}
+            </button>
+          )
+        })}
+      </div>
+
+      {/* ── Overview tab: ICP + clients + personas ── */}
+      {tab === 'overview' && <>
       <div style={{ ...card, marginBottom: 16 }}>
         <SectionTitle>ICP Overview</SectionTitle>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
@@ -242,8 +346,10 @@ export default function QuadSci() {
           </div>
         </div>
       </div>
+      </>}
 
-      {/* ── Signal rules & classification ── */}
+      {/* ── Signal Rules tab ── */}
+      {tab === 'rules' && (
       <div style={{ ...card, marginBottom: 16 }}>
         <SectionTitle>Signal Rules &amp; Classification</SectionTitle>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -261,28 +367,47 @@ export default function QuadSci() {
           ))}
         </div>
       </div>
+      )}
 
-      {/* ── Scored prospects (run_glassbox.py output) ── */}
+      {/* ── Scored Prospects tab (run_glassbox.py output) ── */}
+      {tab === 'prospects' && (
       <div style={{ ...card, marginBottom: 16 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <SectionTitle>Scored Prospects</SectionTitle>
-          <span style={{ fontSize: 12, color: C.textMute }}>{(data.prospects || []).length} scored</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            {zeroCount > 0 && (
+              <button onClick={() => setHideZero(v => !v)} style={{
+                fontSize: 11.5, fontWeight: 600, color: hideZero ? C.textMute : C.primary,
+                background: hideZero ? '#f1f5f9' : `${C.primary}18`, border: 'none', borderRadius: 6,
+                padding: '4px 9px', cursor: 'pointer',
+              }}>
+                {hideZero ? `${zeroCount} zero-score hidden` : `Hide ${zeroCount} zero-score`}
+              </button>
+            )}
+            <span style={{ fontSize: 12, color: C.textMute }}>{visibleProspects.length} shown</span>
+          </div>
         </div>
-        {!data.prospects?.length ? (
+        {!allProspects.length ? (
           <div style={{ textAlign: 'center', padding: '32px 16px' }}>
             <ShieldCheck size={28} color={C.textFaint} style={{ marginBottom: 8 }} />
             <div style={{ fontSize: 13, color: C.textMute }}>
               No companies scored yet — run <code>python run_glassbox.py --campaign-id {data.campaign.id}</code> after a scan has surfaced candidate companies.
             </div>
           </div>
+        ) : !visibleProspects.length ? (
+          <div style={{ textAlign: 'center', padding: '32px 16px', fontSize: 13, color: C.textMute }}>
+            All {zeroCount} scored companies are zero-score — nothing to show with the filter on.
+          </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {data.prospects.map(p => <ProspectCard key={p.id} p={p} />)}
+            {visibleProspects.map(p => <ProspectCard key={p.id} p={p} />)}
           </div>
         )}
       </div>
+      )}
 
-      {/* ── Live signals ── */}
+      {/* ── Live Signals tab ── */}
+      {tab === 'signals' && (
       <div style={{ ...card, marginBottom: 16 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <SectionTitle>Live Signals</SectionTitle>
@@ -326,8 +451,10 @@ export default function QuadSci() {
           </div>
         )}
       </div>
+      )}
 
-      {/* ── Generated emails ── */}
+      {/* ── Emails tab ── */}
+      {tab === 'emails' && (
       <div style={card}>
         <SectionTitle>Generated Emails</SectionTitle>
         {data.hooks.length === 0 ? (
@@ -357,6 +484,29 @@ export default function QuadSci() {
           </div>
         )}
       </div>
+      )}
+
+      {/* ── Sequences tab ── */}
+      {tab === 'sequences' && (
+      <div style={card}>
+        <SectionTitle>Sequences</SectionTitle>
+        {sequencedHooks.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '32px 16px' }}>
+            <Layers size={28} color={C.textFaint} style={{ marginBottom: 8 }} />
+            <div style={{ fontSize: 13, color: C.textMute, marginBottom: 12 }}>
+              No sequences built yet for the generated emails.
+            </div>
+            <Link to="/campaign-builder" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 600, color: C.primary, textDecoration: 'none' }}>
+              <Rocket size={13} /> Build cadences in Campaign Builder
+            </Link>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {sequencedHooks.map(h => <SequenceCard key={h.id} h={h} />)}
+          </div>
+        )}
+      </div>
+      )}
     </div>
   )
 }

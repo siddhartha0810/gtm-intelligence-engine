@@ -18,6 +18,16 @@ signal_rules:
   - Director of Retention
   - Churn Analyst
   - Revenue Operations Manager
+  - Customer Success Operations Manager
+  - Head of Customer Success
+  - Director of Customer Success
+  - VP Customer Experience
+  - Chief Customer Officer
+  - Director of RevOps
+  - Retention Marketing Manager
+  - Customer Success Analyst
+  - VP GTM Operations
+  - Head of GTM
   confidence: 0.75
 
 - type: tech_stack_tell
@@ -29,6 +39,15 @@ signal_rules:
   - Mixpanel
   - Amplitude
   - Clari
+  - Vitally
+  - Catalyst Software
+  - Totango
+  - ChurnZero
+  - Planhat
+  - Custify
+  - Baremetrics
+  - ProfitWell
+  - Heap Analytics
   context: job_description
   confidence: 0.60
 
@@ -36,8 +55,18 @@ signal_rules:
   description: Fresh capital raise, especially press citing efficient growth or NRR —
     urgency signal for retention tooling investment.
   detect:
+  - Series A
+  - Series B
   - Series C
   - Series D
+  - Series E
+  - Series F
+  - seed round
+  - seed funding
+  - raises $
+  - funding round
+  - closes funding
+  - secures funding
   - net revenue retention
   - efficient growth
   confidence: 0.70

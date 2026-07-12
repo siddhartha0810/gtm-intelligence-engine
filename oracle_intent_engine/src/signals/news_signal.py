@@ -203,6 +203,26 @@ class NewsSignal(BaseSignal):
             logger.error(f"Google RSS error: {e}")
             return []
 
+    def search_company_mentions(self, company_name: str, max_pages: int = 1) -> list[dict]:
+        """
+        Targeted corroboration search: unlike fetch() (broad topic search,
+        then extract-the-subject-company from whatever comes back), this
+        searches news FOR a company we already know, so no company-name
+        extraction step is needed — callers classify the returned articles
+        themselves (see run_glassbox.py's fetch_corroboration()) against
+        whatever term list is relevant (funding/leadership/NRR/displacement).
+        """
+        query = f'"{company_name}"'
+        raw = self._collect_bing_rss(query) + self._collect_google_rss(query)
+        seen_urls: set[str] = set()
+        results = []
+        for a in raw:
+            if a["url"] in seen_urls:
+                continue
+            seen_urls.add(a["url"])
+            results.append(a)
+        return results
+
     # ------------------------------------------------------------------ #
     #  Regex fallback — only precise structural patterns (no broad sweep)
     # ------------------------------------------------------------------ #

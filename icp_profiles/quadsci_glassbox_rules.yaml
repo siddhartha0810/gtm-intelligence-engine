@@ -57,6 +57,7 @@ rules:
     name: Leadership change
     condition: leadership_change
     weight: 10
+    decay_days: 365
     evidence_source: sec_or_signals
     rationale_template: "Leadership change signal (\"{term}\") — new execs typically audit and refresh the GTM/CS stack within 90 days."
 

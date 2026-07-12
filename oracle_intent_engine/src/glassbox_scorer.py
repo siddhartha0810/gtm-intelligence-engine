@@ -52,15 +52,35 @@ _TIER_INSUFFICIENT = "TIER 4 — INSUFFICIENT EVIDENCE"
 _MIN_EVALUABLE_RULES = 2
 
 
+def _parse_evidence_date(evidence_date: str) -> date | None:
+    """Evidence dates arrive in whatever format their source uses — ISO from
+    the DB (oracle_signals.detected_at), RFC 822 from RSS feeds (news
+    corroboration hits, e.g. "Tue, 30 Jun 2020 07:00:00 GMT"). Silently
+    failing to parse and falling back to "full weight" is the wrong default
+    for a decay function — it means a genuinely 6-year-old funding
+    announcement gets scored as if it happened today. Try both formats
+    explicitly rather than swallowing the mismatch."""
+    try:
+        return datetime.fromisoformat(evidence_date.replace("Z", "+00:00")).date()
+    except Exception:
+        pass
+    try:
+        from email.utils import parsedate_to_datetime
+        return parsedate_to_datetime(evidence_date).date()
+    except Exception:
+        return None
+
+
 def _decayed_weight(weight: float, decay_days: int | None, evidence_date: str | None) -> float:
     """Linear decay: a rule's weight fades to 0 over decay_days from its
-    evidence date. No decay_days or no date on the evidence -> full weight."""
+    evidence date. No decay_days or no date on the evidence -> full weight.
+    An unparseable date is NOT treated as "no date" — that would silently
+    grant full weight to evidence whose age we simply failed to read."""
     if not decay_days or not evidence_date:
         return weight
-    try:
-        d = datetime.fromisoformat(evidence_date.replace("Z", "+00:00")).date()
-    except Exception:
-        return weight
+    d = _parse_evidence_date(evidence_date)
+    if d is None:
+        return 0.0  # can't verify recency -> don't credit it as fresh
     days_since = (date.today() - d).days
     if days_since <= 0:
         return weight

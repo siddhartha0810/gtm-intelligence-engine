@@ -80,6 +80,15 @@ HOOK RULES (non-negotiable):
   plausible-sounding specific to fill the gap. A generic-but-true sentence
   beats a specific-but-invented one; the specific one gets rejected downstream
   regardless, so it wastes the attempt.
+- SPECIFICITY (when the evidence has it, use it): if the evidence contains an
+  exact dollar figure, an investor name, a round letter, a product category,
+  or any other proper noun specific to THIS company, the hook must anchor on
+  that — not on generic funding/GTM vocabulary ("your recent funding round",
+  "investors will scrutinize", "revenue metrics") that would read the same
+  for literally any company that raised any amount of money from anyone. A
+  hook built only from generic words, even if technically true, fails the
+  actual goal — it should be obvious from reading the hook alone, with no
+  other context, which specific company it's about.
 - NEVER use: "leverage", "synergy", "quick question", "I wanted to reach out",
   "love what you're building", "hope this finds you", "just checking in"
 - Subject line: under 8 words, no question mark, no exclamation mark

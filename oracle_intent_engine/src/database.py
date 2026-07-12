@@ -1204,7 +1204,19 @@ def save_contacts(company_id: int, contacts: list):
                 """, (apollo_domain, company_id))
 
         for c in contacts:
-            cur.execute("""
+            # company_contacts has TWO unique constraints (email, and
+            # linkedin_url) but ON CONFLICT can only target one arbiter per
+            # statement. The email one is handled below; a row with no email
+            # (or an email that doesn't collide) can still collide on
+            # linkedin_url alone — e.g. Apollo returning the same person
+            # across two different title-query passes. A SAVEPOINT here means
+            # that specific collision just gets skipped instead of aborting
+            # the whole batch's transaction (which silently dropped every
+            # contact after the colliding one, including for companies with
+            # zero relation to the duplicate).
+            cur.execute("SAVEPOINT sp_contact")
+            try:
+                cur.execute("""
                 INSERT INTO company_contacts
                     (company_id, full_name, first_name, last_name, title,
                      email, linkedin_url, seniority, confidence, is_target, source,
@@ -1274,6 +1286,14 @@ def save_contacts(company_id: int, contacts: list):
                 c.get("industry", "") or "",
                 c.get("location", "") or "",
             ))
+            except psycopg2.errors.UniqueViolation:
+                cur.execute("ROLLBACK TO SAVEPOINT sp_contact")
+                logger.warning(
+                    f"[save_contacts] skipped duplicate contact for company_id={company_id} "
+                    f"(linkedin_url collision): {c.get('full_name', '')}"
+                )
+            else:
+                cur.execute("RELEASE SAVEPOINT sp_contact")
         # Keep denormalized contact_count in sync after batch insert
         cur.execute("""
             UPDATE companies
@@ -2773,19 +2793,29 @@ def save_campaign_touches(hook_id: int, touches: list) -> None:
 def get_touches_for_hooks(hook_ids: list) -> dict:
     """Batch-fetch touches 2-5 for a set of hook ids, keyed by hook_id, each
     list ordered by day. Powers any UI that needs to show a hook's full
-    cadence, not just the touch-1 opener."""
+    cadence, not just the touch-1 opener.
+
+    save_campaign_touches() is a plain INSERT with no uniqueness guard, so a
+    hook whose cadence was built more than once (e.g. re-run from the UI)
+    ends up with duplicate (day, channel) rows. Dedupe here — keep the most
+    recent row per (hook_id, day, channel) — rather than at insert time, so
+    a read is never wrong even if a future caller re-introduces the same
+    duplication."""
     if not hook_ids:
         return {}
     with db_cursor(commit=False) as cur:
         cur.execute("""
-            SELECT hook_id, day, channel, subject, body, notes
+            SELECT DISTINCT ON (hook_id, day, channel)
+                   hook_id, day, channel, subject, body, notes
             FROM campaign_touches
             WHERE hook_id = ANY(%s)
-            ORDER BY hook_id, day
+            ORDER BY hook_id, day, channel, created_at DESC
         """, (list(hook_ids),))
         out: dict = {}
         for row in cur.fetchall():
             out.setdefault(row["hook_id"], []).append(dict(row))
+        for hook_id in out:
+            out[hook_id].sort(key=lambda r: r["day"])
         return out
 
 

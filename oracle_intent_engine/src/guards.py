@@ -106,6 +106,21 @@ _GROUNDING_STOPWORDS = {
     "there", "role", "hiring", "hire", "job", "jobs", "looking", "based",
     "noticed", "saw", "see", "seen", "reach", "reaching", "out", "quick",
     "hey", "hi", "hello", "thanks", "thought", "wanted", "know", "notice",
+    # Generic GTM/funding vocabulary — technically "distinctive" by length,
+    # but appears in evidence for nearly every company regardless of what
+    # they actually do, so matching on these alone lets a hook pass grounding
+    # while reading as boilerplate ("your recent funding round means
+    # investors will scrutinize retention" fits literally any funded SaaS
+    # company). Force the check to require an actual proper noun, dollar
+    # figure, or business-specific term instead.
+    "recent", "recently", "revenue", "revenues", "series", "funding", "round",
+    "rounds", "raise", "raises", "raised", "raising", "valuation", "valued",
+    "investor", "investors", "growth", "growing", "grow", "scrutiny",
+    "scrutinize", "metric", "metrics", "retention", "churn", "platform",
+    "platforms", "product", "products", "business", "businesses", "market",
+    "markets", "industry", "industries", "customer", "customers", "client",
+    "clients", "startup", "startups", "capital", "financing", "backed",
+    "means", "pressure", "demands", "proof",
 }
 
 

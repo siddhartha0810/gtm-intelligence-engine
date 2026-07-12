@@ -1279,15 +1279,38 @@ async def api_decision_intelligence_quadsci(current_user: dict = Depends(oracle_
                 "by_phase": by_phase,
             }
 
-            company_names = {s["name"] for s in signals}
+            # Company names for hook filtering must come from ALL companies in
+            # this scan, not the `signals` list above — that's capped at
+            # LIMIT 30 for the signal-feed preview, so reusing it here dropped
+            # hooks for any company outside that arbitrary top-30 slice
+            # (this scan surfaced 72 companies; only some landed in the cap).
+            with oracle_db.db_cursor(commit=False) as cur:
+                cur.execute("""
+                    SELECT DISTINCT c.name FROM oracle_signals s JOIN companies c ON c.id = s.company_id
+                    WHERE s.scan_run_id = %s
+                """, (last_run_id,))
+                company_names = {r["name"] for r in cur.fetchall()}
             if company_names:
                 all_hooks = oracle_db.get_recent_campaign_hooks(limit=100)
-                hooks = [h for h in all_hooks
-                         if h.get("ok") and not h.get("hold_back") and h.get("company_name") in company_names]
+                seen_companies: set = set()
+                hooks = []
+                for h in all_hooks:  # already ordered created_at DESC — first hit per company is the latest
+                    if not h.get("ok") or h.get("hold_back") or h.get("company_name") not in company_names:
+                        continue
+                    if h["company_name"] in seen_companies:
+                        continue  # older re-generation attempt for a company we already have the latest hook for
+                    seen_companies.add(h["company_name"])
+                    hooks.append(h)
 
         # Scored prospects from run_glassbox.py — empty until that's been run
         # manually (real SEC/Apollo calls, a deliberate action, not automatic).
         prospects = oracle_db.get_account_prospects(campaign["id"]) if campaign else []
+
+        # Touches 2-5 for whatever hooks made it through the filter above —
+        # touch 1 is the hook itself (subject/body already on the hook dict).
+        touches_by_hook = oracle_db.get_touches_for_hooks([h["id"] for h in hooks]) if hooks else {}
+        for h in hooks:
+            h["touches"] = touches_by_hook.get(h["id"], [])
 
         return jsonable_encoder({
             "icp": icp,
