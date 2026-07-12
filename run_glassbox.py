@@ -405,6 +405,24 @@ def build_evidence(company: dict, icp: dict, signal_rules: dict,
     # it, which only works for events that happen to ALSO be a scored rule
     # (a bare hiring signal contributing to the count had no trace row of
     # its own to point at).
+    #
+    # Corroboration hits are deduped by `type` before counting — multiple
+    # news outlets covering the SAME underlying event (e.g. three sites
+    # reporting one funding round on three different dates) must count as
+    # ONE trigger event, not three. R2/R4/R5 already treat `type` as the
+    # evaluation unit via _corrob_hit() picking a single representative
+    # hit; R6 needs the same collapse or "N trigger events" gets inflated
+    # by duplicate coverage of one real event (confirmed: Tebra's single
+    # $250M raise, covered by 3 outlets, was counting as 3 of its 4
+    # "trigger events").
+    seen_corrob_types: set = set()
+    deduped_corroboration = []
+    for h in corroboration:
+        if h["type"] in seen_corrob_types:
+            continue
+        seen_corrob_types.add(h["type"])
+        deduped_corroboration.append(h)
+
     dated_events = [
         {"date": s["detected_at"], "url": s.get("url", ""),
          "label": s.get("evidence") or s.get("job_title") or "signal"}
@@ -412,7 +430,7 @@ def build_evidence(company: dict, icp: dict, signal_rules: dict,
     ] + [
         {"date": h["posted_date"], "url": h.get("url", ""),
          "label": h.get("title") or h.get("term") or "corroboration"}
-        for h in corroboration if h.get("posted_date")
+        for h in deduped_corroboration if h.get("posted_date")
     ]
     if dated_events:
         from datetime import datetime
