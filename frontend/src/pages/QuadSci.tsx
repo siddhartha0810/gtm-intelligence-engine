@@ -64,9 +64,12 @@ interface Hook {
   personalization_bucket: number | null; personalization_label: string
   touches?: Touch[]
 }
+interface TraceEvent {
+  label: string; url: string; date: string
+}
 interface TraceEntry {
   id: string; condition: string; state: 'fired' | 'not_fired' | 'no_evidence'
-  points: number; why?: string; source_url?: string
+  points: number; why?: string; source_url?: string; events?: TraceEvent[]
 }
 interface Prospect {
   id: number; company_id: number; company_name: string; domain: string
@@ -201,6 +204,22 @@ function ProspectCard({ p, contacts }: { p: Prospect; contacts: Contact[] }) {
                     <a href={t.source_url} target="_blank" rel="noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: C.primary, textDecoration: 'none', marginTop: 2 }}>
                       <ExternalLink size={10} /> Source
                     </a>
+                  )}
+                  {!!t.events?.length && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginTop: 4, paddingLeft: 10, borderLeft: `2px solid ${C.border}` }}>
+                      {t.events.map((e, i) => (
+                        <div key={i} style={{ fontSize: 11, color: C.textMute }}>
+                          {e.date && <span style={{ color: C.textFaint }}>{e.date.slice(0, 10)} — </span>}
+                          {e.url ? (
+                            <a href={e.url} target="_blank" rel="noreferrer" style={{ color: C.primary, textDecoration: 'none' }}>
+                              {e.label}
+                            </a>
+                          ) : (
+                            <span>{e.label}</span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
                   )}
                 </div>
               </div>

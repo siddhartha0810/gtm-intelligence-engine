@@ -117,11 +117,14 @@ def score_company(rules: list[dict], evidence: dict) -> dict:
         if ev.get("fired"):
             points = round(_decayed_weight(weight, decay_days, ev.get("date")), 2)
             total += points
-            trace.append({
+            trace_item = {
                 "id": rid, "condition": condition, "state": "fired",
                 "points": points, "why": ev.get("why", ""),
                 "source_url": ev.get("source_url", ""),
-            })
+            }
+            if ev.get("events"):
+                trace_item["events"] = ev["events"]
+            trace.append(trace_item)
         else:
             trace.append({
                 "id": rid, "condition": condition, "state": "not_fired",

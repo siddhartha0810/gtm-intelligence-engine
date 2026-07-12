@@ -398,29 +398,48 @@ def build_evidence(company: dict, icp: dict, signal_rules: dict,
 
     # R6 buying_window_timing — pure date-math over signals + corroboration hits,
     # evaluable whenever ANY evidence exists (this is what actually detects
-    # "hiring signal + a second, different-typed signal close in time")
-    all_dates = [s["detected_at"] for s in signals if s.get("detected_at")]
-    all_dates += [h["posted_date"] for h in corroboration if h.get("posted_date")]
-    if all_dates:
+    # "hiring signal + a second, different-typed signal close in time"). Keeps
+    # each contributing event's own url/label so the trace can link straight
+    # to what was actually counted — before this, the only way to check "is
+    # this really 3 events" was to cross-reference the OTHER rule cards above
+    # it, which only works for events that happen to ALSO be a scored rule
+    # (a bare hiring signal contributing to the count had no trace row of
+    # its own to point at).
+    dated_events = [
+        {"date": s["detected_at"], "url": s.get("url", ""),
+         "label": s.get("evidence") or s.get("job_title") or "signal"}
+        for s in signals if s.get("detected_at")
+    ] + [
+        {"date": h["posted_date"], "url": h.get("url", ""),
+         "label": h.get("title") or h.get("term") or "corroboration"}
+        for h in corroboration if h.get("posted_date")
+    ]
+    if dated_events:
         from datetime import datetime
+        from email.utils import parsedate_to_datetime
         parsed = []
-        for d in all_dates:
+        for ev in dated_events:
+            d = ev["date"]
             if hasattr(d, "year"):
-                parsed.append(d)
+                dt = d
             else:
                 try:
-                    from email.utils import parsedate_to_datetime
-                    parsed.append(parsedate_to_datetime(str(d)).replace(tzinfo=None))
+                    dt = parsedate_to_datetime(str(d)).replace(tzinfo=None)
                 except Exception:
                     continue
+            parsed.append({"dt": dt, "url": ev["url"], "label": ev["label"]})
         if parsed:
-            parsed.sort(reverse=True)
-            most_recent = parsed[0]
+            parsed.sort(key=lambda e: e["dt"], reverse=True)
+            most_recent = parsed[0]["dt"]
             days_ago = (datetime.now() - most_recent).days
             evidence["buying_window_timing"] = {
                 "fired": len(parsed) >= 2 and days_ago <= 270,
                 "why": f"{len(parsed)} trigger events, most recent {days_ago} days ago.",
                 "source_url": "", "date": str(most_recent),
+                "events": [
+                    {"label": str(e["label"])[:160], "url": e["url"], "date": str(e["dt"])}
+                    for e in parsed
+                ],
             }
 
     # R7 decision_maker_found — existing company_contacts only (no_evidence
