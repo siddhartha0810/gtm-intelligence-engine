@@ -92,6 +92,37 @@ signal_rules:
   - net revenue retention decline
   confidence: 0.80
 
+- type: customer_pain_language
+  description: A prospect's OWN CUSTOMERS, in public G2/Capterra reviews, describing
+    the exact symptom QuadSci cures — reactive support, no usage visibility, surprise
+    renewals/charges. Third-party disclosure in the customer's own words, not the
+    prospect's marketing — the sharpest available evidence for a private company
+    with no SEC filings to mine (the closest QuadSci equivalent to what SEC filings
+    were for InRule's regulated-industry ICP). Sourced via g2_review_search.py
+    (free DuckDuckGo web search, not the Bing-News-only g2_reviews_signal.py, which
+    never surfaces review pages at all). Multi-word phrases only — a bare word here
+    risks the same false-positive class as "Pendo"/"Clari" did as single tokens.
+  detect:
+  - poor customer support
+  - slow customer support
+  - reactive support
+  - unresponsive support
+  - no visibility into
+  - lack of visibility
+  - didn't know until
+  - surprised by the renewal
+  - unexplained charges
+  - difficult to reach support
+  - customer success is reactive
+  - found out too late
+  - billing practices feel unfair
+  - migrating away
+  - switching away from
+  - users migrating away
+  - complaints regarding support
+  - not communicating
+  confidence: 0.65
+
 - type: competitor_displacement
   description: Evidence of active evaluation or migration away from existing CS/analytics
     tooling — timing signal for an in-flight buying process.

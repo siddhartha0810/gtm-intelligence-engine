@@ -15,11 +15,18 @@ For a given campaign (account), this:
   3. Optionally runs a generalized SEC EDGAR search (sec_filing_signal.py's
      `queries` override) using the ICP's category_terms/competitor_products —
      skip with --no-sec for private-company-heavy ICPs where it won't help.
-  4. Scores every candidate via glassbox_scorer.score_company() — each rule
+  4. Optionally searches G2/Capterra for each candidate's own customers
+     describing the exact pain the account's product solves (see
+     fetch_g2_pain_corroboration() / g2_review_search.py) — the QuadSci
+     equivalent of what SEC filings were for InRule: third-party disclosure
+     of the precise buying trigger, not a proxy signal. Uses free ddgs web
+     search, not g2_reviews_signal.py (Bing-News-only, never surfaces review
+     pages). Skip with --no-g2.
+  5. Scores every candidate via glassbox_scorer.score_company() — each rule
      evaluated fired / not_fired / no_evidence, never zeroed out for a
      missing evidence source.
-  5. Upserts account_prospects.
-  6. With --enrich-top N: runs Apollo enrichment (apollo_enrichment.py,
+  6. Upserts account_prospects.
+  7. With --enrich-top N: runs Apollo enrichment (apollo_enrichment.py,
      already generic) for the top N scored companies, then re-scores just
      those so R7 (decision_maker_found) reflects real contacts instead of
      defaulting to no_evidence.
@@ -30,7 +37,7 @@ already-generic pipeline, once you've reviewed the scored list.
 
 Usage:
     python run_glassbox.py --campaign-id 4
-    python run_glassbox.py --campaign-id 4 --no-sec
+    python run_glassbox.py --campaign-id 4 --no-sec --no-g2
     python run_glassbox.py --campaign-id 4 --enrich-top 10
 """
 
@@ -199,6 +206,59 @@ def fetch_corroboration(candidates: list, signal_rules: dict) -> dict:
     return results
 
 
+def fetch_g2_pain_corroboration(candidates: list, signal_rules: dict) -> dict:
+    """The QuadSci-specific answer to what SEC filings were for InRule: not a
+    proxy signal (hiring, funding) but a prospect's OWN CUSTOMERS describing
+    the exact symptom QuadSci cures, in public G2/Capterra reviews. Third-party
+    disclosure in the customer's own words — the sharpest evidence available
+    for a private company with no SEC filings.
+
+    Uses g2_review_search.py (free ddgs web search) — NOT g2_reviews_signal.py,
+    which only hits Bing's News RSS feed and never surfaces review pages at all
+    (confirmed empirically; news crawlers don't index evergreen review content).
+
+    Returns {company_name: [{"type": "customer_pain_language", "term", "title",
+    "url"}]} — same shape as fetch_corroboration() so build_evidence() can
+    merge both into one list per company."""
+    from src.g2_review_search import search_review_mentions
+    from src.phase_classifier import detect_campaign_product
+
+    pain_terms = _terms_for_signal_type(signal_rules, "customer_pain_language")
+    if not pain_terms:
+        return {}
+
+    results: dict = {}
+    print(f"[run_glassbox] searching G2/Capterra customer-pain language for {len(candidates)} companies...")
+    for i, c in enumerate(candidates, 1):
+        mentions = search_review_mentions(c["name"])
+        name_key = _normalize_name(c["name"])
+        hits = []
+        for m in mentions:
+            # Comparison/alternatives pages ("X vs Y", "Best X Alternatives")
+            # legitimately rank in results for a company search while being
+            # substantively ABOUT a different company — confirmed empirically:
+            # searching "Tebra" surfaced a G2 page titled "athenaOne Reviews"
+            # (a Tebra competitor). Require the searched company's name to
+            # actually appear in the title or URL before trusting the match —
+            # same class of fix as the exclude_companies name-mangling bug.
+            if name_key not in _normalize_name(m["title"]) and name_key not in _normalize_name(m["url"]):
+                continue
+            matched_term, _ = detect_campaign_product(m["title"], m.get("body", ""), pain_terms)
+            if matched_term:
+                hits.append({
+                    "type": "customer_pain_language", "term": matched_term,
+                    "title": m["title"], "url": m["url"], "posted_date": "",
+                })
+        if hits:
+            results[c["name"]] = hits
+            print(f"  [{c['name']}] {len(hits)} G2/Capterra pain-language hit(s): "
+                  f"{[h['term'] for h in hits]}")
+        if i % 10 == 0:
+            print(f"  ...{i}/{len(candidates)} companies checked")
+    print(f"[run_glassbox] G2/Capterra pain-language corroboration found for {len(results)}/{len(candidates)} companies")
+    return results
+
+
 def build_evidence(company: dict, icp: dict, signal_rules: dict,
                     sec_hits_by_name: dict, signals: list, contacts: list,
                     corroboration: list | None = None) -> dict:
@@ -220,16 +280,27 @@ def build_evidence(company: dict, icp: dict, signal_rules: dict,
     def _corrob_hit(rule_type: str) -> dict | None:
         return next((h for h in corroboration if h["type"] == rule_type), None)
 
-    # R1 category_language — SEC first, then signals text, then corroboration
-    # (an nrr_commentary hit — e.g. "NRR softness" — IS category language for
-    # this ICP, arguably more directly than the marketing terms in category_terms).
+    # R1 category_language — priority order: SEC (rare but strongest, most of
+    # this ICP is private so this rarely fires) > G2/Capterra customer pain
+    # language (a prospect's OWN CUSTOMERS naming the exact symptom QuadSci
+    # cures, in public — the sharpest broadly-available evidence for this ICP,
+    # the direct analog to what SEC filings were for InRule's regulated ICP)
+    # > signals text > nrr_commentary corroboration (weakest, most generic).
     cat_terms = icp.get("category_terms", [])
     sec_cat_hit = next((h for h in sec_hits if any(t.lower() in h.get("job_title", "").lower() for t in cat_terms)), None)
+    pain_hit = _corrob_hit("customer_pain_language")
     nrr_hit = _corrob_hit("nrr_commentary")
     if sec_cat_hit:
         evidence["category_language"] = {
             "fired": True, "why": f'Uses category language ("{sec_cat_hit.get("job_title", "")}") in SEC filings.',
             "source_url": sec_cat_hit.get("url", ""), "date": sec_cat_hit.get("posted_date", ""),
+        }
+    elif pain_hit:
+        evidence["category_language"] = {
+            "fired": True,
+            "why": f'This company\'s own customers describe the exact pain QuadSci solves '
+                   f'("{pain_hit["term"]}") in a public G2/Capterra review — {pain_hit["title"]}',
+            "source_url": pain_hit["url"], "date": pain_hit["posted_date"],
         }
     elif signals and (term_hit := next((t for t in cat_terms if t.lower() in signal_texts), None)):
         src = next((s for s in signals if term_hit.lower() in (s.get("evidence") or "").lower()), signals[0])
@@ -365,7 +436,7 @@ def build_evidence(company: dict, icp: dict, signal_rules: dict,
     return evidence
 
 
-def score_campaign(campaign_id: int, use_sec: bool = True) -> list:
+def score_campaign(campaign_id: int, use_sec: bool = True, use_g2: bool = True) -> list:
     campaign = db.get_campaign(campaign_id)
     if not campaign:
         raise SystemExit(f"No campaign with id={campaign_id}")
@@ -386,6 +457,10 @@ def score_campaign(campaign_id: int, use_sec: bool = True) -> list:
 
     sec_hits_by_name = fetch_sec_hits(icp) if use_sec else {}
     corroboration_by_name = fetch_corroboration(candidates, signal_rules)
+    if use_g2:
+        g2_by_name = fetch_g2_pain_corroboration(candidates, signal_rules)
+        for name, hits in g2_by_name.items():
+            corroboration_by_name.setdefault(name, []).extend(hits)
 
     results = []
     for company in candidates:
@@ -438,6 +513,8 @@ def enrich_top(campaign_id: int, n: int, icp_slug: str) -> None:
     real_companies = [db.get_company_by_id(p["company_id"]) for p in prospects]
     real_companies = [dict(c) for c in real_companies if c]
     corroboration = fetch_corroboration(real_companies, signal_rules)
+    for name, hits in fetch_g2_pain_corroboration(real_companies, signal_rules).items():
+        corroboration.setdefault(name, []).extend(hits)
     for company in real_companies:
         signals = [dict(s) for s in db.get_signals_for_company(company["id"])]
         contacts = [dict(c) for c in db.get_contacts_for_company(company["id"])]
@@ -457,11 +534,12 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--campaign-id", type=int, required=True)
     parser.add_argument("--no-sec", action="store_true", help="skip SEC EDGAR search (private-company-heavy ICPs)")
+    parser.add_argument("--no-g2", action="store_true", help="skip G2/Capterra customer-pain-language search")
     parser.add_argument("--enrich-top", type=int, default=0, help="run Apollo enrichment + re-score for top N prospects")
     args = parser.parse_args()
 
     db.init_db()
-    score_campaign(args.campaign_id, use_sec=not args.no_sec)
+    score_campaign(args.campaign_id, use_sec=not args.no_sec, use_g2=not args.no_g2)
 
     if args.enrich_top:
         campaign = db.get_campaign(args.campaign_id)
