@@ -15,13 +15,15 @@ For a given campaign (account), this:
   3. Optionally runs a generalized SEC EDGAR search (sec_filing_signal.py's
      `queries` override) using the ICP's category_terms/competitor_products —
      skip with --no-sec for private-company-heavy ICPs where it won't help.
-  4. Optionally searches G2/Capterra for each candidate's own customers
-     describing the exact pain the account's product solves (see
-     fetch_g2_pain_corroboration() / g2_review_search.py) — the QuadSci
-     equivalent of what SEC filings were for InRule: third-party disclosure
-     of the precise buying trigger, not a proxy signal. Uses free ddgs web
-     search, not g2_reviews_signal.py (Bing-News-only, never surfaces review
-     pages). Skip with --no-g2.
+  4. Optionally searches for each candidate's own customers describing the
+     exact pain the account's product solves — via G2/Capterra search-engine
+     presence (fetch_g2_pain_corroboration()) AND real Reddit threads
+     (fetch_reddit_pain_corroboration(), added after confirming G2/Capterra
+     can't be scraped directly — both sit behind active anti-bot challenges;
+     see g2_review_search.py) — the QuadSci equivalent of what SEC filings
+     were for InRule: third-party disclosure of the precise buying trigger,
+     not a proxy signal. Uses free ddgs web search, not g2_reviews_signal.py
+     (Bing-News-only, never surfaces review pages). Skip both with --no-g2.
   5. Scores every candidate via glassbox_scorer.score_company() — each rule
      evaluated fired / not_fired / no_evidence, never zeroed out for a
      missing evidence source.
@@ -256,6 +258,51 @@ def fetch_g2_pain_corroboration(candidates: list, signal_rules: dict) -> dict:
         if i % 10 == 0:
             print(f"  ...{i}/{len(candidates)} companies checked")
     print(f"[run_glassbox] G2/Capterra pain-language corroboration found for {len(results)}/{len(candidates)} companies")
+    return results
+
+
+def fetch_reddit_pain_corroboration(candidates: list, signal_rules: dict) -> dict:
+    """Second pain-language source, added after confirming G2/Capterra can't
+    be scraped directly (both sit behind active anti-bot challenges — see
+    g2_review_search.py's module docstring). Real Reddit threads are
+    unprompted, candid, and well-indexed by search engines, unlike G2's
+    review pages whose SEO metadata is marketing copy, not review text.
+
+    Same shape/contract as fetch_g2_pain_corroboration() — callers merge
+    both into one corroboration list per company."""
+    from src.g2_review_search import search_reddit_mentions
+    from src.phase_classifier import detect_campaign_product
+
+    pain_terms = _terms_for_signal_type(signal_rules, "customer_pain_language")
+    if not pain_terms:
+        return {}
+
+    results: dict = {}
+    print(f"[run_glassbox] searching Reddit customer-pain language for {len(candidates)} companies...")
+    for i, c in enumerate(candidates, 1):
+        mentions = search_reddit_mentions(c["name"])
+        name_key = _normalize_name(c["name"])
+        hits = []
+        for m in mentions:
+            # Same same-company sanity filter as the G2 search — a company
+            # name search can surface threads substantively about a
+            # different company (comparisons, "vs" posts, unrelated
+            # subreddits that happen to mention the term in passing).
+            if name_key not in _normalize_name(m["title"]) and name_key not in _normalize_name(m["url"]):
+                continue
+            matched_term, _ = detect_campaign_product(m["title"], m.get("body", ""), pain_terms)
+            if matched_term:
+                hits.append({
+                    "type": "customer_pain_language", "term": matched_term,
+                    "title": m["title"], "url": m["url"], "posted_date": "",
+                })
+        if hits:
+            results[c["name"]] = hits
+            print(f"  [{c['name']}] {len(hits)} Reddit pain-language hit(s): "
+                  f"{[h['term'] for h in hits]}")
+        if i % 10 == 0:
+            print(f"  ...{i}/{len(candidates)} companies checked")
+    print(f"[run_glassbox] Reddit pain-language corroboration found for {len(results)}/{len(candidates)} companies")
     return results
 
 
@@ -498,6 +545,9 @@ def score_campaign(campaign_id: int, use_sec: bool = True, use_g2: bool = True) 
         g2_by_name = fetch_g2_pain_corroboration(candidates, signal_rules)
         for name, hits in g2_by_name.items():
             corroboration_by_name.setdefault(name, []).extend(hits)
+        reddit_by_name = fetch_reddit_pain_corroboration(candidates, signal_rules)
+        for name, hits in reddit_by_name.items():
+            corroboration_by_name.setdefault(name, []).extend(hits)
 
     results = []
     for company in candidates:
@@ -552,6 +602,8 @@ def enrich_top(campaign_id: int, n: int, icp_slug: str) -> None:
     corroboration = fetch_corroboration(real_companies, signal_rules)
     for name, hits in fetch_g2_pain_corroboration(real_companies, signal_rules).items():
         corroboration.setdefault(name, []).extend(hits)
+    for name, hits in fetch_reddit_pain_corroboration(real_companies, signal_rules).items():
+        corroboration.setdefault(name, []).extend(hits)
     for company in real_companies:
         signals = [dict(s) for s in db.get_signals_for_company(company["id"])]
         contacts = [dict(c) for c in db.get_contacts_for_company(company["id"])]
@@ -571,7 +623,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--campaign-id", type=int, required=True)
     parser.add_argument("--no-sec", action="store_true", help="skip SEC EDGAR search (private-company-heavy ICPs)")
-    parser.add_argument("--no-g2", action="store_true", help="skip G2/Capterra customer-pain-language search")
+    parser.add_argument("--no-g2", action="store_true", help="skip G2/Capterra + Reddit customer-pain-language search")
     parser.add_argument("--enrich-top", type=int, default=0, help="run Apollo enrichment + re-score for top N prospects")
     args = parser.parse_args()
 
