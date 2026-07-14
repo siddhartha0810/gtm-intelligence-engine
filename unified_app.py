@@ -1203,19 +1203,21 @@ async def api_decision_intelligence_live(current_user: dict = Depends(oracle_aut
         return JSONResponse({"error": "Internal server error"}, status_code=500)
 
 
-# The campaign row seeded by seed_quadsci_campaign.py — hardcoded the same way
-# get_campaign(1) is implicitly "InRule" above; there is only one QuadSci campaign.
+# Account pages seeded by seed_<account>_campaign.py — each hardcoded the same
+# way get_campaign(1) is implicitly "InRule" above; there is only one campaign
+# per account. _account_page_payload() is the shared builder both routes call
+# so the two account pages can't silently drift apart from each other.
 QUADSCI_CAMPAIGN_NAME = "QuadSci ICP"
+ENDEX_CAMPAIGN_NAME = "Endex ICP"
 
 
-@app.get("/api/decision-intelligence/quadsci")
-async def api_decision_intelligence_quadsci(current_user: dict = Depends(oracle_auth.require_user)):
-    """QuadSci account page data: curated ICP/signal-rules reference content
-    (icp_profiles/quadsci*.yaml) plus real signals/hooks — correctly scoped to
-    this campaign's own scan_run_id, unlike /api/decision-intelligence/live
-    above which queries oracle_signals globally. Empty signals/hooks before a
-    scan has been run is an expected state, not an error."""
-    import json as _json
+def _account_page_payload(campaign_name: str, icp_yaml: str, rules_yaml: str) -> dict:
+    """Build an account page payload: curated ICP/signal-rules reference
+    content (icp_profiles/<account>*.yaml) plus real signals/hooks/prospects/
+    contacts — correctly scoped to this campaign's own scan_run_id, unlike
+    /api/decision-intelligence/live above which queries oracle_signals
+    globally. Empty signals/hooks before a scan has been run is an expected
+    state, not an error."""
     from pathlib import Path as _Path
     try:
         import yaml as _yaml
@@ -1231,136 +1233,156 @@ async def api_decision_intelligence_quadsci(current_user: dict = Depends(oracle_
         except Exception:
             return default
 
+    icp = _load_yaml(icp_yaml, {}) or {}
+    signal_rules = (_load_yaml(rules_yaml, {}) or {}).get("signal_rules", [])
+
+    campaigns = [c for c in oracle_db.list_campaigns() if c.get("name") == campaign_name]
+    campaign = campaigns[0] if campaigns else None
+    last_run_id = campaign.get("last_run_id") if campaign else None
+
+    signals: list = []
+    hooks: list = []
+    contacts_by_company: dict = {}
+    summary = {"total_signals": 0, "total_companies": 0, "by_source": {}, "by_phase": {}}
+
+    # Scored prospects from run_glassbox.py — fetched before the
+    # company_names union below so companies whose only signal predates
+    # the latest scan (e.g. Skydio, scored from an earlier run) still
+    # get their hooks/contacts surfaced instead of silently vanishing.
+    prospects = oracle_db.get_account_prospects(campaign["id"]) if campaign else []
+
+    if last_run_id:
+        with oracle_db.db_cursor(commit=False) as cur:
+            cur.execute("""
+                SELECT c.id AS company_id, c.name, c.domain, s.oracle_product, s.phase,
+                       s.job_title, s.source, s.confidence, s.url, s.detected_at
+                FROM oracle_signals s JOIN companies c ON c.id = s.company_id
+                WHERE s.scan_run_id = %s
+                ORDER BY s.confidence DESC, s.detected_at DESC
+                LIMIT 30
+            """, (last_run_id,))
+            signals = [dict(r) for r in cur.fetchall()]
+
+            cur.execute("""
+                SELECT source, COUNT(*) AS n FROM oracle_signals
+                WHERE scan_run_id = %s GROUP BY source ORDER BY n DESC
+            """, (last_run_id,))
+            by_source = {r["source"]: r["n"] for r in cur.fetchall()}
+
+            cur.execute("""
+                SELECT phase, COUNT(*) AS n FROM oracle_signals
+                WHERE scan_run_id = %s GROUP BY phase ORDER BY n DESC
+            """, (last_run_id,))
+            by_phase = {r["phase"]: r["n"] for r in cur.fetchall()}
+
+            cur.execute("""
+                SELECT COUNT(DISTINCT company_id) AS n FROM oracle_signals WHERE scan_run_id = %s
+            """, (last_run_id,))
+            total_companies = cur.fetchone()["n"]
+
+        summary = {
+            "total_signals": len(signals),
+            "total_companies": total_companies,
+            "by_source": by_source,
+            "by_phase": by_phase,
+        }
+
+        # Company names for hook/contact filtering must come from ALL
+        # companies in this scan, not the `signals` list above — that's
+        # capped at LIMIT 30 for the signal-feed preview, so reusing it
+        # here dropped hooks for any company outside that arbitrary
+        # top-30 slice (this scan surfaced 72 companies; only some
+        # landed in the cap).
+        with oracle_db.db_cursor(commit=False) as cur:
+            cur.execute("""
+                SELECT DISTINCT c.name FROM oracle_signals s JOIN companies c ON c.id = s.company_id
+                WHERE s.scan_run_id = %s
+            """, (last_run_id,))
+            company_names = {r["name"] for r in cur.fetchall()}
+
+        # Also union in every scored prospect's company name — prospects
+        # accumulate across ALL scan runs a campaign has ever had (see
+        # get_candidate_companies() in run_glassbox.py), so a company
+        # like Skydio (only signal in an older run, but still this
+        # campaign's top-scored prospect) would otherwise be invisible
+        # here even though it's clearly still relevant. Scoping to
+        # last_run_id alone silently dropped both its hook and its 20
+        # real contacts.
+        company_names |= {p["company_name"] for p in prospects if p.get("company_name")}
+
+        if company_names:
+            all_hooks = oracle_db.get_recent_campaign_hooks(limit=100)
+            seen_companies: set = set()
+            hooks = []
+            for h in all_hooks:  # already ordered created_at DESC — first hit per company is the latest
+                if not h.get("ok") or h.get("hold_back") or h.get("company_name") not in company_names:
+                    continue
+                if h["company_name"] in seen_companies:
+                    continue  # older re-generation attempt for a company we already have the latest hook for
+                seen_companies.add(h["company_name"])
+                hooks.append(h)
+
+        # Contacts for every company this campaign has surfaced (same
+        # company_names set used for hooks above) — grouped by company_id
+        # so the frontend can show a "Contacts" button per prospect/signal
+        # row instead of a separate unscoped lookup.
+        if company_names:
+            with oracle_db.db_cursor(commit=False) as cur:
+                cur.execute("""
+                    SELECT cc.company_id, c.name AS company_name, cc.full_name, cc.first_name,
+                           cc.last_name, cc.title, cc.email, cc.linkedin_url, cc.source, cc.is_target
+                    FROM company_contacts cc JOIN companies c ON c.id = cc.company_id
+                    WHERE c.name = ANY(%s)
+                    ORDER BY c.name, cc.is_target DESC, cc.confidence DESC
+                """, (list(company_names),))
+                for r in cur.fetchall():
+                    contacts_by_company.setdefault(r["company_id"], []).append(dict(r))
+
+    # Touches 2-5 for whatever hooks made it through the filter above —
+    # touch 1 is the hook itself (subject/body already on the hook dict).
+    touches_by_hook = oracle_db.get_touches_for_hooks([h["id"] for h in hooks]) if hooks else {}
+    for h in hooks:
+        h["touches"] = touches_by_hook.get(h["id"], [])
+
+    return {
+        "icp": icp,
+        "signal_rules": signal_rules,
+        "campaign": {
+            "id": campaign.get("id") if campaign else None,
+            "name": campaign.get("name") if campaign else campaign_name,
+            "keywords": campaign.get("keywords") if campaign else [],
+            "exclude_companies": campaign.get("exclude_companies") if campaign else [],
+            "last_run_at": campaign.get("last_run_at") if campaign else None,
+        },
+        "summary": summary,
+        "signals": signals,
+        "hooks": hooks,
+        "prospects": prospects,
+        "contacts_by_company": contacts_by_company,
+    }
+
+
+@app.get("/api/decision-intelligence/quadsci")
+async def api_decision_intelligence_quadsci(current_user: dict = Depends(oracle_auth.require_user)):
     try:
-        icp = _load_yaml("icp_profiles/quadsci.yaml", {}) or {}
-        signal_rules = (_load_yaml("icp_profiles/quadsci_signal_rules.yaml", {}) or {}).get("signal_rules", [])
-
-        campaigns = [c for c in oracle_db.list_campaigns() if c.get("name") == QUADSCI_CAMPAIGN_NAME]
-        campaign = campaigns[0] if campaigns else None
-        last_run_id = campaign.get("last_run_id") if campaign else None
-
-        signals: list = []
-        hooks: list = []
-        contacts_by_company: dict = {}
-        summary = {"total_signals": 0, "total_companies": 0, "by_source": {}, "by_phase": {}}
-
-        # Scored prospects from run_glassbox.py — fetched before the
-        # company_names union below so companies whose only signal predates
-        # the latest scan (e.g. Skydio, scored from an earlier run) still
-        # get their hooks/contacts surfaced instead of silently vanishing.
-        prospects = oracle_db.get_account_prospects(campaign["id"]) if campaign else []
-
-        if last_run_id:
-            with oracle_db.db_cursor(commit=False) as cur:
-                cur.execute("""
-                    SELECT c.id AS company_id, c.name, c.domain, s.oracle_product, s.phase,
-                           s.job_title, s.source, s.confidence, s.url, s.detected_at
-                    FROM oracle_signals s JOIN companies c ON c.id = s.company_id
-                    WHERE s.scan_run_id = %s
-                    ORDER BY s.confidence DESC, s.detected_at DESC
-                    LIMIT 30
-                """, (last_run_id,))
-                signals = [dict(r) for r in cur.fetchall()]
-
-                cur.execute("""
-                    SELECT source, COUNT(*) AS n FROM oracle_signals
-                    WHERE scan_run_id = %s GROUP BY source ORDER BY n DESC
-                """, (last_run_id,))
-                by_source = {r["source"]: r["n"] for r in cur.fetchall()}
-
-                cur.execute("""
-                    SELECT phase, COUNT(*) AS n FROM oracle_signals
-                    WHERE scan_run_id = %s GROUP BY phase ORDER BY n DESC
-                """, (last_run_id,))
-                by_phase = {r["phase"]: r["n"] for r in cur.fetchall()}
-
-                cur.execute("""
-                    SELECT COUNT(DISTINCT company_id) AS n FROM oracle_signals WHERE scan_run_id = %s
-                """, (last_run_id,))
-                total_companies = cur.fetchone()["n"]
-
-            summary = {
-                "total_signals": len(signals),
-                "total_companies": total_companies,
-                "by_source": by_source,
-                "by_phase": by_phase,
-            }
-
-            # Company names for hook/contact filtering must come from ALL
-            # companies in this scan, not the `signals` list above — that's
-            # capped at LIMIT 30 for the signal-feed preview, so reusing it
-            # here dropped hooks for any company outside that arbitrary
-            # top-30 slice (this scan surfaced 72 companies; only some
-            # landed in the cap).
-            with oracle_db.db_cursor(commit=False) as cur:
-                cur.execute("""
-                    SELECT DISTINCT c.name FROM oracle_signals s JOIN companies c ON c.id = s.company_id
-                    WHERE s.scan_run_id = %s
-                """, (last_run_id,))
-                company_names = {r["name"] for r in cur.fetchall()}
-
-            # Also union in every scored prospect's company name — prospects
-            # accumulate across ALL scan runs a campaign has ever had (see
-            # get_candidate_companies() in run_glassbox.py), so a company
-            # like Skydio (only signal in an older run, but still this
-            # campaign's top-scored prospect) would otherwise be invisible
-            # here even though it's clearly still relevant. Scoping to
-            # last_run_id alone silently dropped both its hook and its 20
-            # real contacts.
-            company_names |= {p["company_name"] for p in prospects if p.get("company_name")}
-
-            if company_names:
-                all_hooks = oracle_db.get_recent_campaign_hooks(limit=100)
-                seen_companies: set = set()
-                hooks = []
-                for h in all_hooks:  # already ordered created_at DESC — first hit per company is the latest
-                    if not h.get("ok") or h.get("hold_back") or h.get("company_name") not in company_names:
-                        continue
-                    if h["company_name"] in seen_companies:
-                        continue  # older re-generation attempt for a company we already have the latest hook for
-                    seen_companies.add(h["company_name"])
-                    hooks.append(h)
-
-            # Contacts for every company this campaign has surfaced (same
-            # company_names set used for hooks above) — grouped by company_id
-            # so the frontend can show a "Contacts" button per prospect/signal
-            # row instead of a separate unscoped lookup.
-            if company_names:
-                with oracle_db.db_cursor(commit=False) as cur:
-                    cur.execute("""
-                        SELECT cc.company_id, c.name AS company_name, cc.full_name, cc.first_name,
-                               cc.last_name, cc.title, cc.email, cc.linkedin_url, cc.source, cc.is_target
-                        FROM company_contacts cc JOIN companies c ON c.id = cc.company_id
-                        WHERE c.name = ANY(%s)
-                        ORDER BY c.name, cc.is_target DESC, cc.confidence DESC
-                    """, (list(company_names),))
-                    for r in cur.fetchall():
-                        contacts_by_company.setdefault(r["company_id"], []).append(dict(r))
-
-        # Touches 2-5 for whatever hooks made it through the filter above —
-        # touch 1 is the hook itself (subject/body already on the hook dict).
-        touches_by_hook = oracle_db.get_touches_for_hooks([h["id"] for h in hooks]) if hooks else {}
-        for h in hooks:
-            h["touches"] = touches_by_hook.get(h["id"], [])
-
-        return jsonable_encoder({
-            "icp": icp,
-            "signal_rules": signal_rules,
-            "campaign": {
-                "id": campaign.get("id") if campaign else None,
-                "name": campaign.get("name") if campaign else QUADSCI_CAMPAIGN_NAME,
-                "keywords": campaign.get("keywords") if campaign else [],
-                "exclude_companies": campaign.get("exclude_companies") if campaign else [],
-                "last_run_at": campaign.get("last_run_at") if campaign else None,
-            },
-            "summary": summary,
-            "signals": signals,
-            "hooks": hooks,
-            "prospects": prospects,
-            "contacts_by_company": contacts_by_company,
-        })
+        payload = _account_page_payload(
+            QUADSCI_CAMPAIGN_NAME, "icp_profiles/quadsci.yaml", "icp_profiles/quadsci_signal_rules.yaml",
+        )
+        return jsonable_encoder(payload)
     except Exception:
         logger.exception("decision-intelligence quadsci failed")
+        return JSONResponse({"error": "Internal server error"}, status_code=500)
+
+
+@app.get("/api/decision-intelligence/endex")
+async def api_decision_intelligence_endex(current_user: dict = Depends(oracle_auth.require_user)):
+    try:
+        payload = _account_page_payload(
+            ENDEX_CAMPAIGN_NAME, "icp_profiles/endex.yaml", "icp_profiles/endex_signal_rules.yaml",
+        )
+        return jsonable_encoder(payload)
+    except Exception:
+        logger.exception("decision-intelligence endex failed")
         return JSONResponse({"error": "Internal server error"}, status_code=500)
 
 

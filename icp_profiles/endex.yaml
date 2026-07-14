@@ -1,0 +1,74 @@
+meta:
+  company: Endex
+  domain: endex.ai
+  status: researched — verified via endex.ai, OpenAI Startup Fund portfolio page,
+    Tracxn, PitchBook, TechStartups, CB Insights competitor mapping
+category_terms:
+- Excel-native AI Agent
+- Financial Modeling Automation
+- AI Financial Intelligence Layer
+- Auditable AI for Finance (citation-backed outputs)
+target_industries:
+- Investment Banking (bulge bracket + boutique)
+- Private Equity
+- Hedge Funds / Multi-Strategy Asset Management
+- Corporate Finance / FP&A (Fortune 500)
+- Publicly Traded Real Estate (REITs / developers)
+current_clients:
+- No named clients disclosed publicly — testimonials are attributed only to
+  role ("Hedge Fund Portfolio Manager"). Endex describes enterprise deployments
+  at "leading investment banks", "$100B+ AUM private equity firms", and "global
+  multi-strategy hedge funds" without naming firms.
+buyer_personas:
+  primary:
+  - CFO / Head of FP&A (corporate finance teams)
+  - Head of Financial Modeling / Head of Valuation
+  - VP / Director, Investment Banking (coverage or product group)
+  - Portfolio Manager (hedge fund)
+  secondary:
+  - Head of Research (equity/credit)
+  - COO of fund (PE/HF operations owner, buys tooling for the desk)
+  - Head of Data / Head of Technology (financial services)
+  internal_ally:
+  - Senior Analyst / Associate (the daily hands-on-keyboard user in Excel)
+identification_criteria:
+  firmographic:
+  - Investment banks — bulge bracket or credible boutique (active M&A/ECM/DCM desk)
+  - Private equity firms — mid-market ($1B+ AUM) to $100B+ AUM
+  - Hedge funds — multi-strategy or fundamental long/short, meaningful analyst headcount
+  - Fortune 500 corporate finance / FP&A teams doing heavy Excel modeling
+  - Publicly traded REITs / real estate developers with in-house modeling teams
+  - Enterprise security posture required (SOC 2 / ISO 27001 / GDPR expected of vendors)
+  technographic:
+  - Capital IQ (CapIQ)
+  - FactSet
+  - Bloomberg Terminal
+  - PitchBook
+  - Addepar
+  - Excel / VBA as the primary modeling surface (not a low-Excel shop)
+  - Workiva
+  - Anaplan
+excluded_segments:
+- Non-financial companies with no capital-markets or heavy-modeling exposure
+- SMB without a dedicated finance/analyst function
+- Companies without an Excel-centric modeling workflow (e.g., pure SaaS with no
+  in-house valuation/deal work)
+- Academic institutions
+competitor_products:
+- Rogo
+- Hebbia
+- Daloopa
+- Shortcut
+- Microsoft Copilot for Excel
+- ChatGPT Enterprise / Claude (generic-LLM substitution risk, not a specialist competitor)
+_evidence:
+  sources:
+  - https://endex.ai/
+  - https://openai.com/index/endex/
+  - https://techstartups.com/2025/08/06/endex-ai-raises-14m-in-funding-led-by-openai-startup-fund-to-bring-ai-agents-directly-into-excel/
+  - https://tracxn.com/d/companies/endex/__1yPXQtxYejdoTb241G65VMwfNLRug0vfLus7qJxeNvo
+  - https://pitchbook.com/profiles/company/533365-66
+  - https://www.cbinsights.com/company/endex/alternatives-competitors
+  founders: Tarun Amasa and Kevin Yang (founded 2022, HQ New York City)
+  funding: $14.6M total raised; $14M Series B (Aug 2025) led by OpenAI Startup Fund,
+    with Dorm Room Fund, Soma Capital, and Neo participating

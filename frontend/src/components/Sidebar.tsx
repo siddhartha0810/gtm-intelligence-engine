@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Building2, Users, Cpu, ClipboardCheck,
   BarChart3, Settings, ChevronLeft, ChevronRight,
   Zap, Target, Layers, Upload, CalendarDays,
-  ScrollText, UserCog, RefreshCw, PackageSearch, Search, Rocket, Crosshair, Activity, Sparkles, Wand2, Mail
+  ScrollText, UserCog, RefreshCw, PackageSearch, Search, Rocket, Crosshair, Activity, Sparkles, Wand2, Mail, Landmark
 } from 'lucide-react'
 
 interface NavItem {
@@ -41,11 +41,10 @@ function buildNavGroups(user?: User): NavGroup[] {
       { to: '/dashboard', icon: LayoutDashboard, label: 'Command Center', min: 1 },
       { to: '/decision-intelligence', icon: Sparkles, label: 'Decision Intelligence', min: 1 },
     ]},
-    // ACCOUNTS group hidden from nav for demo purposes — re-enable by
-    // uncommenting when not demoing a different account (e.g. InRule).
-    // { label: 'ACCOUNTS', items: [
-    //   { to: '/accounts/quadsci', icon: Radar, label: 'QuadSci', min: 1 },
-    // ]},
+    // QuadSci nav item stays hidden (disabled for the InRule demo — see App.tsx).
+    { label: 'ACCOUNTS', items: [
+      { to: '/accounts/endex', icon: Landmark, label: 'Endex', min: 1 },
+    ]},
     { label: 'HUNT', stage: 1, items: [
       { to: '/campaign-builder', icon: Rocket,    label: 'Campaign Builder', min: 1 },
       { to: '/campaign-emails',  icon: Mail,      label: 'Campaign Emails',  min: 1 },

@@ -93,6 +93,23 @@ def _normalize_name(name: str) -> str:
     return re.sub(r"[^a-z0-9]", "", n).strip()
 
 
+# Firmographic-vendor industry labels (Wikidata etc.) rarely phrase things the
+# way an ICP file's target_industries does — see build_evidence()'s
+# industry_fit fallback below.
+_INDUSTRY_SYNONYMS = {
+    "bank": ["banking", "financial services", "investment"],
+    "banking": ["bank", "financial services", "investment banking"],
+    "national bank": ["banking", "investment banking", "financial services"],
+    "investment": ["banking", "investment banking", "asset management"],
+    "financial services": ["banking", "investment", "asset management",
+                            "private equity", "hedge fund", "real estate"],
+    "economics of banking": ["banking", "investment banking"],
+    "conglomerate": ["financial services", "investment banking"],
+    "mergers and acquisitions": ["investment banking"],
+    "asset management": ["hedge fund", "private equity", "asset management"],
+}
+
+
 def _terms_for_signal_type(signal_rules: dict, rule_type: str) -> list[str]:
     for rule in signal_rules.get("signal_rules", []):
         if rule.get("type") == rule_type:
@@ -170,11 +187,21 @@ def fetch_corroboration(candidates: list, signal_rules: dict) -> dict:
     from any company that happens to be hiring a RevOps manager for
     unrelated reasons; this is what actually tests for that.
 
+    trigger_types included "nrr_commentary" (QuadSci's rule name) but not
+    "ai_adoption_pressure" (Endex's differently-named equivalent rule — press
+    coverage of AI automating analyst work / cutting analyst-class sizes /
+    reducing junior-banker hours, arguably the single strongest signal type
+    for the Endex ICP) — that type was silently never searched for any
+    account using a different rule-type name than QuadSci's. Both are listed
+    now so this function generalizes across accounts instead of only working
+    for the one it was first written for.
+
     Returns {company_name: [{"type", "term", "title", "url", "posted_date"}]}."""
     from src.signals.news_signal import NewsSignal
     from src.phase_classifier import detect_campaign_product
 
-    trigger_types = ["funding_event", "leadership_change", "nrr_commentary", "competitor_displacement"]
+    trigger_types = ["funding_event", "leadership_change", "nrr_commentary",
+                      "ai_adoption_pressure", "competitor_displacement"]
     term_to_type = {
         t.lower(): rtype for rtype in trigger_types for t in _terms_for_signal_type(signal_rules, rtype)
     }
@@ -337,6 +364,7 @@ def build_evidence(company: dict, icp: dict, signal_rules: dict,
     sec_cat_hit = next((h for h in sec_hits if any(t.lower() in h.get("job_title", "").lower() for t in cat_terms)), None)
     pain_hit = _corrob_hit("customer_pain_language")
     nrr_hit = _corrob_hit("nrr_commentary")
+    ai_pressure_hit = _corrob_hit("ai_adoption_pressure")
     if sec_cat_hit:
         evidence["category_language"] = {
             "fired": True, "why": f'Uses category language ("{sec_cat_hit.get("job_title", "")}") in SEC filings.',
@@ -354,6 +382,13 @@ def build_evidence(company: dict, icp: dict, signal_rules: dict,
         evidence["category_language"] = {
             "fired": True, "why": f'Uses category language ("{term_hit}").',
             "source_url": src.get("url", ""), "date": str(src.get("detected_at", "")),
+        }
+    elif ai_pressure_hit:
+        evidence["category_language"] = {
+            "fired": True,
+            "why": f'Public commentary shows the exact AI-adoption pressure Endex sells into '
+                   f'("{ai_pressure_hit["term"]}") — {ai_pressure_hit["title"]}',
+            "source_url": ai_pressure_hit["url"], "date": ai_pressure_hit["posted_date"],
         }
     elif nrr_hit:
         evidence["category_language"] = {
@@ -390,7 +425,28 @@ def build_evidence(company: dict, icp: dict, signal_rules: dict,
     #      the correct evidence source for it, not R2/displacement.
     target_industries = icp.get("target_industries", [])
     if company.get("industry"):
-        match = next((t for t in target_industries if t.lower() in company["industry"].lower()), None)
+        # Bidirectional substring check — companies.industry is often a short
+        # firmographic-vendor label ("bank"), while target_industries entries
+        # are longer descriptive strings ("Investment Banking (bulge bracket
+        # + boutique)"). A one-directional check (ICP string contained in the
+        # short label) can never match; checking the short label against the
+        # ICP string too lets "bank" correctly match "...Investment Banking...".
+        ind = company["industry"].lower()
+        match = next(
+            (t for t in target_industries if t.lower() in ind or ind in t.lower()),
+            None,
+        )
+        if not match:
+            # Firmographic vendors (Wikidata/Clearbit-style) return short
+            # finance-vertical labels ("economics of banking", "conglomerate",
+            # "mergers and acquisitions") that never literally substring-match
+            # the ICP's descriptive category strings ("Investment Banking
+            # (bulge bracket + boutique)") even bidirectionally. A small
+            # synonym expansion catches these real matches instead of
+            # under-counting every bank/PE firm whose vendor label happens to
+            # phrase things differently than the ICP file does.
+            synonyms = [s for key, vals in _INDUSTRY_SYNONYMS.items() if key in ind for s in vals]
+            match = next((t for t in target_industries if any(s in t.lower() for s in synonyms)), None)
         evidence["industry_fit"] = (
             {"fired": True, "why": f'Industry match: {company["industry"]}.', "source_url": "", "date": ""}
             if match else {"fired": False}

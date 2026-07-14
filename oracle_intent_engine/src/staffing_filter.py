@@ -555,11 +555,27 @@ _PURE_STAFFING: set[str] = {
     "woodsage",                          # IT staffing/consulting
     # ── Anonymously posted jobs — company identity unknown ────────────────────
     "confidential", "confidential careers", "confidential jobs",
+    "undisclosed",
     # ── Malformed entries (job titles captured as company names) ──────────────
     "senior erp payroll", "international",
     # Oracle itself is not a prospect
     "oracle america", "oracle corporation", "oracle",
     "oracle uk", "oracle emea",
+    # ── Finance/banking recruiting — the Endex-ICP equivalent of the IT/ERP
+    # recruiters above. IB/PE job titles ("Investment Banking Associate") are
+    # frequently posted BY these agencies on behalf of an undisclosed client,
+    # so the agency itself surfaces as the "company" unless filtered here —
+    # confirmed live: 5 of the Endex ICP campaign's top-15 scored prospects
+    # were recruiting agencies, not end-user financial firms.
+    "selby jennings",                    # Phaidon Group — banking/finance recruiting
+    "alexander chapman",                 # finance recruiting (UK)
+    "crossing hurdles",                  # finance recruiting (UK)
+    "blacklock group",                   # executive search
+    "venture search",                    # recruiting agency
+    "tenfold search", "tenfold search & advisory",  # search/advisory
+    "atlantic group", "the atlantic group",  # finance & accounting staffing (Vaco brand)
+    "lawrence harvey",                   # tech/finance recruiting
+    "bruin", "bruin financial",          # financial services recruiting
 }
 
 # ── Keyword patterns that indicate staffing / body-shopping ─────────────────

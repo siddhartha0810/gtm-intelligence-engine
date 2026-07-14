@@ -1,0 +1,126 @@
+# Buying-signal taxonomy for the Endex ICP (Excel-native AI agent for finance —
+# financial modeling, DCF/three-statement models, citation-backed outputs).
+# Confidence scale mirrors .claude/rules/signals.md's Oracle convention:
+#   0.75-0.90 explicit/high-confidence, 0.60-0.75 strong indicator,
+#   0.50-0.60 weak/context-dependent. Below 0.40 not worth storing.
+#
+# This file is the single source of truth for both the Endex page's
+# "signal rules & classification" display and the seed campaign's keyword
+# config (seed_endex_campaign.py) — do not duplicate these lists elsewhere.
+
+signal_rules:
+- type: hiring
+  description: Actively recruiting for roles that build or run AI/financial-modeling
+    tooling, or that signal a growing analyst bench needing that tooling — direct
+    proof of budget and organizational ownership forming around modeling automation.
+  detect:
+  - Head of Financial Modeling
+  - Head of FP&A
+  - VP Financial Planning & Analysis
+  - Director of Financial Systems
+  - Head of AI (Finance)
+  - AI Product Manager Finance
+  - Director of Innovation
+  - Investment Banking Analyst
+  - Investment Banking Associate
+  - Private Equity Associate
+  - Private Equity Analyst
+  - Quantitative Research Analyst
+  - Head of Data Science
+  - Excel VBA Developer
+  - Financial Modeling Analyst
+  - GenAI Finance
+  - Prompt Engineer Finance
+  confidence: 0.75
+
+- type: tech_stack_tell
+  description: Job description lists existing finance-data infrastructure as a
+    requirement — confirms the technographic fit (they already run the data
+    stack Endex plugs into and unifies).
+  detect:
+  - Capital IQ
+  - CapIQ
+  - FactSet
+  - Bloomberg Terminal
+  - PitchBook
+  - Addepar
+  - Workiva
+  - Anaplan
+  context: job_description
+  confidence: 0.60
+
+- type: funding_event
+  description: Fresh capital raised or fund closed — for PE/HF this is a direct
+    budget signal (new AUM to deploy, new deal team to staff and tool up).
+  detect:
+  - closes fund
+  - final close
+  - raises new fund
+  - launches strategy
+  - assets under management grows
+  - AUM reaches
+  - new fund raised
+  - fund oversubscribed
+  confidence: 0.70
+
+- type: leadership_change
+  description: New CFO/Head of FP&A/Head of Data hire — new execs typically audit
+    and refresh the finance tech stack within their first 90 days.
+  detect:
+  - new CFO
+  - appoints Head of FP&A
+  - joins as Head of Data
+  - new Chief Financial Officer
+  - names new CTO
+  confidence: 0.65
+
+- type: ai_adoption_pressure
+  description: Public commentary (press, exec posts, earnings calls) about AI
+    automating analyst work, cutting analyst-class sizes, or targeting the
+    burnout/hours problem in modeling-heavy roles — direct evidence of the
+    exact mandate Endex sells into, the highest-intent signal available short
+    of an RFP.
+  detect:
+  - automate financial modeling
+  - automate pitch book
+  - AI copilot for Excel
+  - reduce analyst hours
+  - junior banker hours
+  - analyst burnout
+  - cut analyst class
+  - reduce manual model building
+  - AI agents into Excel
+  - modeling automation
+  confidence: 0.80
+
+- type: customer_pain_language
+  description: Analysts/associates, in their OWN words on public forums (Wall
+    Street Oasis, Glassdoor, G2), describing the exact symptom Endex cures —
+    manual data entry from filings, version-control chaos in Excel, tedious
+    recurring model updates. Third-party disclosure in the target's own words,
+    not the target's marketing — sharpest available evidence for private funds
+    with no SEC filings of their own to mine. Sourced via g2_review_search.py
+    (free web search), same pattern as QuadSci's customer_pain_language rule.
+    Multi-word phrases only — a bare word here risks the same false-positive
+    class a single tech-stack token would.
+  detect:
+  - copy pasting from the 10-K
+  - manual data entry from filings
+  - version control nightmare
+  - tedious model updates
+  - rebuilding the model every quarter
+  - spend hours updating the model
+  - all-nighter building the model
+  - grinding through comps
+  confidence: 0.65
+
+- type: competitor_displacement
+  description: Evidence of active evaluation of or migration away from a
+    competing finance-AI tool — timing signal for an in-flight buying process.
+  detect:
+  - migrating from Hebbia
+  - switching from Rogo
+  - evaluating Daloopa
+  - comparing Endex vs
+  - Copilot for Excel pilot
+  confidence: 0.55
