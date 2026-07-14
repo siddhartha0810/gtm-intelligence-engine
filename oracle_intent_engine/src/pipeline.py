@@ -18,6 +18,7 @@ from src import contact_finder
 from src import firmographics
 from src import domain_enricher
 from src import csv_contacts
+from src import slack_notify
 from src.signals.indeed_signal import IndeedSignal
 from src.signals.linkedin_signal import LinkedInSignal, LINKEDIN_MANUFACTURING_INDUSTRIES
 from src.signals.news_signal import NewsSignal
@@ -630,6 +631,11 @@ def run_scan(
         _log(f"─── Scan {status.upper()} ───")
         _log(f"   Signals: {len(classified)}  |  New companies: {new_count}  |  Already known: {known_count}")
 
+        slack_notify.notify_scan_complete(
+            run_id=run_id, status=status, new_count=new_count, known_count=known_count,
+            total_signals=len(classified), duration_seconds=_time.monotonic() - _scan_start_time,
+        )
+
         return {
             "run_id": run_id,
             "total_raw_signals": len(raw_signals),
@@ -644,6 +650,10 @@ def run_scan(
         _log(f"✗ Pipeline error: {e}")
         if _current_scan.get("run_id"):
             db.finish_scan_run(_current_scan["run_id"], 0, 0, status="failed")
+            slack_notify.notify_scan_complete(
+                run_id=_current_scan["run_id"], status="failed", new_count=0, known_count=0,
+                total_signals=0, duration_seconds=_time.monotonic() - _scan_start_time,
+            )
         # Whichever stage was mid-flight when this fired should show as errored,
         # not stuck on "running" forever in the frontend's checklist.
         stages = _current_scan.get("stages", {})
