@@ -205,6 +205,28 @@ class PipelineDB:
             imported += 1
         return imported
 
+    # ── Apollo credit log ───────────────────────────────────────────────────
+    # Writes to the shared apollo_credit_log table (DDL owned by
+    # oracle_intent_engine/src/database.py, same Postgres database) so the
+    # dashboard can show per-step burn. Uses this engine's own connection
+    # pool rather than importing oracle_intent_engine — the two engines
+    # share a database, not code.
+
+    def log_apollo_credits(
+        self, run_id: str, step: str,
+        credits_before: Optional[int], credits_after: Optional[int],
+    ) -> None:
+        used = None
+        if credits_before is not None and credits_after is not None:
+            used = credits_before - credits_after
+        with self._conn() as cur:
+            cur.execute(
+                """INSERT INTO apollo_credit_log
+                       (run_id, step, credits_before, credits_after, credits_used)
+                   VALUES (%s, %s, %s, %s, %s)""",
+                (run_id, step, credits_before, credits_after, used),
+            )
+
     def export_csv(self, csv_path: str) -> None:
         import pandas as pd
         rows = [

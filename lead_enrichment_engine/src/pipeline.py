@@ -759,17 +759,16 @@ def main() -> None:
     df = run("enriched", enrich, df, checkpoint_fn=ckpt)
     apollo_credits_after  = get_apollo_credits()
 
-    # Log Apollo credit consumption for this run so the UI can show per-step burn
+    # Log Apollo credit consumption for this run so the UI can show per-step burn.
+    # Writes via this engine's own PipelineDB (shared Postgres table, not a
+    # cross-engine import — see database.py's log_apollo_credits).
     try:
-        import sys, os as _os
-        _root = _os.path.dirname(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
-        if _root not in sys.path:
-            sys.path.insert(0, _root)
-        from oracle_intent_engine.src.database_sqlite import log_apollo_credits
         _run_id = str(run_id) if run_id else "standalone"
         _before = apollo_credits_before.get("consumed_credits") if isinstance(apollo_credits_before, dict) else None
         _after  = apollo_credits_after.get("consumed_credits")  if isinstance(apollo_credits_after,  dict) else None
-        log_apollo_credits(_run_id, "stage_3_enrichment", _before, _after)
+        _db = get_db()
+        if _db is not None:
+            _db.log_apollo_credits(_run_id, "stage_3_enrichment", _before, _after)
     except Exception as _e:
         pass  # credit logging is best-effort — never block the pipeline
 
