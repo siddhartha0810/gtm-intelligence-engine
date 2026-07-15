@@ -74,6 +74,7 @@ def build_campaign_kwargs() -> dict:
     hiring_terms: list[str] = []
     tech_stack_terms: list[str] = []
     news_queries: list[str] = []
+    cost_terms: list[str] = []
     for rule in rules:
         rtype = rule.get("type")
         if rtype == "hiring":
@@ -86,8 +87,17 @@ def build_campaign_kwargs() -> dict:
             # with query_builder's NEWS_TEMPLATES (which assumes keywords are
             # product names, e.g. "Oracle Cloud ERP goes live").
             news_queries.extend(rule.get("detect", []))
+        elif rtype == "cost_pressure":
+            # Keywords ONLY (classification match for layoff_signal.py's
+            # emitted text) — NOT news queries: "laid off" as a bare news
+            # search returns every layoff on earth, while the layoffs source
+            # already delivers these events structured and company-attributed.
+            cost_terms.extend(rule.get("detect", []))
 
-    keywords = hiring_terms + tech_stack_terms  # kept for display/exclusion matching elsewhere
+    # keywords drive display/exclusion matching AND campaign-scan
+    # classification (detect_campaign_product) — cost_terms must be here or
+    # the layoffs source's signals get classified against nothing and dropped.
+    keywords = hiring_terms + tech_stack_terms + cost_terms
 
     exclude = [icp.get("meta", {}).get("company", "QuadSci")]
     exclude.extend(icp.get("competitor_products", []))
@@ -110,7 +120,7 @@ def build_campaign_kwargs() -> dict:
         keywords=keywords,
         location="United States",
         max_pages=3,
-        sources=["linkedin", "indeed", "adzuna", "ats", "news"],
+        sources=["linkedin", "indeed", "adzuna", "ats", "news", "layoffs"],
         custom_job_queries=job_queries,
         custom_news_queries=news_queries,
         query_tier=1,

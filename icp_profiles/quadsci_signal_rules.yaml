@@ -123,6 +123,22 @@ signal_rules:
   - not communicating
   confidence: 0.65
 
+- type: cost_pressure
+  description: Public workforce reduction (layoffs.fyi WARN/press tracker, or an
+    8-K restructuring disclosure) — cost pressure made public. The moment the
+    retain-vs-acquire math flips toward retention tooling; every churned
+    customer now has to be replaced by a smaller GTM team. Sourced first-party
+    via layoff_signal.py (structured company/headcount/date/press-link rows),
+    not keyword news search.
+  detect:
+  - laid off
+  - layoffs
+  - workforce reduction
+  - job cuts
+  - reduction in force
+  - restructuring plan
+  confidence: 0.60
+
 - type: competitor_displacement
   description: Evidence of active evaluation or migration away from existing CS/analytics
     tooling — timing signal for an in-flight buying process.

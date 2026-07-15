@@ -39,6 +39,7 @@ from src.signals.company_pages_signal import CompanyPagesSignal
 from src.signals.g2_reviews_signal import G2ReviewsSignal
 from src.signals.agentic_harvester_signal import AgenticHarvesterSignal
 from src.signals.ats_signal import ATSSignal
+from src.signals.layoff_signal import LayoffSignal
 
 logger = get_logger(__name__)
 
@@ -175,6 +176,7 @@ def run_scan(
             "g2_reviews":       G2ReviewsSignal(),
             "agentic_harvester": AgenticHarvesterSignal(),
             "ats":              ATSSignal(),
+            "layoffs":          LayoffSignal(),
         }
 
         raw_signals: list[dict] = []
@@ -380,6 +382,18 @@ def run_scan(
                 _log(f"✓ PROCUREMENT done — {len(results)} tenders")
             except Exception as e:
                 _log(f"  [procurement] ERROR: {e}")
+
+        # layoffs / workforce reductions (layoffs.fyi tracker — one bounded fetch)
+        if "layoffs" in sources and not _is_stopped():
+            _current_scan["progress"] = "Scanning layoff tracker..."
+            _log("▶ Starting LAYOFFS (layoffs.fyi WARN/press tracker)")
+            try:
+                results = scrapers["layoffs"].fetch()
+                raw_signals.extend(results)
+                _current_scan["raw_signals"] = len(raw_signals)
+                _log(f"✓ LAYOFFS done — {len(results)} workforce-reduction signals")
+            except Exception as e:
+                _log(f"  [layoffs] ERROR: {e}")
 
         # sec / public filings
         if "sec_filing" in sources and not _is_stopped():

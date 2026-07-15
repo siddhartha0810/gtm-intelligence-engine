@@ -268,6 +268,44 @@ def fetch_sec_officer_changes(candidates: list, window_days: int = 365) -> dict:
     return results
 
 
+def fetch_layoff_corroboration(candidates: list, window_days: int = 365) -> dict:
+    """Cost-pressure corroboration from layoffs.fyi's structured tracker
+    (WARN filings + press, company/headcount/date/source-link rows). One
+    bounded fetch for the whole candidate list — the inverse economics of
+    fetch_corroboration()'s per-company news searches. Matched by normalized
+    name; typed cost_pressure, which build_evidence() treats as a
+    recent_trigger_event alternative and R6 counts as a dated event."""
+    from email.utils import format_datetime as _fmt822
+
+    from src.signals.layoff_signal import fetch_layoff_rows
+
+    rows = fetch_layoff_rows(window_days=window_days)
+    if not rows:
+        return {}
+    by_norm = {}
+    for r in rows:
+        by_norm.setdefault(_normalize_name(r["company"]), []).append(r)
+
+    results: dict = {}
+    for c in candidates:
+        for r in by_norm.get(_normalize_name(c["name"]), [])[:1]:  # most recent is enough
+            pct = r["percentage"]
+            pct_txt = f" ({round(pct * 100)}%)" if isinstance(pct, (int, float)) else ""
+            n = r["laid_off"]
+            n_txt = f"{int(n)} employees" if isinstance(n, (int, float)) else "employees"
+            results.setdefault(c["name"], []).append({
+                "type": "cost_pressure",
+                "term": "workforce reduction",
+                "title": f"{r['company']} laid off {n_txt}{pct_txt} on {r['date']:%Y-%m-%d} "
+                         f"(layoffs.fyi tracker, press-sourced)",
+                "url": r["source_url"],
+                "posted_date": _fmt822(r["date"]),
+            })
+            print(f"  [{c['name']}] layoff event {r['date']:%Y-%m-%d}")
+    print(f"[run_glassbox] layoff corroboration: {len(results)}/{len(candidates)} candidates with a recent workforce reduction")
+    return results
+
+
 def fetch_corroboration(candidates: list, signal_rules: dict) -> dict:
     """Targeted, per-company search: does THIS specific company (already
     surfaced by a hiring/tech-stack signal) have a SECOND, different-typed
@@ -554,9 +592,13 @@ def build_evidence(company: dict, icp: dict, signal_rules: dict,
             evidence["industry_fit"] = {"fired": False}
     # else: no industry field and no signals at all -> stays absent -> no_evidence
 
-    # R4 recent_trigger_event — SEC first, then signals, then corroboration (funding_event terms)
+    # R4 recent_trigger_event — SEC first, then signals, then corroboration.
+    # funding_event and cost_pressure are BOTH trigger events: fresh capital
+    # and a public layoff are opposite balance-sheet moments that create the
+    # same "why now" (new scrutiny on retention economics). funding wins the
+    # tie only because its terms are also checked in signal text first.
     trigger_terms = _terms_for_signal_type(signal_rules, "funding_event")
-    fund_hit = _corrob_hit("funding_event")
+    fund_hit = _corrob_hit("funding_event") or _corrob_hit("cost_pressure")
     if signals and (term_hit := next((t for t in trigger_terms if t.lower() in signal_texts), None)):
         src = next((s for s in signals if term_hit.lower() in (s.get("evidence") or "").lower()), signals[0])
         evidence["recent_trigger_event"] = {
@@ -692,6 +734,10 @@ def score_campaign(campaign_id: int, use_sec: bool = True, use_g2: bool = True) 
         # company's own legally mandated disclosure.
         for name, hits in fetch_sec_officer_changes(candidates).items():
             corroboration_by_name.setdefault(name, []).extend(hits)
+    # Workforce reductions (layoffs.fyi) — cost-pressure trigger events.
+    # One bounded fetch; failure degrades to {} without blocking scoring.
+    for name, hits in fetch_layoff_corroboration(candidates).items():
+        corroboration_by_name.setdefault(name, []).extend(hits)
     if use_g2:
         g2_by_name = fetch_g2_pain_corroboration(candidates, signal_rules)
         for name, hits in g2_by_name.items():
