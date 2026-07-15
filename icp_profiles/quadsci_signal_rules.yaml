@@ -147,6 +147,9 @@ signal_rules:
   - switching from Pendo
   - QBR prep
   - manual churn analysis
+  - removed from Pendo
+  - removed from Gainsight
+  - removed from Totango
   confidence: 0.55
 
 - type: competitor_churn_watch
