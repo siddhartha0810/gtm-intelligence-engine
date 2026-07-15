@@ -107,6 +107,20 @@ _INDUSTRY_SYNONYMS = {
     "conglomerate": ["financial services", "investment banking"],
     "mergers and acquisitions": ["investment banking"],
     "asset management": ["hedge fund", "private equity", "asset management"],
+    # SaaS-vertical labels (QuadSci-style ICPs). Only precise labels are
+    # mapped — generic "software industry" / "information and communications
+    # technology" deliberately match nothing, because they'd fire
+    # industry_fit for every software company on earth and the rule would
+    # stop meaning anything.
+    "computer security": ["security saas", "security"],
+    "cybersecurity": ["security saas", "security"],
+    "network security": ["security saas", "security"],
+    "marketing technology": ["martech", "marketing"],
+    "advertising technology": ["martech", "marketing"],
+    "data analytics": ["data / mdm", "data"],
+    "business intelligence": ["data / mdm", "data"],
+    "cloud infrastructure": ["infrastructure", "devtools"],
+    "developer tools": ["infrastructure", "devtools"],
 }
 
 
