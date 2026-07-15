@@ -193,7 +193,8 @@ def fetch_sec_hits(icp: dict) -> dict:
     return by_name
 
 
-def fetch_sec_officer_changes(candidates: list, window_days: int = 365) -> dict:
+def fetch_sec_officer_changes(candidates: list, window_days: int = 365,
+                              sic_out: dict | None = None) -> dict:
     """SEC 8-K Item 5.02 = legally mandated disclosure of officer/director
     departures and appointments — the authoritative, citable source for the
     leadership_change rule on the PUBLIC slice of any ICP (news search finds
@@ -206,6 +207,13 @@ def fetch_sec_officer_changes(candidates: list, window_days: int = 365) -> dict:
       3. surface 8-Ks whose items include 5.02 within window_days
     Free, keyless, ~0.3s/company (SEC fair-access pacing). Private companies
     simply don't resolve and are skipped — expected for most of QuadSci's ICP.
+
+    sic_out: optional dict the caller owns; for every resolved company it
+    gains {company_name: {"cik", "sic", "sic_desc"}} from the same
+    submissions.json fetch — zero extra requests. This is what implements
+    the "sec" half of the glassbox rules' declared `sec_or_firmographic`
+    evidence source for industry_fit (build_evidence's sec_sic_by_name
+    param), which was documented in the rules yaml but never wired up.
 
     Returns {company_name: [corroboration hits]} in the same shape as
     fetch_corroboration(), typed leadership_change."""
@@ -257,6 +265,9 @@ def fetch_sec_officer_changes(candidates: list, window_days: int = 365) -> dict:
         except Exception as e:
             print(f"  [{c['name']}] submissions fetch failed: {e}")
             continue
+        if sic_out is not None and subs.get("sicDescription"):
+            sic_out[c["name"]] = {"cik": cik, "sic": subs.get("sic", ""),
+                                  "sic_desc": subs.get("sicDescription", "")}
         recent = subs.get("filings", {}).get("recent", {})
         rows = zip(recent.get("form", []), recent.get("filingDate", []),
                    recent.get("accessionNumber", []), recent.get("primaryDocument", []),
@@ -476,7 +487,8 @@ def fetch_reddit_pain_corroboration(candidates: list, signal_rules: dict) -> dic
 
 def build_evidence(company: dict, icp: dict, signal_rules: dict,
                     sec_hits_by_name: dict, signals: list, contacts: list,
-                    corroboration: list | None = None) -> dict:
+                    corroboration: list | None = None,
+                    sec_sic_by_name: dict | None = None) -> dict:
     """One evidence dict per company, keyed by rule condition. A missing key
     means no_evidence — the caller (glassbox_scorer) treats that as excluded
     from scoring, not a failure.
@@ -485,7 +497,13 @@ def build_evidence(company: dict, icp: dict, signal_rules: dict,
     fetch_corroboration()), each {"type", "term", "title", "url", "posted_date"}
     — distinct from `signals` (the campaign's own broad scan) because it's
     specifically "does THIS company have a SECOND, different-typed signal,"
-    not just another hit on the same broad keyword search."""
+    not just another hit on the same broad keyword search.
+
+    sec_sic_by_name: {company_name: {"cik", "sic", "sic_desc"}} collected by
+    fetch_sec_officer_changes(sic_out=...) — makes industry_fit's declared
+    `sec_or_firmographic` evidence source real: EDGAR's own SIC classification
+    is checked FIRST (authoritative + citable), falling back to the
+    firmographic-vendor label, then tech-stack tells in signal text."""
     evidence: dict = {}
     corroboration = corroboration or []
     name_key = _normalize_name(company["name"])
@@ -557,15 +575,43 @@ def build_evidence(company: dict, icp: dict, signal_rules: dict,
     elif signals or corroboration:
         evidence["displacement"] = {"fired": False}
 
-    # R3 industry_fit / technographic fit — SEC SIC not implemented here (no
-    # per-company CIK lookup yet). Two evaluable fallbacks, checked in order:
-    #   1. companies.industry field vs target_industries (firmographic)
-    #   2. tech_stack_tell terms in signal text (e.g. "Gainsight Administrator"
+    # R3 industry_fit / technographic fit — three evaluable sources, checked
+    # in declared sec_or_firmographic order:
+    #   1. SEC SIC classification (sec_sic_by_name — public companies only;
+    #      authoritative and citable, but note SIC is coarse for SaaS ICPs:
+    #      nearly everything is 7372 "Prepackaged Software", which matches
+    #      no vertical and correctly falls through to the next source)
+    #   2. companies.industry field vs target_industries (firmographic)
+    #   3. tech_stack_tell terms in signal text (e.g. "Gainsight Administrator"
     #      job posting) — quadsci_signal_rules.yaml's own description for this
     #      rule type is literally "confirms the technographic fit", so this is
     #      the correct evidence source for it, not R2/displacement.
     target_industries = icp.get("target_industries", [])
-    if company.get("industry"):
+    sic_info = (sec_sic_by_name or {}).get(company["name"])
+    sic_matched = False
+    if sic_info:
+        sic_desc = sic_info["sic_desc"].lower()
+        match = next((t for t in target_industries if t.lower() in sic_desc or sic_desc in t.lower()), None)
+        if not match:
+            synonyms = [s for key, vals in _INDUSTRY_SYNONYMS.items() if key in sic_desc for s in vals]
+            match = next((t for t in target_industries if any(s in t.lower() for s in synonyms)), None)
+        if match:
+            cik = sic_info["cik"]
+            evidence["industry_fit"] = {
+                "fired": True,
+                "why": f'SEC industry classification (SIC {sic_info["sic"]}): '
+                       f'{sic_info["sic_desc"]} — a core ICP vertical, confirmed via EDGAR.',
+                "source_url": (f"https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany"
+                                f"&CIK={cik:010d}&type=10-K&dateb=&owner=include&count=10"),
+                "date": "",
+            }
+            sic_matched = True
+        # A generic/non-matching SIC is NOT "checked, absent" by itself —
+        # fall through so the firmographic/tech-stack sources still get
+        # their look before the rule settles.
+    if sic_matched:
+        pass
+    elif company.get("industry"):
         # Bidirectional substring check — companies.industry is often a short
         # firmographic-vendor label ("bank"), while target_industries entries
         # are longer descriptive strings ("Investment Banking (bulge bracket
@@ -604,7 +650,12 @@ def build_evidence(company: dict, icp: dict, signal_rules: dict,
             }
         else:
             evidence["industry_fit"] = {"fired": False}
-    # else: no industry field and no signals at all -> stays absent -> no_evidence
+    elif sic_info:
+        # SIC was checked against an authoritative source and didn't match,
+        # and no fallback source was evaluable — that's "checked, absent",
+        # not no_evidence.
+        evidence["industry_fit"] = {"fired": False}
+    # else: nothing evaluable at all -> stays absent -> no_evidence
 
     # R4 recent_trigger_event — SEC first, then signals, then corroboration.
     # funding_event and cost_pressure are BOTH trigger events: fresh capital
@@ -742,11 +793,15 @@ def score_campaign(campaign_id: int, use_sec: bool = True, use_g2: bool = True) 
 
     sec_hits_by_name = fetch_sec_hits(icp) if use_sec else {}
     corroboration_by_name = fetch_corroboration(candidates, signal_rules)
+    sec_sic_by_name: dict = {}
     if use_sec:
         # Public-company officer changes from 8-K Item 5.02 filings — feeds
         # the same leadership_change rule as news corroboration, but from the
-        # company's own legally mandated disclosure.
-        for name, hits in fetch_sec_officer_changes(candidates).items():
+        # company's own legally mandated disclosure. The same submissions.json
+        # fetch also yields each resolved company's SIC classification
+        # (sic_out), which industry_fit checks first — the "sec" half of the
+        # rules' declared sec_or_firmographic evidence source.
+        for name, hits in fetch_sec_officer_changes(candidates, sic_out=sec_sic_by_name).items():
             corroboration_by_name.setdefault(name, []).extend(hits)
     # Workforce reductions (layoffs.fyi) — cost-pressure trigger events.
     # One bounded fetch; failure degrades to {} without blocking scoring.
@@ -765,7 +820,8 @@ def score_campaign(campaign_id: int, use_sec: bool = True, use_g2: bool = True) 
         signals = [dict(s) for s in db.get_signals_for_company(company["id"])]
         contacts = [dict(c) for c in db.get_contacts_for_company(company["id"])]
         corroboration = corroboration_by_name.get(company["name"], [])
-        evidence = build_evidence(company, icp, signal_rules, sec_hits_by_name, signals, contacts, corroboration)
+        evidence = build_evidence(company, icp, signal_rules, sec_hits_by_name, signals, contacts,
+                                   corroboration, sec_sic_by_name=sec_sic_by_name)
         scored = score_company(rules, evidence)
         db.upsert_account_prospect(
             campaign_id=campaign_id, company_id=company["id"],
