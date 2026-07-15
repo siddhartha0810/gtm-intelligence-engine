@@ -148,3 +148,23 @@ signal_rules:
   - QBR prep
   - manual churn analysis
   confidence: 0.55
+
+- type: competitor_churn_watch
+  description: Churn detection pointed at COMPETITORS — Wayback Machine diffs of
+    rival vendors' own /customers logo walls (competitor_churn_watch.py). A logo
+    quietly REMOVED between two structurally comparable archived snapshots means
+    that company very likely churned from the competitor — the hottest
+    displacement prospect there is (proven budget, proven category need, open
+    vacancy). Every hit cites the before/after archive pages. Live catch —
+    Patreon and Chatwork removed from Pendo's customer wall between Sep 2024 and
+    Mar 2025 while the wall GREW 118→127 (specific takedowns, not a purge).
+    Removal can also mean rebrand or logo-permission withdrawal, hence the same
+    0.55 confidence as other displacement evidence — needs a second signal type
+    to cluster into a qualified prospect.
+  detect:
+  - pendo.io/customers
+  - gainsight.com/customers
+  - totango.com/customers
+  - churnzero.com/customers
+  - customergauge.com/customers
+  confidence: 0.55

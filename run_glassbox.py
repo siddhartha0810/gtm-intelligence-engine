@@ -331,6 +331,51 @@ def fetch_layoff_corroboration(candidates: list, window_days: int = 365) -> dict
     return results
 
 
+def fetch_competitor_churn_corroboration(candidates: list) -> dict:
+    """Displacement corroboration from competitor customer-page churn
+    (competitor_churn_watch.py): a candidate whose logo was REMOVED from a
+    rival vendor's /customers wall between two structurally comparable
+    Wayback snapshots very likely churned from that competitor — an
+    in-flight displacement window. Typed competitor_displacement (same 0.55
+    confidence class as news-based displacement evidence); cites the
+    before/after archived pages. ~2-4 min for the full page list (8
+    snapshot fetches per page, politely paced against archive.org)."""
+    from datetime import datetime as _dt
+    from email.utils import format_datetime as _fmt822
+
+    from competitor_churn_watch import PAGES, watch_page
+
+    by_norm = {_normalize_name(c["name"]): c["name"] for c in candidates}
+    results: dict = {}
+    print(f"[run_glassbox] competitor churn watch across {len(PAGES)} customer pages...")
+    for page in PAGES:
+        try:
+            rep = watch_page(page)
+        except Exception as e:
+            print(f"  [{page}] churn watch failed: {e}")
+            continue
+        if not rep:
+            continue
+        vendor = page.split(".")[0].split("/")[-1].title()
+        for removed in rep["removed"]:
+            cand_name = by_norm.get(_normalize_name(removed))
+            if not cand_name:
+                continue
+            results.setdefault(cand_name, []).append({
+                "type": "competitor_displacement",
+                "term": f"removed from {vendor} customers page",
+                "title": f"{removed} removed from {vendor}'s public customers page between "
+                         f"{rep['old_ts'][:8]} and {rep['new_ts'][:8]} (wall grew "
+                         f"{rep['old_count']}→{rep['new_count']} — a specific takedown). "
+                         f"Before: {rep['old_url']}",
+                "url": rep["new_url"],
+                "posted_date": _fmt822(_dt.strptime(rep["new_ts"][:8], "%Y%m%d")),
+            })
+            print(f"  [{cand_name}] removed from {vendor} customer wall")
+    print(f"[run_glassbox] churn watch: {len(results)}/{len(candidates)} candidates matched a removal")
+    return results
+
+
 def fetch_corroboration(candidates: list, signal_rules: dict) -> dict:
     """Targeted, per-company search: does THIS specific company (already
     surfaced by a hiring/tech-stack signal) have a SECOND, different-typed
@@ -772,7 +817,8 @@ def build_evidence(company: dict, icp: dict, signal_rules: dict,
     return evidence
 
 
-def score_campaign(campaign_id: int, use_sec: bool = True, use_g2: bool = True) -> list:
+def score_campaign(campaign_id: int, use_sec: bool = True, use_g2: bool = True,
+                   use_churn_watch: bool = True) -> list:
     campaign = db.get_campaign(campaign_id)
     if not campaign:
         raise SystemExit(f"No campaign with id={campaign_id}")
@@ -807,6 +853,10 @@ def score_campaign(campaign_id: int, use_sec: bool = True, use_g2: bool = True) 
     # One bounded fetch; failure degrades to {} without blocking scoring.
     for name, hits in fetch_layoff_corroboration(candidates).items():
         corroboration_by_name.setdefault(name, []).extend(hits)
+    if use_churn_watch:
+        # Competitor customer-page churn (Wayback diffs) — displacement windows.
+        for name, hits in fetch_competitor_churn_corroboration(candidates).items():
+            corroboration_by_name.setdefault(name, []).extend(hits)
     if use_g2:
         g2_by_name = fetch_g2_pain_corroboration(candidates, signal_rules)
         for name, hits in g2_by_name.items():
@@ -891,11 +941,13 @@ if __name__ == "__main__":
     parser.add_argument("--campaign-id", type=int, required=True)
     parser.add_argument("--no-sec", action="store_true", help="skip SEC EDGAR search (private-company-heavy ICPs)")
     parser.add_argument("--no-g2", action="store_true", help="skip G2/Capterra + Reddit customer-pain-language search")
+    parser.add_argument("--no-churn-watch", action="store_true", help="skip competitor customer-page churn watch (Wayback diffs, ~3 min)")
     parser.add_argument("--enrich-top", type=int, default=0, help="run Apollo enrichment + re-score for top N prospects")
     args = parser.parse_args()
 
     db.init_db()
-    score_campaign(args.campaign_id, use_sec=not args.no_sec, use_g2=not args.no_g2)
+    score_campaign(args.campaign_id, use_sec=not args.no_sec, use_g2=not args.no_g2,
+                   use_churn_watch=not args.no_churn_watch)
 
     if args.enrich_top:
         campaign = db.get_campaign(args.campaign_id)
