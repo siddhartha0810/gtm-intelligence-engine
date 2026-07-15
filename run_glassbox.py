@@ -179,6 +179,95 @@ def fetch_sec_hits(icp: dict) -> dict:
     return by_name
 
 
+def fetch_sec_officer_changes(candidates: list, window_days: int = 365) -> dict:
+    """SEC 8-K Item 5.02 = legally mandated disclosure of officer/director
+    departures and appointments — the authoritative, citable source for the
+    leadership_change rule on the PUBLIC slice of any ICP (news search finds
+    these late or not at all; the company itself must file within 4 business
+    days). Generalizes the method used ad hoc for the Endex account:
+      1. resolve each candidate to a CIK via SEC's company_tickers.json
+         (conservative name match — a wrong CIK cites another company's
+         filing, worse than no citation)
+      2. pull data.sec.gov/submissions/CIK##########.json
+      3. surface 8-Ks whose items include 5.02 within window_days
+    Free, keyless, ~0.3s/company (SEC fair-access pacing). Private companies
+    simply don't resolve and are skipped — expected for most of QuadSci's ICP.
+
+    Returns {company_name: [corroboration hits]} in the same shape as
+    fetch_corroboration(), typed leadership_change."""
+    import json as _json
+    import time as _time
+    import urllib.request
+    from datetime import datetime as _dt, timedelta as _td
+    from email.utils import format_datetime as _fmt822
+
+    headers = {"User-Agent": "GTM Research siddharthakothi@gmail.com"}
+
+    def _get_json(url: str) -> dict:
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            return _json.loads(resp.read())
+
+    def _strip_legal(name: str) -> str:
+        n = re.sub(r"[,.]", " ", name.lower())
+        n = re.sub(r"\b(inc|incorporated|corp|corporation|holdings?|group|plc|llc|ltd|co|the|companies)\b", " ", n)
+        return re.sub(r"\s+", " ", n).strip()
+
+    try:
+        tickers = _get_json("https://www.sec.gov/files/company_tickers.json")
+    except Exception as e:
+        print(f"[run_glassbox] SEC ticker map fetch failed: {e} — skipping officer-change pass")
+        return {}
+    # {stripped_title: cik} — first (lowest-index = largest) entry wins on dupes
+    by_title: dict[str, int] = {}
+    for entry in tickers.values():
+        key = _strip_legal(entry["title"])
+        if key and key not in by_title:
+            by_title[key] = entry["cik_str"]
+
+    cutoff = (_dt.now() - _td(days=window_days)).strftime("%Y-%m-%d")
+    results: dict = {}
+    resolved = 0
+    for c in candidates:
+        key = _strip_legal(c["name"])
+        # Exact stripped-name match only. Substring matching resolves
+        # "Census" to "Census Bureau Corp"-style strangers; a miss here is
+        # just "private company", which is the honest default.
+        cik = by_title.get(key)
+        if not cik:
+            continue
+        resolved += 1
+        try:
+            subs = _get_json(f"https://data.sec.gov/submissions/CIK{cik:010d}.json")
+            _time.sleep(0.3)  # SEC fair-access guideline
+        except Exception as e:
+            print(f"  [{c['name']}] submissions fetch failed: {e}")
+            continue
+        recent = subs.get("filings", {}).get("recent", {})
+        rows = zip(recent.get("form", []), recent.get("filingDate", []),
+                   recent.get("accessionNumber", []), recent.get("primaryDocument", []),
+                   recent.get("items", [""] * len(recent.get("form", []))))
+        for form, fdate, acc, doc, items in rows:
+            if form != "8-K" or "5.02" not in (items or "") or fdate < cutoff:
+                continue
+            acc_nodash = acc.replace("-", "")
+            url = f"https://www.sec.gov/Archives/edgar/data/{cik}/{acc_nodash}/{doc}"
+            hit = {
+                "type": "leadership_change",
+                "term": "officer change (8-K Item 5.02)",
+                "title": f"{subs.get('name', c['name'])} Form 8-K, Item 5.02 "
+                         f"(Departure/Appointment of Officers), filed {fdate}",
+                "url": url,
+                "posted_date": _fmt822(_dt.strptime(fdate, "%Y-%m-%d")),
+            }
+            results.setdefault(c["name"], []).append(hit)
+            print(f"  [{c['name']}] 8-K Item 5.02 filed {fdate}")
+            break  # most recent qualifying filing is enough — R5 evaluates one hit
+    print(f"[run_glassbox] SEC officer-change pass: {resolved}/{len(candidates)} "
+          f"resolved to a CIK, {len(results)} with a recent Item 5.02")
+    return results
+
+
 def fetch_corroboration(candidates: list, signal_rules: dict) -> dict:
     """Targeted, per-company search: does THIS specific company (already
     surfaced by a hiring/tech-stack signal) have a SECOND, different-typed
@@ -597,6 +686,12 @@ def score_campaign(campaign_id: int, use_sec: bool = True, use_g2: bool = True) 
 
     sec_hits_by_name = fetch_sec_hits(icp) if use_sec else {}
     corroboration_by_name = fetch_corroboration(candidates, signal_rules)
+    if use_sec:
+        # Public-company officer changes from 8-K Item 5.02 filings — feeds
+        # the same leadership_change rule as news corroboration, but from the
+        # company's own legally mandated disclosure.
+        for name, hits in fetch_sec_officer_changes(candidates).items():
+            corroboration_by_name.setdefault(name, []).extend(hits)
     if use_g2:
         g2_by_name = fetch_g2_pain_corroboration(candidates, signal_rules)
         for name, hits in g2_by_name.items():
