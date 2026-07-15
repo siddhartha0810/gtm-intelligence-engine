@@ -34,7 +34,7 @@ const Campaigns           = lazy(() => import('./pages/Campaigns'))
 const DecisionIntelligence = lazy(() => import('./pages/DecisionIntelligence'))
 const PredictionEngine     = lazy(() => import('./pages/PredictionEngine'))
 const QuadSci              = lazy(() => import('./pages/QuadSci'))
-const Endex                = lazy(() => import('./pages/Endex'))
+// const Endex             = lazy(() => import('./pages/Endex')) // disabled for demo purposes, see route below
 
 function PageLoader() {
   return (
@@ -130,7 +130,9 @@ export default function App() {
                   <Route path="/dashboard"                  element={<Dashboard />} />
                   <Route path="/decision-intelligence"      element={<DecisionIntelligence />} />
                   <Route path="/accounts/quadsci"           element={<QuadSci />} />
-                  <Route path="/accounts/endex"              element={<Endex />} />
+                  {/* /accounts/endex route disabled for demo purposes — re-enable by
+                      uncommenting when not demoing a different account (e.g. QuadSci).
+                  <Route path="/accounts/endex"              element={<Endex />} /> */}
                   <Route path="/prediction-engine"          element={<PredictionEngine />} />
                   <Route path="/companies"                  element={<Companies />} />
                   <Route path="/contacts"                   element={<Contacts />} />
