@@ -298,8 +298,12 @@ def generate_hook(
                                  "LLM returned no parseable hook")
 
         body = parsed.get("body", "")
-        # Enforce one sentence — cut at first sentence-ending punctuation
-        match = re.search(r'[.!?]', body)
+        # Enforce one sentence — cut at the first sentence-ending punctuation
+        # that actually ends a sentence (followed by whitespace/end). A bare
+        # [.!?] search amputated "your $3.7M raise" at the decimal point,
+        # shipping the three-word body "Casey, your $3." (caught live on the
+        # ClarityQ hook).
+        match = re.search(r'[.!?](?=\s|$)', body)
         if match:
             body = body[:match.start() + 1].strip()
 
@@ -313,17 +317,43 @@ def generate_hook(
             if body and body[-1] not in ".!?":
                 body += "."
 
+        # Minimum-length gate — a body this short is a truncation artifact or
+        # an empty generation, never a real opener (the rules above demand a
+        # name + a named problem; that can't fit in under 8 words).
+        if len(body.split()) < 8:
+            return {
+                **_error_result(contact, company_research,
+                                f"Generated body too short ({len(body.split())} words) — "
+                                "truncated or empty generation, held back"),
+                "subject":                parsed.get("subject", ""),
+                "body":                   body,
+                "angle":                  parsed.get("angle", ""),
+                "word_count":             len(body.split()),
+                "personalization_bucket": bucket,
+                "personalization_label":  bucket_label,
+                "grounded":               False,
+                "grounded_on":            "",
+                "hold_back":              True,
+            }
+
         # ── Grounding gate ────────────────────────────────────────────────────
         # An opener must reference a REAL, observed specific — not generic
         # flattery or a hallucinated fact. Verify the body quotes a distinctive
-        # term from the evidence we actually hold.
+        # term from the evidence we actually hold. The contact's own first/last
+        # name is stripped from the checked copy first — every opener starts
+        # with their name by rule, so it grounds nothing (a body was confirmed
+        # passing on matched_term="casey").
         evidence_sources = [
             contact.get("company", "") or company_research.get("name", ""),
             contact.get("title", ""),
             company_research.get("one_liner", ""),
             company_research.get("research", {}).get("summary", ""),
         ]
-        grounded, matched_term = guards.grounding_check(body, evidence_sources)
+        _name_re = re.compile(
+            "|".join(re.escape(n) for n in (contact.get("first_name", ""), contact.get("last_name", "")) if n),
+            re.IGNORECASE) if (contact.get("first_name") or contact.get("last_name")) else None
+        body_for_grounding = _name_re.sub(" ", body) if _name_re else body
+        grounded, matched_term = guards.grounding_check(body_for_grounding, evidence_sources)
 
         if not grounded:
             # Ungrounded means the body's specifics don't trace to any real
