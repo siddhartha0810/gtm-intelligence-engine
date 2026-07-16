@@ -432,6 +432,64 @@ def fetch_corroboration(candidates: list, signal_rules: dict) -> dict:
     return results
 
 
+_PAIN_MAX_AGE_DAYS = 540  # ~18 months; older third-party pain isn't current pain
+
+_DATE_PATTERNS = [
+    re.compile(r'<time[^>]+datetime="(\d{4}-\d{2}-\d{2})', re.I),
+    re.compile(r'"datePublished"\s*:\s*"(\d{4}-\d{2}-\d{2})', re.I),
+    re.compile(r'property="article:published_time"[^>]+content="(\d{4}-\d{2}-\d{2})', re.I),
+    re.compile(r'"dateCreated"\s*:\s*"(\d{4}-\d{2}-\d{2})', re.I),
+]
+
+
+def _page_publish_date(url: str) -> "date | None":
+    """Best-effort publish date for a third-party page, from its own markup
+    (<time datetime>, schema.org datePublished, og article:published_time).
+    None when the page is unreachable or carries no machine-readable date."""
+    from datetime import date as _date
+    import urllib.request
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=15) as r:
+            html = r.read(400_000).decode("utf-8", errors="ignore")
+    except Exception:
+        return None
+    found = []
+    for pat in _DATE_PATTERNS:
+        for m in pat.findall(html):
+            try:
+                y, mo, d = m.split("-")
+                found.append(_date(int(y), int(mo), int(d)))
+            except Exception:
+                continue
+    return min(found) if found else None  # earliest = original post, not last reply
+
+
+def _date_gate_pain_hits(company: str, hits: list) -> list:
+    """Keep only pain-language hits whose page carries a machine-readable
+    publish date within _PAIN_MAX_AGE_DAYS. Undated pages are DROPPED, not
+    given a pass — an undated hit stored with posted_date='' bypasses every
+    decay rule and scores like it happened yesterday (confirmed live: a
+    Sep-2020 skydiopilots.com forum thread fired category_language at full
+    weight in 2026). Kept hits gain their real date so decay applies."""
+    from datetime import date as _date
+    from email.utils import format_datetime as _fmt
+    from datetime import datetime as _dt
+    kept = []
+    for h in hits:
+        d = _page_publish_date(h["url"])
+        if d is None:
+            print(f"  [{company}] dropped pain hit (no publish date): {h['url'][:80]}")
+            continue
+        age = (_date.today() - d).days
+        if age > _PAIN_MAX_AGE_DAYS:
+            print(f"  [{company}] dropped pain hit ({age}d old, {d}): {h['url'][:80]}")
+            continue
+        h["posted_date"] = _fmt(_dt(d.year, d.month, d.day))
+        kept.append(h)
+    return kept
+
+
 def fetch_g2_pain_corroboration(candidates: list, signal_rules: dict) -> dict:
     """The QuadSci-specific answer to what SEC filings were for InRule: not a
     proxy signal (hiring, funding) but a prospect's OWN CUSTOMERS describing
@@ -475,6 +533,8 @@ def fetch_g2_pain_corroboration(candidates: list, signal_rules: dict) -> dict:
                     "type": "customer_pain_language", "term": matched_term,
                     "title": m["title"], "url": m["url"], "posted_date": "",
                 })
+        if hits:
+            hits = _date_gate_pain_hits(c["name"], hits)
         if hits:
             results[c["name"]] = hits
             print(f"  [{c['name']}] {len(hits)} G2/Capterra pain-language hit(s): "
@@ -520,6 +580,8 @@ def fetch_reddit_pain_corroboration(candidates: list, signal_rules: dict) -> dic
                     "type": "customer_pain_language", "term": matched_term,
                     "title": m["title"], "url": m["url"], "posted_date": "",
                 })
+        if hits:
+            hits = _date_gate_pain_hits(c["name"], hits)
         if hits:
             results[c["name"]] = hits
             print(f"  [{c['name']}] {len(hits)} Reddit pain-language hit(s): "
