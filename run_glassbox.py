@@ -654,6 +654,12 @@ def build_evidence(company: dict, icp: dict, signal_rules: dict,
         # A generic/non-matching SIC is NOT "checked, absent" by itself —
         # fall through so the firmographic/tech-stack sources still get
         # their look before the rule settles.
+    # Sources FALL THROUGH until one fires — a checked-but-unmatched source
+    # must not block a stronger one behind it (a generic Wikidata "software
+    # industry" label was blocking AppFolio's hiring-for-Pendo technographic
+    # evidence). "Checked, absent" is only settled at the end, if every
+    # evaluable source came up empty.
+    industry_checked = bool(sic_info)
     if sic_matched:
         pass
     elif company.get("industry"):
@@ -663,6 +669,7 @@ def build_evidence(company: dict, icp: dict, signal_rules: dict,
         # + boutique)"). A one-directional check (ICP string contained in the
         # short label) can never match; checking the short label against the
         # ICP string too lets "bank" correctly match "...Investment Banking...".
+        industry_checked = True
         ind = company["industry"].lower()
         match = next(
             (t for t in target_industries if t.lower() in ind or ind in t.lower()),
@@ -679,11 +686,10 @@ def build_evidence(company: dict, icp: dict, signal_rules: dict,
             # phrase things differently than the ICP file does.
             synonyms = [s for key, vals in _INDUSTRY_SYNONYMS.items() if key in ind for s in vals]
             match = next((t for t in target_industries if any(s in t.lower() for s in synonyms)), None)
-        evidence["industry_fit"] = (
-            {"fired": True, "why": f'Industry match: {company["industry"]}.', "source_url": "", "date": ""}
-            if match else {"fired": False}
-        )
-    elif signals:
+        if match:
+            evidence["industry_fit"] = {"fired": True, "why": f'Industry match: {company["industry"]}.',
+                                         "source_url": "", "date": ""}
+    if "industry_fit" not in evidence and signals:
         tech_terms = _terms_for_signal_type(signal_rules, "tech_stack_tell")
         term_hit = next((t for t in tech_terms if t.lower() in signal_texts), None)
         if term_hit:
@@ -694,11 +700,9 @@ def build_evidence(company: dict, icp: dict, signal_rules: dict,
                 "source_url": src.get("url", ""), "date": str(src.get("detected_at", "")),
             }
         else:
-            evidence["industry_fit"] = {"fired": False}
-    elif sic_info:
-        # SIC was checked against an authoritative source and didn't match,
-        # and no fallback source was evaluable — that's "checked, absent",
-        # not no_evidence.
+            industry_checked = True
+    if "industry_fit" not in evidence and (industry_checked or signals):
+        # at least one source was evaluable and none matched — checked, absent
         evidence["industry_fit"] = {"fired": False}
     # else: nothing evaluable at all -> stays absent -> no_evidence
 
