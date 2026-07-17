@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import {
   Briefcase, ExternalLink, Users, Building2, Radar, ShieldCheck,
   CheckCircle2, Rocket, Crosshair, LayoutGrid, ListChecks, Target, Mail, Layers,
+  RefreshCw, ArrowDown,
 } from 'lucide-react'
 import { toast } from '../components/Toast'
 
@@ -92,10 +93,11 @@ interface QuadSciData {
   contacts_by_company?: Record<string, Contact[]>
 }
 
-type Tab = 'overview' | 'rules' | 'prospects' | 'signals' | 'contacts' | 'emails' | 'sequences'
+type Tab = 'overview' | 'workflow' | 'rules' | 'prospects' | 'signals' | 'contacts' | 'emails' | 'sequences'
 
 const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: 'overview',  label: 'Overview',        icon: <LayoutGrid size={14} /> },
+  { id: 'workflow',  label: 'The Loop',        icon: <RefreshCw size={14} /> },
   { id: 'rules',     label: 'Signal Rules',    icon: <ListChecks size={14} /> },
   { id: 'prospects', label: 'Scored Prospects', icon: <Target size={14} /> },
   { id: 'signals',   label: 'Live Signals',    icon: <Radar size={14} /> },
@@ -106,6 +108,35 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return <h2 style={{ fontSize: 15, fontWeight: 700, color: C.text, margin: '0 0 12px' }}>{children}</h2>
+}
+
+function StageBlock({ n, title, what, live, handoff, isFeedback }: {
+  n: number; title: string; what: React.ReactNode; live: React.ReactNode
+  handoff: React.ReactNode; isFeedback?: boolean
+}) {
+  const label = (t: string) => (
+    <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.08em', color: '#047857', marginBottom: 6 }}>{t}</div>
+  )
+  return (
+    <div>
+      <div style={{ border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden', background: C.card }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', background: '#f8fafc', borderBottom: `1px solid ${C.border}` }}>
+          <span style={{ width: 24, height: 24, borderRadius: 999, background: C.primary, color: '#fff', fontSize: 12.5, fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{n}</span>
+          <span style={{ fontSize: 14.5, fontWeight: 700, color: C.text }}>{title}</span>
+        </div>
+        <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div>{label('WHAT HAPPENS HERE')}<div style={{ fontSize: 12.5, color: C.textMute, lineHeight: 1.55 }}>{what}</div></div>
+          <div>{label('WHAT ACTUALLY HAPPENED — LIVE RUN')}<div style={{ fontSize: 12.5, color: C.text, lineHeight: 1.55 }}>{live}</div></div>
+        </div>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, margin: '10px 0 18px', padding: '10px 14px', background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: 10 }}>
+        <ArrowDown size={15} color="#047857" style={{ flexShrink: 0, marginTop: 2, transform: isFeedback ? 'rotate(180deg)' : 'none' }} />
+        <div style={{ fontSize: 12, color: '#065f46', lineHeight: 1.55 }}>
+          <span style={{ fontWeight: 700 }}>{isFeedback ? 'FEEDBACK → ' : 'HANDOFF → '}</span>{handoff}
+        </div>
+      </div>
+    </div>
+  )
 }
 
 function TagList({ items, color = C.primary }: { items?: string[]; color?: string }) {
@@ -420,6 +451,71 @@ export default function QuadSci() {
         </div>
       </div>
       </>}
+
+      {/* ── The Loop tab: 4 stages + data flow ── */}
+      {tab === 'workflow' && (
+      <div style={{ ...card, marginBottom: 16 }}>
+        <SectionTitle>The Loop — signal to campaign, one connected system</SectionTitle>
+        <p style={{ fontSize: 12.5, color: C.textMute, margin: '-6px 0 18px', lineHeight: 1.55 }}>
+          Each stage consumes exactly what the previous stage produced. The evidence is never summarized
+          away — the same dated, cited signal records that score an account also write its email and sit
+          next to it in the review queue.
+        </p>
+
+        <StageBlock n={1} title="Detect Signal Cluster"
+          what={<>Five free sources are monitored continuously — ATS job boards (keyless JSON), SEC 8-K
+            Item 5.02 filings, the layoffs tracker, date-gated G2/Reddit pain language, and the Wayback
+            churn watch on competitor customer walls. Every detection becomes a dated, cited signal
+            record. One signal parks an account in monitor; two independent signal types inside 90 days
+            declare intent.</>}
+          live={<>~11,000 raw signals this scan → 681 classified. Real catches: Patreon and Chatwork
+            removed from Pendo&apos;s customer wall while it grew 118→127; Qualys and Trimble 8-K officer
+            changes; Cloudflare&apos;s May 2026 workforce reduction; Demandbase posting a VP Revenue
+            Operations role.</>}
+          handoff={<>Candidate accounts, each carrying its full signal records
+            — type, evidence text, source URL, date, confidence — flow to scoring. Nothing is summarized away.</>} />
+
+        <StageBlock n={2} title="Score & Filter Accounts"
+          what={<>Hard ICP filters run first and disqualify regardless of signals: not B2B SaaS, under
+            200 employees, pre-Series B, no CS function, agencies/partners/customers. Survivors are scored
+            by the weighted rubric with time decay; tier = points as a share of evaluable weight. Buyers
+            found free: team pages, LinkedIn, Apollo free tier, email-pattern inference.</>}
+          live={<>{allProspects.length} scored prospects on this board — {visibleProspects.length} above
+            zero, {allProspects.filter(p => p.tier.includes('TIER 2')).length} TIER 2 qualified. Hard
+            filters visibly disqualified Rivian (layoff fired — but an EV maker), Surf Air, ClarityQ.
+            {Object.keys(contactsByCompany).length} companies carry named contacts; ~90 emails filled at
+            $0 via pattern inference.</>}
+          handoff={<>For every account clearing the gate (tier ≥ 2, ≥2 citations, named buyer): the full
+            scoring trace — fired rules, why-text, citations, dates — plus the buyer. That trace IS the
+            payload the copy prompt receives.</>} />
+
+        <StageBlock n={3} title="Generate Personalized Copy"
+          what={<>The Stage-2 trace is injected verbatim into the prompt, alongside product context in
+            quadsci.ai&apos;s own words (Growth AI / Cohorts AI, 90%+ accuracy 9–18 months ahead,
+            telemetry vs CRM-derived guesswork). Three mechanical gates before any human sees it:
+            grounding (copy must quote real evidence), minimum length, banned vocabulary. Failures are
+            held back — visibly.</>}
+          live={<>{data.hooks.length} grounded emails on this board. Flagship: &quot;Yasuyuki, Pendo
+            records what happened but can&apos;t predict what&apos;s coming with your customers.&quot; —
+            the churn-watch evidence as the first line. The audit of ~100 hooks regenerated 1 truncated
+            body and held 10 as ungrounded template copy.</>}
+          handoff={<>One staged row per approved contact: hook + 5-touch sequence + every gate result +
+            the inherited evidence trace. Copy never travels without the evidence that justified it.</>} />
+
+        <StageBlock n={4} title="Stage the Campaign" isFeedback
+          what={<>A review queue where each row shows the copy AND the evidence that produced it — the
+            reviewer judges the claim, not the prose. At cold start nothing auto-sends; C-level
+            recipients, pain-derived copy, and pattern-inferred emails always route to human review. A
+            signal type earns auto-send only after ~50 reviewed sends with reply rate above baseline.</>}
+          live={<>{sequencedHooks.length} five-touch sequences staged (email → LinkedIn → email naming
+            Growth AI → LinkedIn → breakup). Held-back copy sits visibly alongside — including a
+            truthful-but-lexically-ungrounded Cloudflare hook: the gate working as designed. Nothing has
+            auto-sent, by policy.</>}
+          handoff={<>Every send logs reply / meeting / bounce, tagged by the signal type that sourced the
+            account. Monthly, reply rate by signal type reweights the Stage-2 rubric and reprioritizes
+            Stage-1 sources. Detection → scoring → copy → outcome → detection. The loop is closed.</>} />
+      </div>
+      )}
 
       {/* ── Signal Rules tab ── */}
       {tab === 'rules' && (
