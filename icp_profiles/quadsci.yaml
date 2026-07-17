@@ -1,12 +1,16 @@
 meta:
   company: QuadSci
   domain: quadsci.ai
-  status: researched — verified via quadsci.ai, CB Insights, AlleyWatch, BusinessWire
+  status: aligned to QuadSci's own ICP statement (GTM Engineer exercise brief) +
+    quadsci.ai site language; earlier bands ($20M-$500M ARR, Series C+) were
+    news-derived and are superseded by the company's stated ICP
 category_terms:
 - Customer Intelligence AI
-- Revenue Orchestration
+- Growth AI
+- Cohorts AI
 - Churn Prediction
 - Product Telemetry Analytics
+- Revenue Orchestration
 target_industries:
 - Infrastructure / DevTools SaaS
 - Data / MDM / Integration Platforms
@@ -22,18 +26,22 @@ current_clients:
 buyer_personas:
   primary:
   - Chief Revenue Officer (CRO)
-  - Head of RevOps / VP RevOps
+  - SVP / VP Sales
+  - VP / Head of RevOps
+  - Director of Revenue Operations
   secondary:
-  - Chief Customer Officer (CCO) / Head of Customer Success
-  - Chief Marketing Officer (CMO)
+  - Chief Customer Officer (CCO) / VP Customer Success
+  - CS Operations lead
   internal_ally:
   - Chief Product Officer (CPO) / Head of Product
+  - Chief Marketing Officer (CMO)
 identification_criteria:
   firmographic:
-  - $20M-$500M+ ARR
-  - Series C or later (or later-stage private/public)
-  - Subscription or usage-based pricing model
-  - Genuine product-usage telemetry layer (not a services business)
+  - B2B SaaS (subscription software product)
+  - 200+ employees (sweet spot 200-500)
+  - Series B or later
+  - Ideally $50M+ ARR
+  - Existing CS AND Sales teams (a real renewal motion to improve)
   technographic:
   - Gainsight
   - Pendo
@@ -43,22 +51,42 @@ identification_criteria:
   - Clari
   - Salesforce
 excluded_segments:
-- Services businesses
-- Low-telemetry SaaS (thin usage data)
-- SMB / PLG-only companies without a formal CS motion
-- Non-software companies
+- Non-B2B-SaaS (no subscription software product)
+- Under 200 employees
+- Pre-Series B
+- No CS function (no renewal motion, no buyer)
+- Services / consulting / staffing businesses
+- QuadSci partners and existing customers
+# Competitors per QuadSci's own brief: legacy players + AI-native entrants.
+# NOTE: Gainsight, Clari, Pendo also appear on quadsci.ai as INTEGRATION
+# partners (QuadSci ingests from them) — copy must say "make your stack
+# predictive", never "rip out your stack".
 competitor_products:
-- Pendo
 - Gainsight
-- CustomerGauge
-- Swirl
-- Public Comps
-- Profisee
+- ChurnZero
+- Clari
+- Hook
+- Reef
+- Magnify
+_product_language:  # exact site language — copy generation must draw from these
+  products:
+    Growth AI: predictive revenue intelligence — forecasts customer growth, contraction, and churn (CRO / VP Sales / CS leaders)
+    Cohorts AI: intelligent behavioral segmentation tying product adoption to ARR (CPO / CMO)
+  claims:
+  - 90%+ growth and churn accuracy
+  - predictions 9-18 months in advance of renewal
+  - 15% average ARR growth across churn prevention and expansion
+  - 11 trillion telemetry events processed
+  phrases:
+  - See risk early. Act while there's still time.
+  - Customer Intelligence AI for GTM Teams
+  - grounded in real user behavior
+  - product-usage intelligence versus CRM-derived guesswork
+  differentiator: ingests raw product telemetry, not CRM/CS-platform data scored with human-built rules
 _evidence:
   sources:
   - https://quadsci.ai/
-  - https://www.cbinsights.com/company/quadsciai
-  - https://www.alleywatch.com/2026/02/quadsci-customer-intelligence-ai-saas-churn-prediction-product-telemetry-analytics-revenue-retention-sean-murray-dan-harmeson/
+  - QuadSci GTM Engineer Candidate Exercise brief (ICP + competitor set, verbatim)
   - https://www.businesswire.com/news/home/20260217365560/en/QuadSci-the-Most-Predictive-and-Prescriptive-AI-For-Customer-Intelligence-Raises-$8m-Series-A
   founders: Dan Harmeson and Sean Murray (both ex-Elastic, ex-MuleSoft)
   funding: $10.1M total raised, $8M Series A (Feb 2026) led by Crosslink Capital

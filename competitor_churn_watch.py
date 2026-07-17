@@ -42,14 +42,25 @@ _PAUSE = 2.0          # polite pacing between archive.org requests
 _MIN_NAMES = 25       # a snapshot with fewer extracted names isn't a logo wall
 _COMPARABLE = 0.6     # newer count must be >= 60% of older count to diff
 
-# Competitor customer/case-study pages for the QuadSci ICP
-# (icp_profiles/quadsci.yaml competitor_products).
+# Competitor customer/case-study pages for the QuadSci ICP — the six
+# competitors QuadSci itself names (legacy: Gainsight/ChurnZero/Clari;
+# AI-native: Hook/Reef/Magnify), plus adjacent analytics vendors whose
+# walls have usable archive depth. Coverage reality (probed 2026-07):
+# only mature server-rendered walls (Pendo, Totango) yield diffable
+# history today — the AI-natives have no archived customer pages yet and
+# Gainsight/ChurnZero render client-side. The watch still registers them
+# all: it accrues its own snapshot history from the day it's turned on;
+# the public archive only looks backward for incumbents.
 PAGES = [
-    "pendo.io/customers/",
     "gainsight.com/customers/",
-    "totango.com/customers",
     "churnzero.com/customers/",
-    "customergauge.com/customers",
+    "clari.com/customers/",
+    "usehook.com/customers",
+    "reef.ai/customers",
+    "magnify.io/customers",
+    # adjacent analytics vendors with usable archive depth
+    "pendo.io/customers/",
+    "totango.com/customers",
 ]
 
 _JUNK = re.compile(r"logo|icon|arrow|image|badge|avatar|photo|screenshot|customer story|"

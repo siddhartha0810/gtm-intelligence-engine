@@ -144,13 +144,36 @@ signal_rules:
     tooling — timing signal for an in-flight buying process.
   detect:
   - migrating from Gainsight
+  - migrating from ChurnZero
+  - switching from Clari
   - switching from Pendo
   - QBR prep
   - manual churn analysis
   - removed from Pendo
   - removed from Gainsight
+  - removed from ChurnZero
+  - removed from Clari
   - removed from Totango
   confidence: 0.55
+
+- type: renewal_window_entry
+  description: "THE USP-TIED SIGNAL — the account signed or went live on its CS/
+    revenue platform 9-18 months ago (dated press release, case-study publish
+    date, or first appearance of its logo on a vendor's customer page via the
+    Wayback Machine). QuadSci's core claim is 90%+ churn/growth prediction 9-18
+    months IN ADVANCE of renewal ('See risk early. Act while there's still
+    time.') — so an account entering that pre-renewal window right now is the
+    only moment the prediction changes the outcome instead of explaining it
+    afterward. For a CRO: 'your next renewal cycle is already being decided in
+    this quarter's usage data — you just can't see it yet.'"
+  detect:
+  - goes live with
+  - selects Gainsight
+  - selects ChurnZero
+  - deploys Clari
+  - announces partnership with
+  - case study published
+  confidence: 0.70
 
 - type: competitor_churn_watch
   description: Churn detection pointed at COMPETITORS — Wayback Machine diffs of

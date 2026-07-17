@@ -37,27 +37,34 @@ PERSONA_PATTERNS = [
 ]
 
 PRODUCT_CONTEXT = """
-QuadSci — predictive revenue intelligence AI for B2B SaaS companies. Analyzes
-product telemetry, CRM data, and customer engagement signals to forecast
-churn and expansion 12 months ahead of renewal (94% accuracy claimed).
-Founded 2023 by Dan Harmeson and Sean Murray (both ex-Elastic, ex-MuleSoft).
-$10.1M raised, $8M Series A (Feb 2026, Crosslink Capital). Customers include
-Clari, Reltio, Movable Ink, Boomi, Tenable. Named Machine Learning Company of
-the Year, 2026 AI Breakthrough Awards. Pitch: eliminate surprise churn and
-uncover growth by grounding customer intelligence in actual product usage,
-not CRM notes or anecdote.
+QuadSci — Customer Intelligence AI for GTM Teams (quadsci.ai). Two products:
+Growth AI (predictive revenue intelligence for CROs, VP Sales, and CS leaders —
+forecasts customer growth, contraction, and churn) and Cohorts AI (behavioral
+segmentation tying product adoption to ARR, for CPOs/CMOs). Core claims, in
+the site's own words: 90%+ growth and churn accuracy, predictions 9-18 months
+in advance of renewal, 15% average ARR growth across churn prevention and
+expansion, 11 trillion telemetry events processed. Tagline: "See risk early.
+Act while there's still time." Differentiator: predictions grounded in real
+user behavior — raw product telemetry — not CRM-derived guesswork scored with
+human-built rules. Works WITH the existing stack (integrates with Gainsight,
+Clari, Pendo, Salesforce, Mixpanel, Amplitude) — makes it predictive rather
+than replacing it. Customers include Clari, Reltio, Movable Ink, Boomi,
+Tenable. $8M Series A (Feb 2026, Crosslink Capital).
 """.strip()
 
 ICP_RESEARCH = """
-Target: B2B SaaS companies, $20M-$500M ARR, Series C or later, subscription
-or usage-based pricing, with a real product-usage telemetry layer. Buyers:
-CRO, Head of RevOps/VP RevOps (primary); CCO/Head of Customer Success, CMO
-(secondary). These companies typically already run product analytics or CS
-tooling (Gainsight, Pendo, Mixpanel, Clari) and are under investor pressure
-to prove efficient growth and protect net revenue retention — not just grow
-top-line. A recent funding round, a new CRO/CCO hire, or active RevOps/CS
-hiring signals exactly this moment: fresh scrutiny on retention and
-expansion economics.
+Target (QuadSci's own ICP statement): B2B SaaS companies with 200+ employees
+(sweet spot 200-500), Series B or later, ideally $50M+ ARR, with existing CS
+AND Sales teams. Primary buyers: the CRO org — CRO, SVP/VP Sales, VP/Head of
+RevOps, Director of Revenue Operations. CS leaders (CCO, VP CS) are secondary.
+The CRO's specific pain: renewals get decided by customer behavior 9-18 months
+before the renewal date, but the forecast is built from CRM fields and CS
+health scores — human-built rules on lagging data — so churn arrives as a
+surprise and expansion is found too late. These companies already run
+Gainsight/Clari/Pendo-class tooling and still can't see risk early; the
+tooling records what happened, it doesn't predict what's coming. A Director+
+RevOps hire, NRR pressure in public statements, or entering the 9-18-month
+pre-renewal window all mark the moment this pain is owned and budgeted.
 """.strip()
 
 
