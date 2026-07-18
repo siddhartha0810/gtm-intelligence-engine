@@ -110,9 +110,9 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
   return <h2 style={{ fontSize: 15, fontWeight: 700, color: C.text, margin: '0 0 12px' }}>{children}</h2>
 }
 
-function StageBlock({ n, title, what, live, handoff, isFeedback }: {
-  n: number; title: string; what: React.ReactNode; live: React.ReactNode
-  handoff: React.ReactNode; isFeedback?: boolean
+function StageBlock({ n, title, deliverables, what, live, details, handoff, isFeedback }: {
+  n: number; title: string; deliverables: string[]; what: React.ReactNode; live: React.ReactNode
+  details?: React.ReactNode; handoff: React.ReactNode; isFeedback?: boolean
 }) {
   const label = (t: string) => (
     <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.08em', color: '#047857', marginBottom: 6 }}>{t}</div>
@@ -120,12 +120,20 @@ function StageBlock({ n, title, what, live, handoff, isFeedback }: {
   return (
     <div>
       <div style={{ border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden', background: C.card }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', background: '#f8fafc', borderBottom: `1px solid ${C.border}` }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', background: '#f8fafc', borderBottom: `1px solid ${C.border}`, flexWrap: 'wrap' }}>
           <span style={{ width: 24, height: 24, borderRadius: 999, background: C.primary, color: '#fff', fontSize: 12.5, fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{n}</span>
           <span style={{ fontSize: 14.5, fontWeight: 700, color: C.text }}>{title}</span>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginLeft: 'auto' }}>
+            {deliverables.map(d => (
+              <span key={d} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 10.5, fontWeight: 600, color: '#047857', background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: 999, padding: '2px 8px' }}>
+                <CheckCircle2 size={10} /> {d}
+              </span>
+            ))}
+          </div>
         </div>
         <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div>{label('WHAT HAPPENS HERE')}<div style={{ fontSize: 12.5, color: C.textMute, lineHeight: 1.55 }}>{what}</div></div>
+          {details && <div>{label('THE ARTIFACT')}{details}</div>}
           <div>{label('WHAT ACTUALLY HAPPENED — LIVE RUN')}<div style={{ fontSize: 12.5, color: C.text, lineHeight: 1.55 }}>{live}</div></div>
         </div>
       </div>
@@ -137,6 +145,31 @@ function StageBlock({ n, title, what, live, handoff, isFeedback }: {
       </div>
     </div>
   )
+}
+
+// small building blocks for the on-screen deliverable artifacts
+function MiniTable({ head, rows }: { head: string[]; rows: (string | number)[][] }) {
+  return (
+    <div style={{ overflowX: 'auto', border: `1px solid ${C.border}`, borderRadius: 8 }}>
+      <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: 12 }}>
+        <thead><tr style={{ background: '#f1f5f9' }}>
+          {head.map(h => <th key={h} style={{ textAlign: 'left', padding: '7px 10px', fontWeight: 700, color: C.text, borderBottom: `1px solid ${C.border}` }}>{h}</th>)}
+        </tr></thead>
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={i} style={{ borderBottom: i < rows.length - 1 ? `1px solid ${C.border}` : 'none' }}>
+              {r.map((c, j) => <td key={j} style={{ padding: '7px 10px', color: j === 0 ? C.text : C.textMute, fontWeight: j === 0 ? 600 : 400 }}>{c}</td>)}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+const codeBox: React.CSSProperties = {
+  background: '#0f172a', color: '#e2e8f0', fontFamily: 'ui-monospace, Menlo, monospace',
+  fontSize: 11, lineHeight: 1.5, padding: '12px 14px', borderRadius: 8, whiteSpace: 'pre-wrap',
+  overflowX: 'auto', maxHeight: 320, overflowY: 'auto',
 }
 
 function TagList({ items, color = C.primary }: { items?: string[]; color?: string }) {
@@ -469,24 +502,73 @@ export default function QuadSci() {
         </p>
 
         <StageBlock n={1} title="Detect Signal Cluster"
+          deliverables={['5 signals + sources', 'cluster definition', 'USP-tied signal']}
           what={<>Five free sources are monitored continuously — ATS job boards (keyless JSON), SEC 8-K
             Item 5.02 filings, the layoffs tracker, date-gated G2/Reddit pain language, and the Wayback
             churn watch on competitor customer walls. Every detection becomes a dated, cited signal
             record. One signal parks an account in monitor; two independent signal types inside 90 days
-            declare intent.</>}
+            declare intent. (Full 5-signal table with CRO-language meaning + free source per signal is on
+            the <strong>Signal Rules</strong> tab.)</>}
+          details={<>
+            <div style={{ fontSize: 12, color: C.textMute, marginBottom: 8, lineHeight: 1.55 }}>
+              <strong style={{ color: C.text }}>Cluster definition</strong> — a single signal is noise; a
+              cluster is intent:
+            </div>
+            <MiniTable head={['Condition', 'Rule']} rows={[
+              ['Per-account trigger', '≥2 signals of DIFFERENT types within 90 days of each other'],
+              ['At least one', 'a pain or displacement signal (2 job posts = 1 event, not a cluster)'],
+              ['1 signal only', '→ account parks in MONITOR, nothing sent'],
+              ['Batch trigger', '5+ clustered accounts in a week → a campaign run'],
+              ['USP-tied signal', 'renewal-window entry: went live 9–18 mo ago = inside QuadSci’s prediction window'],
+            ]} />
+          </>}
           live={<>~11,000 raw signals this scan → 681 classified. Real catches: Chatwork removed from
             Pendo&apos;s customer wall (it grew 118→127, so a specific takedown); Qualys, Trimble,
-            Cloudflare and AppFolio 8-K officer changes; Cloudflare&apos;s May 2026 workforce reduction.
-            A cluster fires only when ≥2 <em>different</em> signal types land within 90 days of each
-            other — Qualys&apos;s hiring post + 8-K, 30 days apart, is a real one.</>}
+            Cloudflare and AppFolio 8-K officer changes; Cloudflare&apos;s May 2026 workforce reduction;
+            live RevOps hires — Demandbase (VP RevOps), Postman (Director CS-Ops), Vanta, Abnormal.
+            Qualys&apos;s hiring post + 8-K, 30 days apart, is a real cluster.</>}
           handoff={<>Candidate accounts, each carrying its full signal records
             — type, evidence text, source URL, date, confidence — flow to scoring. Nothing is summarized away.</>} />
 
         <StageBlock n={2} title="Score & Filter Accounts"
-          what={<>Hard ICP filters run first and disqualify regardless of signals: not B2B SaaS, under
-            200 employees, pre-Series B, no CS function, agencies/partners/customers. Survivors are scored
+          deliverables={['scoring rubric', 'hard filters', 'buyer ID', 'Stage-3 threshold']}
+          what={<>Hard ICP filters run first and disqualify regardless of signals. Survivors are scored
             by the weighted rubric with time decay; tier = points as a share of evaluable weight. Buyers
-            found free: team pages, LinkedIn, Apollo free tier, email-pattern inference.</>}
+            found free: team pages, LinkedIn, Apollo free tier, email-pattern inference (CRO org primary:
+            CRO / SVP-VP Sales / VP-Head-Director RevOps; CS secondary).</>}
+          details={<>
+            <div style={{ fontSize: 12, fontWeight: 700, color: C.text, margin: '0 0 6px' }}>Hard filters — disqualify before scoring (firm size · funding stage · GTM structure · tech stack)</div>
+            <MiniTable head={['Dimension', 'Disqualifier']} rows={[
+              ['Firm size', 'under 200 employees'],
+              ['Funding stage', 'pre-Series B'],
+              ['GTM structure', 'no CS function (no renewal motion = no buyer)'],
+              ['Business type', 'not B2B SaaS; agencies / partners / existing customers'],
+              ['Tech stack', 'no product-telemetry layer — nothing for Growth AI to read'],
+            ]} />
+            <div style={{ fontSize: 12, fontWeight: 700, color: C.text, margin: '12px 0 6px' }}>Scoring rubric (point system)</div>
+            <MiniTable head={['Signal / factor', 'Points']} rows={[
+              ['Legacy CS-platform friction / displacement', '+12'],
+              ['Public NRR / forecast pain, new CRO-CCO (8-K)', '+10'],
+              ['Director+ RevOps / CS-Ops hire', '+8'],
+              ['Renewal-window entry (USP-tied)', '+8'],
+              ['Cluster bonus (2+ types in 90d)', '+8'],
+              ['Firmographic fit (200–500 sweet spot; >2k → −2)', '+6'],
+              ['Named buyer on file', '+4'],
+              ['Decay: every dated trigger fades linearly over 365 days', ''],
+            ]} />
+            <div style={{ fontSize: 12, fontWeight: 700, color: C.text, margin: '12px 0 6px' }}>Tiers &amp; the Stage-3 spend threshold</div>
+            <MiniTable head={['Tier', 'Threshold', 'Action']} rows={[
+              ['TIER 1 — PRIORITY', '≥60%', 'Outreach this week'],
+              ['TIER 2 — QUALIFIED', '≥40%', 'Outreach this cycle → eligible for copy'],
+              ['TIER 3 — MONITOR', '≥20%', 'Watch for the cluster to complete'],
+              ['TIER 4', '<20%', 'Ignore'],
+            ]} />
+            <div style={{ fontSize: 11.5, color: C.textMute, marginTop: 8, lineHeight: 1.5 }}>
+              <strong>Spend AI credits only when:</strong> hard filters passed AND tier ≥ TIER 2 AND ≥2
+              independent citations AND a named CRO-org buyer. Copy costs pennies — the real cost of a bad
+              send is domain reputation, so the gate is evidence quality, not tokens.
+            </div>
+          </>}
           live={<>{scorable.filter(p => p.total_score > 0).length} scorable accounts,{' '}
             {allProspects.filter(p => p.tier.includes('TIER 2')).length} TIER 2 qualified
             (Cloudflare, Qualys, Trimble). Hard filters visibly disqualified {disqualified.length}{' '}
@@ -500,11 +582,41 @@ export default function QuadSci() {
             payload the copy prompt receives.</>} />
 
         <StageBlock n={3} title="Generate Personalized Copy"
+          deliverables={['worked email', 'the full prompt', 'personalize-at-scale']}
           what={<>The Stage-2 trace is injected verbatim into the prompt, alongside product context in
             quadsci.ai&apos;s own words (Growth AI / Cohorts AI, 90%+ accuracy 9–18 months ahead,
             telemetry vs CRM-derived guesswork). Three mechanical gates before any human sees it:
             grounding (copy must quote real evidence), minimum length, banned vocabulary. Failures are
-            held back — visibly.</>}
+            held back — visibly. (The worked email + 5-touch sequence render on the <strong>Emails</strong>
+            and <strong>Sequences</strong> tabs.)</>}
+          details={<>
+            <div style={{ fontSize: 12, fontWeight: 700, color: C.text, margin: '0 0 6px' }}>The production system prompt (verbatim)</div>
+            <div style={codeBox}>{`You are a senior GTM engineer writing hyper-personalised cold email HOOKS.
+A hook is the opening 1-2 sentences only — not a full email.
+
+ICP RESEARCH (ground your angles in this): {icp_research}
+
+HOOK RULES (non-negotiable):
+- EXACTLY ONE SENTENCE. The hook NAMES THE PROBLEM only — never the product.
+- Start with their first name. Max 20 words after the name. Plain vocabulary.
+- Pick ONE angle: Risk / Effort / Time / Cost / Identity / TwoTimelines
+- PHRASING: blame a shared enemy ("the spreadsheet"), never "you".
+  BUT/THEREFORE structure, not a flat list of facts.
+- GROUNDING: never invent a detail (report name, $ figure, deadline) not in
+  the evidence. A generic-but-true line beats a specific-but-invented one.
+- SPECIFICITY: if the evidence has a $ figure / investor / proper noun for THIS
+  company, anchor on it — the hook should make it obvious which company it is.
+- NEVER use: "leverage", "synergy", "quick question", "I wanted to reach out",
+  "hope this finds you", "just checking in"
+- Subject: under 8 words, no "?" or "!".`}</div>
+            <div style={{ fontSize: 11.5, color: C.textMute, margin: '8px 0 0', lineHeight: 1.5 }}>
+              <strong style={{ color: C.text }}>Personalize at scale.</strong> Per-account variables: name ·
+              company · verbatim signal evidence + dates · angle (by evidence type) · buyer-org framing
+              (CRO → Growth AI language; CPO/CMO → Cohorts AI). Templated: structure, gates, banned
+              vocabulary, cadence. The Stage-2 scoring trace (JSON of fired rules + citations) is fed
+              straight into the prompt — the same evidence that scored the account writes its email.
+            </div>
+          </>}
           live={<>{data.hooks.length} grounded emails on this board. Flagship: &quot;Yasuyuki, Pendo
             records what happened but can&apos;t predict what&apos;s coming with your customers.&quot; —
             the churn-watch evidence as the first line. The audit of ~100 hooks regenerated 1 truncated
@@ -513,10 +625,35 @@ export default function QuadSci() {
             the inherited evidence trace. Copy never travels without the evidence that justified it.</>} />
 
         <StageBlock n={4} title="Stage the Campaign" isFeedback
+          deliverables={['staging mechanism', 'auto-send logic', 'feedback loop', 'biggest risk']}
           what={<>A review queue where each row shows the copy AND the evidence that produced it — the
-            reviewer judges the claim, not the prose. At cold start nothing auto-sends; C-level
-            recipients, pain-derived copy, and pattern-inferred emails always route to human review. A
-            signal type earns auto-send only after ~50 reviewed sends with reply rate above baseline.</>}
+            reviewer judges the claim, not the prose. It&apos;s a working web page here; the design ports
+            to a Google Sheet review queue in an afternoon. Approve → the 5-touch sequence exports to a
+            free-tier sender or Apollo sequence.</>}
+          details={<>
+            <div style={{ fontSize: 12, fontWeight: 700, color: C.text, margin: '0 0 6px' }}>Auto-send vs. human review (nothing auto-sends at cold start)</div>
+            <MiniTable head={['Condition', 'Route']} rows={[
+              ['All gates + tier ≥2 + ≥2 citations + validated email + below C-level', 'Auto-send eligible'],
+              ['C-level recipient', 'Human review, always'],
+              ['Copy derived from pain-language evidence', 'Human review, always'],
+              ['Pattern-inferred (unvalidated) email', 'Human review'],
+              ['Graduation', 'a signal type earns auto-send only after ~50 reviewed sends beat baseline'],
+            ]} />
+            <div style={{ fontSize: 11.5, color: C.textMute, margin: '10px 0 0', lineHeight: 1.5 }}>
+              <strong style={{ color: C.text }}>Feedback loop.</strong> Every send logs reply / meeting /
+              bounce, tagged by the signal type that sourced the account. Monthly, reply-rate by signal
+              type reweights the Stage-2 rubric and reprioritizes Stage-1 sources — bounces trigger
+              email-pattern re-learning; &quot;not relevant&quot; replies extend the hard-filter list.
+            </div>
+            <div style={{ fontSize: 11.5, color: '#7f1d1d', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '9px 12px', margin: '10px 0 0', lineHeight: 1.5 }}>
+              <strong>Biggest risk — and it already happened.</strong> My top account (Skydio, 28 pts) owed
+              10 points to a customer complaint posted in <strong>2020</strong> — undated evidence was
+              bypassing decay and scoring like it was fresh. I shipped a date gate the same day (third-party
+              pain evidence must carry a machine-readable publish date, &lt;18 months); my #1 dropped two
+              tiers and the fix shipped anyway. Mitigations: human review on all pain-derived copy,
+              citations on every point, decay on every trigger.
+            </div>
+          </>}
           live={<>{sequencedHooks.length} five-touch sequences staged (email → LinkedIn → email naming
             Growth AI → LinkedIn → breakup). Held-back copy sits visibly alongside — including a
             truthful-but-lexically-ungrounded Cloudflare hook: the gate working as designed. Nothing has
