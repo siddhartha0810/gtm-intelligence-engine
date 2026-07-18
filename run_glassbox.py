@@ -415,8 +415,18 @@ def fetch_corroboration(candidates: list, signal_rules: dict) -> dict:
         except Exception as e:
             print(f"  [{c['name']}] search failed: {e}")
             continue
+        # Attribution guard: a search for a generic-word company ("Interface",
+        # "Sauce", "Prove") returns funding/leadership news about OTHER
+        # companies that merely contain the word. Require the account's own
+        # name to actually appear in the article title before crediting the
+        # signal — same guard the G2/Reddit passes already use. Without it,
+        # "Interface" was credited an "Aina Raises $5.5M" round and rode a
+        # misattributed cluster to the #1 slot.
+        name_key = _normalize_name(c["name"])
         hits = []
         for a in articles:
+            if name_key not in _normalize_name(a.get("title", "")):
+                continue
             matched_term, _ = detect_campaign_product(a["title"], a.get("description", ""), all_terms)
             if matched_term:
                 hits.append({

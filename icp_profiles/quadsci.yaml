@@ -1,9 +1,9 @@
 meta:
   company: QuadSci
   domain: quadsci.ai
-  status: aligned to QuadSci's own ICP statement (GTM Engineer exercise brief) +
-    quadsci.ai site language; earlier bands ($20M-$500M ARR, Series C+) were
-    news-derived and are superseded by the company's stated ICP
+  status: aligned to QuadSci's own ICP statement (GTM Engineer exercise brief) + quadsci.ai
+    site language; earlier bands ($20M-$500M ARR, Series C+) were news-derived and
+    are superseded by the company's stated ICP
 category_terms:
 - Customer Intelligence AI
 - Growth AI
@@ -57,13 +57,6 @@ excluded_segments:
 - No CS function (no renewal motion, no buyer)
 - Services / consulting / staffing businesses
 - QuadSci partners and existing customers
-# Hard filters ENFORCED in code (run_glassbox.hard_filter) before any scoring —
-# an account matching any of these is DISQUALIFIED regardless of how loud its
-# signals are, and shown as such rather than deleted. Two layers: an auto rule
-# (industry markers that mean "not B2B SaaS") plus a reviewed override list for
-# accounts our thin free firmographics can't classify automatically. This is
-# how a real GTM engineer works — automate what the data allows, keep an
-# audited manual list for the rest.
 hard_filters:
   non_saas_industry_markers:
   - automotive
@@ -88,11 +81,12 @@ hard_filters:
     Botrista: beverage-robotics hardware — not B2B SaaS
     ElectronX: electricity-derivatives exchange — not B2B SaaS
     BackOps AI: seed-stage logistics automation — below the ICP floor
-    Patreon: B2C creator platform (B2C2B) — outside the B2B-SaaS core, kept only as a flagged edge case
-# Competitors per QuadSci's own brief: legacy players + AI-native entrants.
-# NOTE: Gainsight, Clari, Pendo also appear on quadsci.ai as INTEGRATION
-# partners (QuadSci ingests from them) — copy must say "make your stack
-# predictive", never "rip out your stack".
+    Patreon: B2C creator platform (B2C2B) — outside the B2B-SaaS core, kept only as
+      a flagged edge case
+    Interface: carpet/flooring manufacturer (NYSE TILE, SIC 2273) — not B2B SaaS
+    Bi Pendo: name-extraction artifact, not a real company
+    Lumion: seed-stage / ambiguous identity — below the ICP floor
+    Whatnot: B2C livestream marketplace — not B2B SaaS
 competitor_products:
 - Gainsight
 - ChurnZero
@@ -100,10 +94,12 @@ competitor_products:
 - Hook
 - Reef
 - Magnify
-_product_language:  # exact site language — copy generation must draw from these
+_product_language:
   products:
-    Growth AI: predictive revenue intelligence — forecasts customer growth, contraction, and churn (CRO / VP Sales / CS leaders)
-    Cohorts AI: intelligent behavioral segmentation tying product adoption to ARR (CPO / CMO)
+    Growth AI: predictive revenue intelligence — forecasts customer growth, contraction,
+      and churn (CRO / VP Sales / CS leaders)
+    Cohorts AI: intelligent behavioral segmentation tying product adoption to ARR
+      (CPO / CMO)
   claims:
   - 90%+ growth and churn accuracy
   - predictions 9-18 months in advance of renewal
@@ -114,7 +110,8 @@ _product_language:  # exact site language — copy generation must draw from the
   - Customer Intelligence AI for GTM Teams
   - grounded in real user behavior
   - product-usage intelligence versus CRM-derived guesswork
-  differentiator: ingests raw product telemetry, not CRM/CS-platform data scored with human-built rules
+  differentiator: ingests raw product telemetry, not CRM/CS-platform data scored with
+    human-built rules
 _evidence:
   sources:
   - https://quadsci.ai/
