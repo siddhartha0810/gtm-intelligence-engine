@@ -36,9 +36,9 @@ pipeline, too.
   startup raises). Independent evidence streams converging in a short window is what converts
   coincidence into intent — the same logic QuadSci applies to telemetry.
 
-**Live funnel from this week's run:** ~11,000 raw signals → 681 classified → 113 fit-candidates
-→ 47 with scored evidence → **9 above the outreach threshold**. The system's job is killing
-99.9% of signals.
+**Live funnel from this week's run:** ~11,000 raw signals → 681 classified → 115 candidates →
+7 hard-filtered out → 108 scored → **6 TIER 2/3, of which 3 are QUALIFIED for outreach**. The
+system's job is killing 99.9% of signals.
 
 ---
 
@@ -54,11 +54,14 @@ Checked before any scoring, via LinkedIn headcount, Crunchbase free profiles, an
 4. No visible CS function (no renewal motion to improve = no buyer)
 5. Services / consulting / staffing firms; QuadSci partners and existing customers (suppression list)
 
-These ran against my live board and disqualified real accounts my own detectors had surfaced —
-**Rivian** (layoff signal fired; EV maker, not SaaS), **Surf Air Mobility** (aviation),
-**ClarityQ** (seed-stage, <200 employees). The board displays them as HARD-FILTERED rather
-than deleting them: a filter you can't audit is a filter you can't trust. One borderline kept
-with a caveat: Patreon (subscription platform, telemetry-rich, but B2C2B — flagged, not hidden).
+These are **enforced in code** (`hard_filter()`, driven by `quadsci.yaml`), not just asserted —
+a matching account is recorded as DISQUALIFIED and skips scoring entirely. They ran against my
+live board and disqualified **7 accounts my own detectors had surfaced**: **Rivian** (layoff
+fired — but an EV maker), **Surf Air Mobility** (aviation), **Skydio** (drone hardware),
+**Patreon** and **Whatnot** (B2C), **ClarityQ** (seed-stage, <200 employees), and **Interface** —
+which briefly rode to #1 on a *misattributed* funding article before I caught it (see iteration
+note in Stage 3); it's a carpet manufacturer (NYSE TILE). The board shows all 7 with their reason
+rather than deleting them: a filter you can't audit is a filter you can't trust.
 
 ### Scoring rubric
 
@@ -177,6 +180,14 @@ are *integration partners* on the site — "make your stack predictive," never "
    "laid off 1,100 employees" — lexically different, semantically identical — and was held
    back. I kept the hold: false-positive holds are the acceptable failure direction. The fix
    (semantic grounding via embeddings) is on the with-more-budget list.
+5. **A generic-name account rode misattributed evidence to #1.** "Interface" scored top of the
+   board on an *"Aina Raises $5.5M"* funding article — a different company whose blurb merely
+   contained the word "interface." Root cause: the news-corroboration pass credited any article
+   that matched a signal term, without checking the article was actually *about* the account.
+   Fixed: the account's own name must now appear in the article title before the signal is
+   credited — the same guard the G2/Reddit passes already used. Interface then dropped out and
+   the hard filter caught it as a carpet manufacturer. This is the failure mode I'd watch most
+   closely at scale (see Stage 4 risk).
 
 ### Personalization at scale
 
@@ -245,14 +256,21 @@ free methods run dry.
 
 ## Appendix — live artifacts
 
-- **Funnel:** ~11,000 raw signals → 681 classified → 113 candidates → 47 scored → 9 actionable
-- **Current TIER 2 board (post hard-filter, post date-gate):** Qualys 27.1 (SIC-classified
-  security SaaS; 8-K officer change June 2026) · Trimble 26.6 (8-K May 2026) · Chatwork 22.0 ·
-  Patreon 22.0 (B2C2B caveat flagged) — every point linked to EDGAR, the layoffs tracker,
-  archived pages, or a live job post
-- **Churn watch live catch:** Patreon + Chatwork removed from Pendo's customer wall
-  (2024-09 → 2025-03, wall grew 118→127; before/after archive links)
-- **Held-back copy** left visible in the queue, including a truthful-but-lexically-ungrounded
-  Cloudflare hook — the gate working as designed
-- Full 5-touch Chatwork sequence, scoring traces, and the complete prompt/iteration history
-  available in the walkthrough
+- **Funnel:** ~11,000 raw signals → 681 classified → 115 candidates → 7 hard-filtered →
+  108 scored → 6 TIER 2/3 actionable
+- **TIER 2 — QUALIFIED (post hard-filter, post attribution-guard, post date-gate):**
+  Cloudflare 27.97 (May 2026 layoff of 1,100 + 8-K officer change + a 3-type cluster within 11
+  days) · Qualys 27.01 (SIC-classified security SaaS + 8-K + cluster) · Trimble 26.58 (Gainsight
+  user + 8-K + cluster) — every point linked to EDGAR, the layoffs tracker, or a live job post
+- **TIER 3 — MONITOR:** Chatwork 22.0 (Pendo customer-wall removal) · AppFolio 21.56 (8-K +
+  cluster, VP RevOps on file) · Hush 13.84
+- **The cluster rule** fires only on ≥2 *different* signal types within **90 days of each other**,
+  window still live — two job posts are one hiring event, not a cluster (matches the brief exactly)
+- **Churn watch live catch:** Chatwork removed from Pendo's customer wall (2024-09 → 2025-03,
+  wall grew 118→127; before/after archive links). Patreon was removed too but the hard filter
+  correctly disqualified it as B2C — the watch surfaces candidates, ICP discipline still governs.
+- **7 accounts shown as DISQUALIFIED** with reasons (Rivian, Surf Air, Skydio, Patreon, Whatnot,
+  ClarityQ, Interface) — the hard filter is visible on the board, not hidden
+- **Held-back copy** left visible in the queue: of the 5 flagship-board hooks, Qualys and Chatwork
+  passed grounding; Cloudflare, Trimble, and AppFolio were held for writing generic copy that
+  quoted no distinctive evidence term — the gate working as designed
