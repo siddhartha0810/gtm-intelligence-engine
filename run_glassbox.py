@@ -592,10 +592,28 @@ def fetch_reddit_pain_corroboration(candidates: list, signal_rules: dict) -> dic
     return results
 
 
+def _cluster_type(source: str, signal_type: str) -> str:
+    """Coarse signal category for cluster diversity. Two LinkedIn job posts
+    are the SAME category (one hiring event, not a cluster); a job post + a
+    funding item + a churn-watch removal are three DIFFERENT categories."""
+    s = (source or "").lower()
+    if s == "competitor_churn":
+        return "displacement"
+    if s in ("layoffs", "layoff"):
+        return "cost_pressure"
+    if s == "sec_filing":
+        return "sec"
+    if s == "news":
+        return "news"
+    return "hiring"  # linkedin/indeed/ats/adzuna job postings
+
+
 def build_evidence(company: dict, icp: dict, signal_rules: dict,
                     sec_hits_by_name: dict, signals: list, contacts: list,
                     corroboration: list | None = None,
-                    sec_sic_by_name: dict | None = None) -> dict:
+                    sec_sic_by_name: dict | None = None,
+                    cluster_window_days: int = 90,
+                    cluster_fresh_days: int = 180) -> dict:
     """One evidence dict per company, keyed by rule condition. A missing key
     means no_evidence — the caller (glassbox_scorer) treats that as excluded
     from scoring, not a failure.
@@ -835,11 +853,13 @@ def build_evidence(company: dict, icp: dict, signal_rules: dict,
 
     dated_events = [
         {"date": s["detected_at"], "url": s.get("url", ""),
-         "label": s.get("evidence") or s.get("job_title") or "signal"}
+         "label": s.get("evidence") or s.get("job_title") or "signal",
+         "ctype": _cluster_type(s.get("source", ""), s.get("signal_type", ""))}
         for s in signals if s.get("detected_at")
     ] + [
         {"date": h["posted_date"], "url": h.get("url", ""),
-         "label": h.get("title") or h.get("term") or "corroboration"}
+         "label": h.get("title") or h.get("term") or "corroboration",
+         "ctype": h.get("type", "news")}
         for h in deduped_corroboration if h.get("posted_date")
     ]
     if dated_events:
@@ -855,17 +875,54 @@ def build_evidence(company: dict, icp: dict, signal_rules: dict,
                     dt = parsedate_to_datetime(str(d)).replace(tzinfo=None)
                 except Exception:
                     continue
-            parsed.append({"dt": dt, "url": ev["url"], "label": ev["label"]})
+            parsed.append({"dt": dt, "url": ev["url"], "label": ev["label"], "ctype": ev["ctype"]})
         if parsed:
             parsed.sort(key=lambda e: e["dt"], reverse=True)
             most_recent = parsed[0]["dt"]
             days_ago = (datetime.now() - most_recent).days
+            distinct_types = {e["ctype"] for e in parsed}
+
+            # Cluster (per QuadSci's brief): "a cluster firing on the same
+            # account within a short window is intent." Implemented literally,
+            # not as a bare event count:
+            #   1. ≥2 DIFFERENT signal categories (two job posts = one hiring
+            #      event, not a cluster),
+            #   2. two of those different-category events fall within
+            #      cluster_window_days of EACH OTHER (proximity = intent), and
+            #   3. the window is still live (most recent ≤ cluster_fresh_days).
+            best_gap = None
+            for i in range(len(parsed)):
+                for j in range(i + 1, len(parsed)):
+                    if parsed[i]["ctype"] == parsed[j]["ctype"]:
+                        continue
+                    gap = abs((parsed[i]["dt"] - parsed[j]["dt"]).days)
+                    if best_gap is None or gap < best_gap:
+                        best_gap = gap
+            has_diverse_cluster = (
+                len(distinct_types) >= 2
+                and best_gap is not None
+                and best_gap <= cluster_window_days
+                and days_ago <= cluster_fresh_days
+            )
+            if has_diverse_cluster:
+                why = (f"{len(distinct_types)} distinct signal types cluster within "
+                       f"{best_gap}d of each other (window {cluster_window_days}d), "
+                       f"most recent {days_ago}d ago — an active buying motion.")
+            elif len(distinct_types) < 2:
+                why = (f"{len(parsed)} event(s) but only 1 signal type — not a cluster "
+                       f"(a cluster needs ≥2 different signal types).")
+            elif best_gap is not None and best_gap > cluster_window_days:
+                why = (f"{len(distinct_types)} signal types present but "
+                       f"{best_gap}d apart — outside the {cluster_window_days}d "
+                       f"cluster window.")
+            else:
+                why = f"{len(parsed)} event(s), most recent {days_ago}d ago — no live cluster."
             evidence["buying_window_timing"] = {
-                "fired": len(parsed) >= 2 and days_ago <= 270,
-                "why": f"{len(parsed)} trigger events, most recent {days_ago} days ago.",
+                "fired": has_diverse_cluster,
+                "why": why,
                 "source_url": "", "date": str(most_recent),
                 "events": [
-                    {"label": str(e["label"])[:160], "url": e["url"], "date": str(e["dt"])}
+                    {"label": f"[{e['ctype']}] " + str(e["label"])[:150], "url": e["url"], "date": str(e["dt"])}
                     for e in parsed
                 ],
             }
@@ -881,6 +938,31 @@ def build_evidence(company: dict, icp: dict, signal_rules: dict,
         }
 
     return evidence
+
+
+def hard_filter(company: dict, icp: dict) -> str | None:
+    """ICP hard filter — runs BEFORE scoring. Returns a disqualification
+    reason string, or None if the account passes. An account matching any
+    rule is out regardless of how loud its signals are (the exercise's
+    Stage-2 requirement). Two layers, both config-driven from
+    icp.hard_filters: an auto industry-marker rule for accounts we can
+    classify, and a reviewed override list for the ones our thin free
+    firmographics can't. Accounts we simply lack data on pass (benefit of
+    the doubt) rather than being silently dropped."""
+    from rapidfuzz import fuzz as _fuzz
+    hf = (icp or {}).get("hard_filters", {}) or {}
+    name = (company.get("name") or "").strip()
+
+    for bad_name, reason in (hf.get("disqualify_companies", {}) or {}).items():
+        if _fuzz.token_sort_ratio(name.lower(), bad_name.lower()) >= 88:
+            return reason
+
+    industry = (company.get("industry") or "").lower()
+    if industry:
+        for marker in hf.get("non_saas_industry_markers", []) or []:
+            if marker.lower() in industry:
+                return f"industry '{company['industry']}' — not B2B SaaS ({marker})"
+    return None
 
 
 def score_campaign(campaign_id: int, use_sec: bool = True, use_g2: bool = True,
@@ -902,6 +984,30 @@ def score_campaign(campaign_id: int, use_sec: bool = True, use_g2: bool = True,
     if not candidates:
         print("[run_glassbox] no companies yet — run a scan for this campaign first")
         return []
+
+    # Stage-2 hard filter FIRST — disqualified accounts are recorded (shown as
+    # DISQUALIFIED, not deleted) and never enter scoring or the expensive
+    # corroboration searches below.
+    survivors, disqualified = [], []
+    for c in candidates:
+        reason = hard_filter(c, icp)
+        if reason:
+            disqualified.append((c, reason))
+        else:
+            survivors.append(c)
+    for c, reason in disqualified:
+        db.upsert_account_prospect(
+            campaign_id=campaign_id, company_id=c["id"],
+            total_score=0.0, evaluable_weight=0.0,
+            tier="DISQUALIFIED — hard filter",
+            trace=[{"id": "HF", "condition": "hard_filter", "state": "fired",
+                    "points": 0, "why": f"Hard-filtered before scoring: {reason}",
+                    "source_url": ""}],
+        )
+    print(f"[run_glassbox] hard filter: {len(disqualified)} disqualified, "
+          f"{len(survivors)} proceed to scoring"
+          + (f" (out: {', '.join(c['name'] for c, _ in disqualified)})" if disqualified else ""))
+    candidates = survivors
 
     sec_hits_by_name = fetch_sec_hits(icp) if use_sec else {}
     corroboration_by_name = fetch_corroboration(candidates, signal_rules)

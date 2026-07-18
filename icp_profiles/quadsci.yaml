@@ -57,6 +57,38 @@ excluded_segments:
 - No CS function (no renewal motion, no buyer)
 - Services / consulting / staffing businesses
 - QuadSci partners and existing customers
+# Hard filters ENFORCED in code (run_glassbox.hard_filter) before any scoring —
+# an account matching any of these is DISQUALIFIED regardless of how loud its
+# signals are, and shown as such rather than deleted. Two layers: an auto rule
+# (industry markers that mean "not B2B SaaS") plus a reviewed override list for
+# accounts our thin free firmographics can't classify automatically. This is
+# how a real GTM engineer works — automate what the data allows, keep an
+# audited manual list for the rest.
+hard_filters:
+  non_saas_industry_markers:
+  - automotive
+  - aerospace
+  - aviation
+  - airline
+  - drone
+  - mobility
+  - energy
+  - manufacturing
+  - hardware
+  - defense
+  - biotech
+  - pharmaceutical
+  - retail
+  - hospitality
+  disqualify_companies:
+    Rivian: EV manufacturer — not B2B SaaS
+    Surf Air Mobility: regional aviation — not B2B SaaS
+    Skydio: drone hardware maker — not B2B SaaS (its own customers, not a prospect)
+    ClarityQ: seed-stage, well under 200 employees — below the ICP floor
+    Botrista: beverage-robotics hardware — not B2B SaaS
+    ElectronX: electricity-derivatives exchange — not B2B SaaS
+    BackOps AI: seed-stage logistics automation — below the ICP floor
+    Patreon: B2C creator platform (B2C2B) — outside the B2B-SaaS core, kept only as a flagged edge case
 # Competitors per QuadSci's own brief: legacy players + AI-native entrants.
 # NOTE: Gainsight, Clari, Pendo also appear on quadsci.ai as INTEGRATION
 # partners (QuadSci ingests from them) — copy must say "make your stack

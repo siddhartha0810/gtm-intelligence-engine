@@ -62,11 +62,14 @@ rules:
     rationale_template: "Leadership change signal (\"{term}\") — new execs typically audit and refresh the GTM/CS stack within 90 days."
 
   - id: R6
-    name: Live buying-window timing
+    name: Live buying-window timing (cluster)
     condition: buying_window_timing
     weight: 8
     evidence_source: always
-    rationale_template: "{n} trigger events in the last 270 days (most recent {days} days ago) — signals cluster in time, an active buying motion."
+    # Fires only on a REAL cluster: >=2 DIFFERENT signal types within 90 days
+    # of each other, window still live (most recent <=180 days). Two job posts
+    # are one hiring event, not a cluster. Matches the exercise brief exactly.
+    rationale_template: "Distinct signal types cluster within the 90-day window — an active buying motion, not a single stale signal."
 
   - id: R7
     name: Decision-maker identified
