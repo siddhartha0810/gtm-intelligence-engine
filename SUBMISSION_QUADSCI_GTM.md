@@ -48,11 +48,11 @@ system's job is killing 99.9% of signals.
 
 Checked before any scoring, via LinkedIn headcount, Crunchbase free profiles, and careers pages:
 
-1. Not B2B SaaS (no subscription software product)
-2. Under 200 employees
-3. Pre-Series B
-4. No visible CS function (no renewal motion to improve = no buyer)
-5. Services / consulting / staffing firms; QuadSci partners and existing customers (suppression list)
+1. **Firm size:** under 200 employees
+2. **Funding stage:** pre-Series B
+3. **GTM team structure:** no visible CS function (no renewal motion to improve = no buyer)
+4. **Not B2B SaaS** (no subscription software product), or services / consulting / staffing firms; QuadSci partners and existing customers (suppression list)
+5. **Tech stack:** no product-telemetry layer. QuadSci *ingests raw usage telemetry* — a company with thin/no product-analytics stack (no Pendo/Amplitude/Mixpanel-class instrumentation) has nothing for Growth AI to read, so it's a poor fit even with a loud hiring signal. Conversely, the *presence* of Gainsight/Pendo/Clari is a positive ICP indicator (signal #2), not a disqualifier — those are integration partners, not blockers.
 
 These are **enforced in code** (`hard_filter()`, driven by `quadsci.yaml`), not just asserted —
 a matching account is recorded as DISQUALIFIED and skips scoring entirely. They ran against my
