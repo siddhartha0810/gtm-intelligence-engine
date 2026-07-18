@@ -321,11 +321,17 @@ export default function QuadSci() {
   }, [])
 
   const allProspects = data?.prospects || []
-  const zeroCount = useMemo(() => allProspects.filter(p => p.total_score <= 0).length, [allProspects])
+  const disqualified = useMemo(
+    () => allProspects.filter(p => (p.tier || '').includes('DISQUALIFIED'))
+      .sort((a, b) => a.company_name.localeCompare(b.company_name)),
+    [allProspects]
+  )
+  const scorable = useMemo(() => allProspects.filter(p => !(p.tier || '').includes('DISQUALIFIED')), [allProspects])
+  const zeroCount = useMemo(() => scorable.filter(p => p.total_score <= 0).length, [scorable])
   const visibleProspects = useMemo(
-    () => (hideZero ? allProspects.filter(p => p.total_score > 0) : allProspects)
+    () => (hideZero ? scorable.filter(p => p.total_score > 0) : scorable)
       .sort((a, b) => b.total_score - a.total_score),
-    [allProspects, hideZero]
+    [scorable, hideZero]
   )
 
   if (loading) return <div style={{ padding: 40, textAlign: 'center', color: C.textMute }}>Loading...</div>
@@ -468,10 +474,11 @@ export default function QuadSci() {
             churn watch on competitor customer walls. Every detection becomes a dated, cited signal
             record. One signal parks an account in monitor; two independent signal types inside 90 days
             declare intent.</>}
-          live={<>~11,000 raw signals this scan → 681 classified. Real catches: Patreon and Chatwork
-            removed from Pendo&apos;s customer wall while it grew 118→127; Qualys and Trimble 8-K officer
-            changes; Cloudflare&apos;s May 2026 workforce reduction; Demandbase posting a VP Revenue
-            Operations role.</>}
+          live={<>~11,000 raw signals this scan → 681 classified. Real catches: Chatwork removed from
+            Pendo&apos;s customer wall (it grew 118→127, so a specific takedown); Qualys, Trimble,
+            Cloudflare and AppFolio 8-K officer changes; Cloudflare&apos;s May 2026 workforce reduction.
+            A cluster fires only when ≥2 <em>different</em> signal types land within 90 days of each
+            other — Qualys&apos;s hiring post + 8-K, 30 days apart, is a real one.</>}
           handoff={<>Candidate accounts, each carrying its full signal records
             — type, evidence text, source URL, date, confidence — flow to scoring. Nothing is summarized away.</>} />
 
@@ -480,11 +487,14 @@ export default function QuadSci() {
             200 employees, pre-Series B, no CS function, agencies/partners/customers. Survivors are scored
             by the weighted rubric with time decay; tier = points as a share of evaluable weight. Buyers
             found free: team pages, LinkedIn, Apollo free tier, email-pattern inference.</>}
-          live={<>{allProspects.length} scored prospects on this board — {visibleProspects.length} above
-            zero, {allProspects.filter(p => p.tier.includes('TIER 2')).length} TIER 2 qualified. Hard
-            filters visibly disqualified Rivian (layoff fired — but an EV maker), Surf Air, ClarityQ.
-            {Object.keys(contactsByCompany).length} companies carry named contacts; ~90 emails filled at
-            $0 via pattern inference.</>}
+          live={<>{scorable.filter(p => p.total_score > 0).length} scorable accounts,{' '}
+            {allProspects.filter(p => p.tier.includes('TIER 2')).length} TIER 2 qualified
+            (Cloudflare, Qualys, Trimble). Hard filters visibly disqualified {disqualified.length}{' '}
+            accounts <em>before</em> scoring — Rivian (layoff fired, but an EV maker), Interface (rode a
+            mis-attributed funding article to #1 before the guard caught it — it&apos;s a carpet
+            manufacturer), Patreon and Whatnot (B2C), Skydio (drone hardware). Shown with reasons, not
+            deleted. {Object.keys(contactsByCompany).length} companies carry named contacts; ~90 emails
+            filled at $0 via pattern inference.</>}
           handoff={<>For every account clearing the gate (tier ≥ 2, ≥2 citations, named buyer): the full
             scoring trace — fired rules, why-text, citations, dates — plus the buyer. That trace IS the
             payload the copy prompt receives.</>} />
@@ -572,6 +582,34 @@ export default function QuadSci() {
             {visibleProspects.map(p => (
               <ProspectCard key={p.id} p={p} contacts={data.contacts_by_company?.[String(p.company_id)] || []} />
             ))}
+          </div>
+        )}
+
+        {/* Hard-filtered accounts — shown, not deleted (Stage 2 requirement) */}
+        {disqualified.length > 0 && (
+          <div style={{ marginTop: 22, paddingTop: 16, borderTop: `1px dashed ${C.border}` }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+              <ShieldCheck size={15} color={C.danger} />
+              <span style={{ fontSize: 13.5, fontWeight: 700, color: C.text }}>Hard-filtered — disqualified before scoring</span>
+              <span style={pill(C.danger)}>{disqualified.length}</span>
+            </div>
+            <p style={{ fontSize: 12, color: C.textFaint, margin: '0 0 12px' }}>
+              These tripped a signal but fail the ICP hard filter (not B2B SaaS, below the size/stage floor,
+              or a data artifact). Shown with the reason rather than silently dropped — a filter you can&apos;t
+              audit is a filter you can&apos;t trust.
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {disqualified.map(p => {
+                const reason = (p.trace?.find(t => t.condition === 'hard_filter')?.why || '')
+                  .replace('Hard-filtered before scoring: ', '')
+                return (
+                  <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 14px', border: `1px solid ${C.border}`, borderRadius: 8, background: '#fef2f2' }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: C.text, minWidth: 130 }}>{p.company_name}</span>
+                    <span style={{ fontSize: 12, color: C.textMute }}>{reason}</span>
+                  </div>
+                )
+              })}
+            </div>
           </div>
         )}
       </div>
