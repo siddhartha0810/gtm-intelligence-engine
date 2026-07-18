@@ -609,12 +609,56 @@ HOOK RULES (non-negotiable):
 - NEVER use: "leverage", "synergy", "quick question", "I wanted to reach out",
   "hope this finds you", "just checking in"
 - Subject: under 8 words, no "?" or "!".`}</div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: C.text, margin: '12px 0 6px' }}>
+              The user prompt — the Stage-2 trace, injected verbatim (real Chatwork payload)
+            </div>
+            <div style={codeBox}>{`Contact: Yasuyuki Iwata, Head of Sales & Customer Success at Chatwork
+
+EVIDENCE (fired rules from scoring — quote from this, invent nothing):
+- Names a competitor product/behavior ("removed from Pendo").
+  src: web.archive.org/.../pendo.io/customers/  date: 2025-03-16
+- Technographic fit — already uses/hires for "Pendo".
+- Decision-maker on file: Yasuyuki Iwata (Head of Sales & Customer Success).
+
+PRODUCT (use this language, it is the client's own):
+QuadSci — Customer Intelligence AI for GTM teams. Growth AI predicts
+customer growth, contraction and churn 9-18 months ahead of renewal at
+90%+ accuracy, grounded in real user behavior (raw product telemetry),
+not CRM-derived guesswork. Gainsight/Clari/Pendo are INTEGRATION
+partners — say "make your stack predictive", never "rip it out".`}</div>
             <div style={{ fontSize: 11.5, color: C.textMute, margin: '8px 0 0', lineHeight: 1.5 }}>
               <strong style={{ color: C.text }}>Personalize at scale.</strong> Per-account variables: name ·
               company · verbatim signal evidence + dates · angle (by evidence type) · buyer-org framing
               (CRO → Growth AI language; CPO/CMO → Cohorts AI). Templated: structure, gates, banned
               vocabulary, cadence. The Stage-2 scoring trace (JSON of fired rules + citations) is fed
               straight into the prompt — the same evidence that scored the account writes its email.
+            </div>
+
+            <div style={{ fontSize: 12, fontWeight: 700, color: C.text, margin: '14px 0 6px' }}>
+              Prompt iteration — what broke, what I changed (all real, all in git)
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+              {[
+                { broke: 'Hooks read plausibly but quoted nothing real — fluent, invented specifics.',
+                  fixed: 'Added a grounding gate: copy must contain a distinctive term from the evidence actually held, or it is held back unsent.' },
+                { broke: 'The gate cheated — a hook passed by matching the contact’s own first name ("casey").',
+                  fixed: 'Name tokens are stripped before the check; generic GTM vocabulary ("your recent funding round") blocklisted from counting as grounding.' },
+                { broke: '"Casey, your $3." shipped as a complete email body.',
+                  fixed: 'The one-sentence enforcer was cutting at the first period — including the decimal in "$3.7M". Fixed the sentence-boundary regex; added a minimum-length gate. Regenerated in full.' },
+                { broke: 'Truthful copy got held — a Cloudflare hook wrote "the layoffs" where evidence said "laid off 1,100 employees".',
+                  fixed: 'Kept the hold. False-positive holds are the acceptable failure direction; semantic (embedding) grounding is the real fix, on the more-budget list.' },
+                { broke: '"Interface" rode a misattributed article ("Aina Raises $5.5M" merely contained the word) to #1 on the board.',
+                  fixed: 'The account name must now appear in the article title before a signal is credited — the same guard the G2/Reddit passes already used.' },
+              ].map((it, i) => (
+                <div key={i} style={{ border: `1px solid ${C.border}`, borderRadius: 8, padding: '8px 11px' }}>
+                  <div style={{ fontSize: 11.5, color: '#7f1d1d', lineHeight: 1.5 }}>
+                    <strong>✗ broke:</strong> {it.broke}
+                  </div>
+                  <div style={{ fontSize: 11.5, color: '#065f46', lineHeight: 1.5, marginTop: 3 }}>
+                    <strong>✓ changed:</strong> {it.fixed}
+                  </div>
+                </div>
+              ))}
             </div>
           </>}
           live={<>{data.hooks.length} grounded emails on this board. Flagship: &quot;Yasuyuki, Pendo
@@ -631,6 +675,42 @@ HOOK RULES (non-negotiable):
             to a Google Sheet review queue in an afternoon. Approve → the 5-touch sequence exports to a
             free-tier sender or Apollo sequence.</>}
           details={<>
+            <div style={{ fontSize: 12, fontWeight: 700, color: C.text, margin: '0 0 6px' }}>
+              What one staged row actually looks like (the reviewer&apos;s unit of work)
+            </div>
+            <div style={{ border: `1px solid ${C.border}`, borderRadius: 8, overflow: 'hidden', marginBottom: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 11px', background: '#f8fafc', borderBottom: `1px solid ${C.border}`, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 12.5, fontWeight: 700, color: C.text }}>Chatwork</span>
+                <span style={pill(C.primary)}>TIER 3 — MONITOR</span>
+                <span style={{ fontSize: 11.5, color: C.textMute }}>Yasuyuki Iwata · Head of Sales &amp; CS</span>
+                <span style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 700, color: '#92400e', background: '#fef3c7', border: '1px solid #fde68a', borderRadius: 999, padding: '2px 9px' }}>
+                  ROUTE: HUMAN REVIEW
+                </span>
+              </div>
+              <div style={{ padding: '9px 11px', display: 'flex', flexDirection: 'column', gap: 7 }}>
+                <div style={{ fontSize: 11.5, color: C.text }}>
+                  <span style={{ color: C.textFaint }}>copy · </span>
+                  <strong>Pendo&apos;s blind spot</strong> — &quot;Yasuyuki, Pendo records what happened but
+                  can&apos;t predict what&apos;s coming with your customers.&quot; <span style={{ color: C.textFaint }}>+ 4 more touches</span>
+                </div>
+                <div style={{ fontSize: 11.5, color: C.textMute }}>
+                  <span style={{ color: C.textFaint }}>evidence · </span>
+                  removed from Pendo customer wall (2025-03-16, <a href="http://web.archive.org/web/20250316003724/https://pendo.io/customers/" target="_blank" rel="noreferrer" style={{ color: C.primary, textDecoration: 'none' }}>archived page</a>) ·
+                  technographic fit: runs Pendo
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                  <span style={pill(C.success)}>grounded on &quot;pendo&quot;</span>
+                  <span style={pill(C.success)}>length ok</span>
+                  <span style={pill(C.success)}>no banned vocab</span>
+                  <span style={pill(C.warning)}>email pattern-inferred</span>
+                  <span style={pill(C.textMute)}>1 signal type — no cluster</span>
+                </div>
+                <div style={{ fontSize: 11, color: C.textFaint, fontStyle: 'italic' }}>
+                  Held because the email is pattern-inferred and the account has one signal type, not a
+                  cluster — the reviewer sees the reason, not just a verdict.
+                </div>
+              </div>
+            </div>
             <div style={{ fontSize: 12, fontWeight: 700, color: C.text, margin: '0 0 6px' }}>Auto-send vs. human review (nothing auto-sends at cold start)</div>
             <MiniTable head={['Condition', 'Route']} rows={[
               ['All gates + tier ≥2 + ≥2 citations + validated email + below C-level', 'Auto-send eligible'],
