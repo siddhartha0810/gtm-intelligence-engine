@@ -63,6 +63,7 @@ interface Hook {
   id: number; company_name: string; contact_name: string; contact_title: string
   subject: string; body: string; angle: string
   personalization_bucket: number | null; personalization_label: string
+  grounded_on?: string; word_count?: number
   touches?: Touch[]
 }
 interface TraceEvent {
@@ -81,6 +82,7 @@ interface Contact {
   company_id: number; company_name: string; full_name: string; first_name: string
   last_name: string; title: string; email: string; linkedin_url: string
   source: string; is_target: number
+  email_validation_status?: string; email_source?: string
 }
 interface QuadSciData {
   icp: ICP
@@ -166,6 +168,89 @@ function MiniTable({ head, rows }: { head: string[]; rows: (string | number)[][]
     </div>
   )
 }
+// The reviewer's unit of work, derived entirely from live payload data:
+// the staged hook, its account's scoring trace, and the buyer's email status.
+// The route verdict is COMPUTED from the same rules Stage 4 documents, so the
+// panel can never drift from the policy table beside it.
+function StagedRow({ hook, prospect, contact }: {
+  hook: Hook; prospect?: Prospect; contact?: Contact
+}) {
+  const fired = (prospect?.trace || []).filter(t => t.state === 'fired')
+  const cited = fired.filter(t => t.source_url)
+  const clusterFired = fired.some(t => t.condition === 'buying_window_timing')
+  const tierNum = prospect?.tier?.includes('TIER 1') ? 1
+    : prospect?.tier?.includes('TIER 2') ? 2
+    : prospect?.tier?.includes('TIER 3') ? 3 : 4
+  const patternInferred = (contact?.email_source || '').includes('pattern')
+    || (contact?.email_validation_status || '') === 'not_validated'
+  const title = (hook.contact_title || '').toLowerCase()
+  const isCLevel = /\bc[eforst]o\b|chief |founder|president/.test(title)
+
+  // Same conditions as the auto-send table below this panel
+  const holds: string[] = []
+  if (tierNum > 2) holds.push('tier below TIER 2')
+  if (cited.length < 2) holds.push(`${cited.length} independent citation${cited.length === 1 ? '' : 's'} (needs 2)`)
+  if (patternInferred) holds.push('email is pattern-inferred, not validated')
+  if (isCLevel) holds.push('C-level recipient — always reviewed')
+  if (!clusterFired) holds.push('no live cluster (single signal type)')
+  const autoSendEligible = holds.length === 0
+
+  const gate = (ok: boolean, label: string) => (
+    <span key={label} style={pill(ok ? C.success : C.warning)}>{label}</span>
+  )
+  return (
+    <div style={{ border: `1px solid ${C.border}`, borderRadius: 8, overflow: 'hidden', marginBottom: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 11px', background: '#f8fafc', borderBottom: `1px solid ${C.border}`, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 12.5, fontWeight: 700, color: C.text }}>{hook.company_name}</span>
+        {prospect && <span style={pill(TIER_COLOR(prospect.tier))}>{prospect.tier}</span>}
+        <span style={{ fontSize: 11.5, color: C.textMute }}>{hook.contact_name} · {hook.contact_title}</span>
+        <span style={{
+          marginLeft: 'auto', fontSize: 11, fontWeight: 700,
+          color: autoSendEligible ? '#065f46' : '#92400e',
+          background: autoSendEligible ? '#ecfdf5' : '#fef3c7',
+          border: `1px solid ${autoSendEligible ? '#a7f3d0' : '#fde68a'}`,
+          borderRadius: 999, padding: '2px 9px',
+        }}>
+          ROUTE: {autoSendEligible ? 'AUTO-SEND ELIGIBLE' : 'HUMAN REVIEW'}
+        </span>
+      </div>
+      <div style={{ padding: '9px 11px', display: 'flex', flexDirection: 'column', gap: 7 }}>
+        <div style={{ fontSize: 11.5, color: C.text }}>
+          <span style={{ color: C.textFaint }}>copy · </span>
+          <strong>{hook.subject}</strong> — &quot;{hook.body}&quot;
+          {!!hook.touches?.length && (
+            <span style={{ color: C.textFaint }}> + {hook.touches.filter(t => t.day !== 1).length} more touches</span>
+          )}
+        </div>
+        <div style={{ fontSize: 11.5, color: C.textMute }}>
+          <span style={{ color: C.textFaint }}>evidence · </span>
+          {fired.length === 0 ? <em>no fired rules on file</em> : fired.map((t, i) => (
+            <span key={t.id}>
+              {i > 0 && ' · '}
+              {(t.why || t.condition).replace(/\s+/g, ' ').slice(0, 90)}
+              {t.source_url && (
+                <> (<a href={t.source_url} target="_blank" rel="noreferrer" style={{ color: C.primary, textDecoration: 'none' }}>source</a>)</>
+              )}
+            </span>
+          ))}
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+          {hook.grounded_on ? gate(true, `grounded on "${hook.grounded_on}"`) : gate(false, 'grounding unrecorded')}
+          {gate((hook.word_count ?? hook.body.split(' ').length) >= 8, 'length ok')}
+          {gate(!patternInferred, patternInferred ? 'email pattern-inferred' : 'email validated')}
+          {gate(clusterFired, clusterFired ? 'cluster live' : 'no cluster — 1 signal type')}
+          {gate(cited.length >= 2, `${cited.length} cited source${cited.length === 1 ? '' : 's'}`)}
+        </div>
+        <div style={{ fontSize: 11, color: C.textFaint, fontStyle: 'italic' }}>
+          {autoSendEligible
+            ? 'All gate conditions met — eligible for auto-send once its signal type graduates (~50 reviewed sends).'
+            : `Held: ${holds.join('; ')} — the reviewer sees the reason, not just a verdict.`}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 const codeBox: React.CSSProperties = {
   background: '#0f172a', color: '#e2e8f0', fontFamily: 'ui-monospace, Menlo, monospace',
   fontSize: 11, lineHeight: 1.5, padding: '12px 14px', borderRadius: 8, whiteSpace: 'pre-wrap',
@@ -377,6 +462,28 @@ export default function QuadSci() {
   const sequencedHooks = data.hooks.filter(h => (h.touches || []).length > 0)
   const contactsByCompany = data.contacts_by_company || {}
   const contactCompanyIds = Object.keys(contactsByCompany)
+
+  // Live staged rows for the Stage-4 review-queue panel: the highest-scoring
+  // sequenced hooks, joined to their account's scoring trace and the buyer's
+  // real email status. Nothing here is hardcoded — if the board rescores, the
+  // route verdicts change with it.
+  // NB: plain computation, not useMemo — this runs after the loading/error
+  // early-returns above, so a hook here would break React's rules-of-hooks
+  // (conditional hook call → "rendered more hooks than previous render").
+  const stagedRows = (() => {
+    const byCompany = new Map(allProspects.map(p => [p.company_name, p]))
+    return sequencedHooks
+      .map(hook => {
+        const prospect = byCompany.get(hook.company_name)
+        const contacts = prospect ? (contactsByCompany[String(prospect.company_id)] || []) : []
+        const contact = contacts.find(c =>
+          (c.full_name || `${c.first_name} ${c.last_name}`).trim().toLowerCase()
+            === (hook.contact_name || '').trim().toLowerCase()) || contacts[0]
+        return { hook, prospect, contact }
+      })
+      .sort((a, b) => (b.prospect?.total_score || 0) - (a.prospect?.total_score || 0))
+      .slice(0, 2)
+  })()
 
   const counts: Partial<Record<Tab, number>> = {
     rules: data.signal_rules.length,
@@ -678,39 +785,11 @@ partners — say "make your stack predictive", never "rip it out".`}</div>
             <div style={{ fontSize: 12, fontWeight: 700, color: C.text, margin: '0 0 6px' }}>
               What one staged row actually looks like (the reviewer&apos;s unit of work)
             </div>
-            <div style={{ border: `1px solid ${C.border}`, borderRadius: 8, overflow: 'hidden', marginBottom: 12 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 11px', background: '#f8fafc', borderBottom: `1px solid ${C.border}`, flexWrap: 'wrap' }}>
-                <span style={{ fontSize: 12.5, fontWeight: 700, color: C.text }}>Chatwork</span>
-                <span style={pill(C.primary)}>TIER 3 — MONITOR</span>
-                <span style={{ fontSize: 11.5, color: C.textMute }}>Yasuyuki Iwata · Head of Sales &amp; CS</span>
-                <span style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 700, color: '#92400e', background: '#fef3c7', border: '1px solid #fde68a', borderRadius: 999, padding: '2px 9px' }}>
-                  ROUTE: HUMAN REVIEW
-                </span>
-              </div>
-              <div style={{ padding: '9px 11px', display: 'flex', flexDirection: 'column', gap: 7 }}>
-                <div style={{ fontSize: 11.5, color: C.text }}>
-                  <span style={{ color: C.textFaint }}>copy · </span>
-                  <strong>Pendo&apos;s blind spot</strong> — &quot;Yasuyuki, Pendo records what happened but
-                  can&apos;t predict what&apos;s coming with your customers.&quot; <span style={{ color: C.textFaint }}>+ 4 more touches</span>
-                </div>
-                <div style={{ fontSize: 11.5, color: C.textMute }}>
-                  <span style={{ color: C.textFaint }}>evidence · </span>
-                  removed from Pendo customer wall (2025-03-16, <a href="http://web.archive.org/web/20250316003724/https://pendo.io/customers/" target="_blank" rel="noreferrer" style={{ color: C.primary, textDecoration: 'none' }}>archived page</a>) ·
-                  technographic fit: runs Pendo
-                </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-                  <span style={pill(C.success)}>grounded on &quot;pendo&quot;</span>
-                  <span style={pill(C.success)}>length ok</span>
-                  <span style={pill(C.success)}>no banned vocab</span>
-                  <span style={pill(C.warning)}>email pattern-inferred</span>
-                  <span style={pill(C.textMute)}>1 signal type — no cluster</span>
-                </div>
-                <div style={{ fontSize: 11, color: C.textFaint, fontStyle: 'italic' }}>
-                  Held because the email is pattern-inferred and the account has one signal type, not a
-                  cluster — the reviewer sees the reason, not just a verdict.
-                </div>
-              </div>
-            </div>
+            {stagedRows.length === 0
+              ? <div style={{ fontSize: 12, color: C.textFaint, marginBottom: 12 }}>No staged rows yet — approve a sequence to populate the queue.</div>
+              : stagedRows.map(r => (
+                  <StagedRow key={r.hook.id} hook={r.hook} prospect={r.prospect} contact={r.contact} />
+                ))}
             <div style={{ fontSize: 12, fontWeight: 700, color: C.text, margin: '0 0 6px' }}>Auto-send vs. human review (nothing auto-sends at cold start)</div>
             <MiniTable head={['Condition', 'Route']} rows={[
               ['All gates + tier ≥2 + ≥2 citations + validated email + below C-level', 'Auto-send eligible'],

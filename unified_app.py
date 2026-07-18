@@ -1330,7 +1330,8 @@ def _account_page_payload(campaign_name: str, icp_yaml: str, rules_yaml: str) ->
             with oracle_db.db_cursor(commit=False) as cur:
                 cur.execute("""
                     SELECT cc.company_id, c.name AS company_name, cc.full_name, cc.first_name,
-                           cc.last_name, cc.title, cc.email, cc.linkedin_url, cc.source, cc.is_target
+                           cc.last_name, cc.title, cc.email, cc.linkedin_url, cc.source, cc.is_target,
+                           cc.email_validation_status, cc.email_source
                     FROM company_contacts cc JOIN companies c ON c.id = cc.company_id
                     WHERE c.name = ANY(%s)
                     ORDER BY c.name, cc.is_target DESC, cc.confidence DESC
