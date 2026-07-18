@@ -20,7 +20,7 @@ pipeline, too.
 
 | # | Signal | What it means for a CRO / CS leader | Free source | Weight |
 |---|--------|-------------------------------------|-------------|--------|
-| 1 | **Director+ RevOps / CS-Ops hire** | "You just funded a person whose job is renewal visibility. The problem is now owned and budgeted." | Greenhouse/Lever/Ashby public JSON boards (keyless, ~0% block rate; I registered 43 boards), LinkedIn Jobs | +8 |
+| 1 | **Director+ RevOps / CS-Ops hire** | "You just funded a person whose job is renewal visibility. The problem is now owned and budgeted." Live examples my ATS crawler pulled this week: **Demandbase** — VP Revenue Operations; **Postman** — Director, Customer Success Operations; **Vanta** — Revenue Operations Manager; **Abnormal Security** — CS Operations Manager. | Greenhouse/Lever/Ashby public JSON boards (keyless, ~0% block rate; I registered 43 boards), LinkedIn Jobs | +8 |
 | 2 | **Legacy CS-platform friction** | "You're paying for Gainsight/ChurnZero/Clari and still hiring humans to make it predictive — human-built rules on lagging data." Job posts requiring platform admin/migration work; community threads about migrating off. Plus my **competitor churn watch**: Wayback Machine diffs of vendors' own customer-logo walls — a quietly removed logo is a churned customer with budget, category need, and an open vacancy. | ATS boards, Reddit via site-search (date-gated), web.archive.org CDX API | +12 |
 | 3 | **Public NRR / forecast pain** | "Your buyer is saying out loud that renewals surprise them." Earnings-call retention language (public cos), CRO/VP-CS LinkedIn posts, G2 reviews mentioning churn surprises or forecast blind spots. | Free transcript APIs (EarningsCall.dev, API Ninjas), G2/Reddit via web search — **all third-party pain evidence is date-gated ≤18 months** (see Stage 4 risk) | +10 |
 | 4 | **New CRO / CCO in seat** | "New revenue leaders audit the forecast stack in their first 90 days." | SEC 8-K **Item 5.02** via data.sec.gov (legally mandated disclosure, free, citable) for public accounts; press for private | +10, 365-day decay |
@@ -113,13 +113,32 @@ existing Sales and CS orgs. Passes every hard filter; ICP sweet spot.
 links attached); (2) analytics-stack friction corroborated by hiring activity.
 **Buyer:** Yasuyuki Iwata, Head of Sales & Customer Success (the revenue org).
 
-> **Subject:** Pendo's blind spot
-> **Body:** Yasuyuki, Pendo records what happened but can't predict what's coming with your
-> customers.
+The 1-sentence opener is deliberately just the hook — it names the problem and earns the reply;
+the product is not mentioned until touch 3. Here is the **full 5-touch sequence the pipeline
+generated**, so you can see the complete outbound, not just the opener:
+
+> **Day 1 · Email — "Pendo's blind spot"**
+> Yasuyuki, Pendo records what happened but can't predict what's coming with your customers.
+>
+> **Day 3 · LinkedIn connect**
+> Yasuyuki, great to connect! Chatwork's team collaboration platform is impressive.
+>
+> **Day 5 · Email — "Predicting customer growth"**
+> Yasuyuki, QuadSci's Growth AI helps Chatwork forecast customer growth and churn 9–18 months in
+> advance by analyzing real user-behavior telemetry. Worth 15 minutes to see how QuadSci handles this?
+>
+> **Day 8 · LinkedIn message**
+> Yasuyuki, thanks for connecting. Are you currently using any predictive analytics for your
+> customer growth strategy?
+>
+> **Day 12 · Email — "Closing the loop"**
+> Yasuyuki, if predictive customer intelligence isn't a priority right now, I understand. No need
+> to respond if this isn't the right time.
 
 The signal is the first line; the site's differentiator (telemetry that *predicts* vs. tooling
-that *records*) is the tension; no product mention — touch 3 of the 5-touch sequence names
-Growth AI and makes the one concrete ask. Full sequence in the appendix.
+that *records*) is the tension. The product is named only on Day 5, in QuadSci's own language —
+Growth AI, 9–18 months ahead, real user-behavior telemetry — followed by a single concrete ask.
+No line here could be sent by another vendor.
 
 ### The prompt (full, verbatim — this is the production system prompt)
 
@@ -242,6 +261,22 @@ third-party pain evidence must carry a machine-readable publish date from its ow
 undated pages are dropped, not waved through. My #1 prospect fell ten points and two tiers,
 and the fix went in anyway. Residual mitigations: human review on all pain-derived copy,
 citations on every point, decay on every trigger.
+
+### Two more honest limits (things that don't fully work yet)
+
+- **"Existing CS *and* Sales team" is a manual check, not automated.** It's in the hard-filter
+  list, but free data won't reliably tell me whether a 300-person SaaS company has a *formal* CS
+  function — I'd have to eyeball the careers page or LinkedIn. So the code enforces size, stage,
+  and non-SaaS-industry auto-disqualifiers; the GTM-structure filter is a reviewer step, not a
+  guaranteed gate. I'd rather say that than pretend the machine checks it.
+- **Company-name-only grounding can slip the copy gate.** The grounding check strips the
+  contact's first name but still counts the *company* name as a distinctive term — so a hook like
+  *"May, Qualys can't predict customer churn until it's too late"* passes despite referencing no
+  specific signal (it name-drops Qualys and stops there). That's exactly the "could be sent by any
+  vendor" failure the brief warns about. The fix is to require grounding on a *signal* term (the
+  8-K, the layoff, the removal), not just the account name — which would hold more hooks, but the
+  ones that survive would all reference the actual event. It's why my strongest worked example
+  (Chatwork) grounds on the Pendo removal, and why Cloudflare/Trimble/AppFolio were correctly held.
 
 ### With more budget or time
 
