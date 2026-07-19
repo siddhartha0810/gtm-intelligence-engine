@@ -113,32 +113,52 @@ existing Sales and CS orgs. Passes every hard filter; ICP sweet spot.
 links attached); (2) analytics-stack friction corroborated by hiring activity.
 **Buyer:** Yasuyuki Iwata, Head of Sales & Customer Success (the revenue org).
 
-The 1-sentence opener is deliberately just the hook — it names the problem and earns the reply;
-the product is not mentioned until touch 3. Here is the **full 5-touch sequence the pipeline
-generated**, so you can see the complete outbound, not just the opener:
+**Update:** the sequence below is the one currently staged — Day 1 is the OIQ variant that *won*
+the Stage-3 bake-off (85/100). When a bake-off winner exists for a contact, it is promoted into
+the real staged hook and touches 2–5 are rebuilt on top of it — the scoreboard and the actual
+outbound are the same pipeline, not two disconnected demos.
 
-> **Day 1 · Email — "Pendo's blind spot"**
-> Yasuyuki, Pendo records what happened but can't predict what's coming with your customers.
+**One more fix folded in here:** the first bake-off pass scored high on every gate except one
+nobody had written a gate for — direct address by name. `copy_lab.py`'s OIQ/PAS/CHALLENGER
+prompts never explicitly required opening with the contact's first name the way the original
+single-shot `hook_generator.py` prompt did, so early winners like *"Companies lose revenue when
+they can't see which customers will leave..."* scored 95/100 while reading like it could've been
+sent to anyone at Chatwork. Fixed the same way the one-sentence cap was fixed earlier: added the
+rule to the prompt, then **mechanically enforced it** (`_ensure_named_opening()` in `copy_lab.py`)
+so a variant that drops the name gets it grafted back on rather than relying on the model to
+comply. Re-ran the bake-off for all 6 accounts with the fix in place — every winner below now
+opens with direct address.
+
+The opener earns the reply without naming the product; the product is not mentioned until touch 3.
+Here is the **full 5-touch sequence currently staged for this contact**, so you can see the
+complete outbound, not just the opener:
+
+> **Day 1 · Email — "Pendo removal at Chatwork"**
+> Yasuyuki, Chatwork removed Pendo from their tech stack. This often signals a shift in customer
+> analytics priorities. Worth a look?
 >
 > **Day 3 · LinkedIn connect**
-> Yasuyuki, great to connect! Chatwork's team collaboration platform is impressive.
+> Yasuyuki, noticed your work at Chatwork. Happy to connect and learn about your customer success
+> approach.
 >
-> **Day 5 · Email — "Predicting customer growth"**
-> Yasuyuki, QuadSci's Growth AI helps Chatwork forecast customer growth and churn 9–18 months in
-> advance by analyzing real user-behavior telemetry. Worth 15 minutes to see how QuadSci handles this?
+> **Day 5 · Email — "Customer intelligence for Chatwork"**
+> Yasuyuki, as Chatwork continues to evolve its customer analytics strategy, QuadSci's Growth AI
+> could help forecast customer growth and churn with 90%+ accuracy based on actual product usage
+> rather than CRM data. Worth 15 minutes to see how QuadSci handles this?
 >
 > **Day 8 · LinkedIn message**
-> Yasuyuki, thanks for connecting. Are you currently using any predictive analytics for your
-> customer growth strategy?
+> Yasuyuki, thanks for connecting. Are you currently using any predictive analytics tools for
+> customer growth at Chatwork?
 >
 > **Day 12 · Email — "Closing the loop"**
 > Yasuyuki, if predictive customer intelligence isn't a priority right now, I understand. No need
-> to respond if this isn't the right time.
+> to respond — I'll close the loop here.
 
-The signal is the first line; the site's differentiator (telemetry that *predicts* vs. tooling
-that *records*) is the tension. The product is named only on Day 5, in QuadSci's own language —
-Growth AI, 9–18 months ahead, real user-behavior telemetry — followed by a single concrete ask.
-No line here could be sent by another vendor.
+Touch 1 leads with the cited fact (OIQ: Observation → Implication → Question) — the Pendo removal,
+plainly stated, then what it usually implies, then one interest question. The product is named
+only on Day 5, in QuadSci's own language — Growth AI, 90%+ accuracy, real product usage vs. CRM
+data — followed by a single concrete ask. No line here could be sent by another vendor, and no
+line here could be sent to another contact at Chatwork.
 
 ### The prompt (full, verbatim — this is the production system prompt)
 
@@ -207,6 +227,79 @@ are *integration partners* on the site — "make your stack predictive," never "
    credited — the same guard the G2/Reddit passes already used. Interface then dropped out and
    the hard filter caught it as a carpet manufacturer. This is the failure mode I'd watch most
    closely at scale (see Stage 4 risk).
+
+### The bake-off — copy is chosen, not guessed
+
+Iteration story #5 fixed *who* gets scored. This step fixes *how the copy itself* gets scored —
+because the biggest gap between this submission and a generic "run it through Claude" attempt
+isn't the signals, it's whether the email was validated against anything besides my own taste.
+
+**The research.** Before touching the prompt I looked for the largest cold-email studies I could
+find, and graded the evidence honestly rather than taking vendor claims at face value:
+
+| Source | Dataset | Finding used |
+|---|---|---|
+| Gong | ~304K prospecting emails | Interest-based CTAs ("want me to send what we found?") outperform time-asks ("15 minutes?") on *cold* outreach — a calendar slot is a finite ask, interest isn't. The specific-time ask wins later, once the prospect is already in-cycle. |
+| Gong | same dataset | Highest reply rates sit under ~100 words / 3–4 sentences on the first touch. |
+| Lavender | ~231K emails | Copy written at a 3rd–5th grade reading level sees materially more replies (~67% cited lift); ~70% of cold email is written at grade 10+, i.e. most senders are doing the opposite of what the data supports. |
+| Vendor blogs (Autobound, lead-scorer.com) | undisclosed methodology | "Signal-based outreach gets 15–25% reply rates" — cited widely but **not verifiable**, so I treat it as directional marketing, not evidence, and don't build a gate around the number itself. |
+
+That last row matters as much as the first three: the honest move is naming which claims are load-bearing
+and which are decoration. The one thing this pipeline *can* prove is that a specific, dated, cited event
+was named in the email — so the rubric rewards that because it's **falsifiable**, not because a vendor
+promised a reply-rate lift.
+
+**Three frameworks, same evidence, same buyer.** `copy_lab.py` (new this iteration) writes the identical
+account/evidence/buyer combination three ways instead of one:
+
+- **PAS** (Problem → Agitate → Solve) — the framework already in use. Strong with signal, but risks
+  asserting the pain before showing the evidence, which can read manipulative.
+- **OIQ** (Observation → Implication → Question) — leads with the cited fact itself, states what it
+  usually implies, then asks one interest question. Best fit here because the evidence — an 8-K filing,
+  a layoffs.fyi record, a tech-stack removal — *is* the asset; burying it behind PAS's "problem" framing
+  wastes the one thing competitors running the same exercise can't fabricate.
+- **CHALLENGER** (insight-led reframe) — teaches a non-obvious, defensible point about how companies like
+  theirs lose revenue, then ties it to the observed event.
+
+**Scoring: 60 points mechanical, 40 points judged, nothing on faith.**
+
+*Mechanical (deterministic, 10 pts each, code not opinion):* body ≤75 words · Flesch-Kincaid grade ≤6,
+computed with a real syllable-counting implementation, not the model's self-report · CTA asks for interest,
+not time · names a distinctive term from the actual evidence (the account name alone does not count — that
+was the exact "Qualys can't predict churn" failure mode from iteration story #4) · falsifiable (a real date
+or number, or ≥2 matched evidence terms) · none of the banned filler phrases (*leverage, synergy, quick
+question, circling back...*).
+
+*Judged (LLM role-played as a hard-to-impress CRO who reads 40+ cold emails a day, 0–40):* specificity — does
+this line hold only for THIS company, or would it read the same for any account in the category — credibility,
+and reply-likelihood, weighted double since it's the actual outcome. The judge only scores what a regex
+cannot; every mechanical thing is scored mechanically.
+
+**The winner ships, the losers stay on the record.** All three variants persist with full scores — the
+Emails tab shows the winner's gate badges next to the beaten variants and why they lost, the same
+"held-back copy shown, not hidden" philosophy already used for the grounding gate.
+
+**Live results — the framework choice actually depends on the evidence, it isn't fixed in advance**
+(re-run after the name-opening fix; every winner below opens with direct address):
+
+| Account | Buyer | Winner | Score | Runner-up | Why it won |
+|---|---|---|---|---|---|
+| AppFolio | CRO | CHALLENGER | 95/100 | OIQ (81) | Two officer changes 10 days apart is itself the cluster evidence — CHALLENGER's framing ("revenue leaks as new leaders adjust priorities") used that double-signal better than a single-event OIQ line could. |
+| Hush | Strategy Director | CHALLENGER | 93/100 | PAS (81) | The insight-led "9-month window where growth predictions could miss" reframed a routine CCO hire as a specific, time-bound risk — PAS's flatter "here's the problem, here's the fix" scored lower on judged specificity. |
+| Cloudflare | VP Revenue Ops | OIQ | 91/100 | PAS, CHALLENGER (tied 77) | A stark fact — 1,100 laid off, May 7 — needs no reframing; OIQ's flat statement outscored both other frameworks' attempts to add interpretation the judge read as unnecessary. |
+| Qualys | CMO | OIQ | 91/100 | PAS (88) | The 8-K filing date is strong enough alone; OIQ's flat "filed an 8-K Item 5.02... June 11" beat PAS's added framing, which diluted the citation with generic go-to-market language. |
+| Chatwork | Head of Sales & CS | OIQ | 85/100 | PAS (tied 85) | A genuine tie on total score — OIQ kept the win on the DB's stored order (both lead with the Pendo removal, near-identical structure); CHALLENGER trailed at 81 for adding an unearned "loss-aversion" framing the judge flagged as generic. |
+| Trimble Inc. | CRO | OIQ | 81/100 | PAS, CHALLENGER (three-way tie at 81) | All three frameworks converged on the same score using the identical SEC 8-K + Gainsight-tech-stack evidence — a genuine tie, not a rubric artifact; OIQ's version ties the Gainsight tech-stack fact directly to the ask. |
+
+No two accounts defaulted to the same winning framework by coincidence — the rubric is picking up something
+real about how each type of evidence reads best, not defaulting to one house style. Two of six are genuine
+ties (Chatwork, Trimble) rather than clear wins — an honest result, not massaged to look more decisive
+than the underlying evidence supports.
+
+**What this proves for the "what if they used Claude too" question:** the differentiator was never going
+to be prompt-writing skill — everyone doing this exercise has access to the same model. It's whether the
+system can show its own quality control: three honestly-different attempts, scored against gates traceable
+to named studies, with the losing attempts visible so the choice is auditable rather than asserted.
 
 ### Personalization at scale
 

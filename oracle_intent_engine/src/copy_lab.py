@@ -148,10 +148,30 @@ def deterministic_scores(subject: str, body: str, evidence_text: str,
     }
 
 
+def _ensure_named_opening(body: str, first: str) -> str:
+    """Mechanically guarantee direct address by first name — the prompt asks
+    for it, but under thin evidence the model sometimes drops it to save
+    words. hook_generator.py enforced this the same way (never left to the
+    model alone); copy_lab didn't, which is why early bake-off winners read
+    as generic despite passing every other gate. A body already opening with
+    the name is left untouched."""
+    b = (body or "").strip()
+    if not first or not b:
+        return b
+    if re.match(rf"^{re.escape(first)}\b", b, re.I):
+        return b
+    lead = b[0].lower() + b[1:] if b[:1].isupper() and not b[:2].isupper() else b
+    return f"{first}, {lead}"
+
+
 # ── Framework prompts ─────────────────────────────────────────────────────────
 
 _SHARED_RULES = """
 HARD RULES (these are scored mechanically after you write — violating them loses):
+- Body MUST open with the contact's first name as direct address, e.g. "Yasuyuki, ..." —
+  not buried later, not "Hi Yasuyuki," as a greeting. This is enforced mechanically after
+  generation if you skip it, but the sentence reads better when you write it this way
+  yourself rather than having it grafted on.
 - Body <= 75 words. Shorter wins ties.
 - Reading level: US grade 6 or below. Short words, short sentences. No jargon
   ("leverage", "utilize", "predictive revenue intelligence" -> say it plainly).
@@ -257,6 +277,7 @@ def generate_variants(contact: dict, evidence_text: str, product_context: str,
                 raise RuntimeError("model returned no JSON")
             rec["subject"] = str(parsed.get("subject", "")).strip()
             rec["body"] = re.sub(r"\s+", " ", str(parsed.get("body", ""))).strip()
+            rec["body"] = _ensure_named_opening(rec["body"], first)
         except Exception as e:  # never raise — a dead variant is data too
             rec["error"] = str(e)[:120]
 
