@@ -779,6 +779,31 @@ CREATE TABLE IF NOT EXISTS review_queue (
     """,
     "CREATE INDEX IF NOT EXISTS idx_campaign_touches_hook ON campaign_touches(hook_id)",
 
+    # copy_lab: every generated variant (all frameworks, winners AND losers)
+    # with its scores, so the framework bake-off is auditable, not asserted.
+    """
+    CREATE TABLE IF NOT EXISTS copy_variants (
+        id                BIGSERIAL PRIMARY KEY,
+        company_name      TEXT NOT NULL DEFAULT '',
+        contact_name      TEXT NOT NULL DEFAULT '',
+        contact_title     TEXT NOT NULL DEFAULT '',
+        framework         TEXT NOT NULL DEFAULT '',
+        subject           TEXT NOT NULL DEFAULT '',
+        body              TEXT NOT NULL DEFAULT '',
+        word_count        INTEGER NOT NULL DEFAULT 0,
+        fk_grade          REAL NOT NULL DEFAULT 0,
+        mechanical_score  INTEGER NOT NULL DEFAULT 0,
+        judge_score       INTEGER NOT NULL DEFAULT 0,
+        total_score       INTEGER NOT NULL DEFAULT 0,
+        gates             JSONB NOT NULL DEFAULT '{}',
+        judge             JSONB NOT NULL DEFAULT '{}',
+        is_winner         BOOLEAN NOT NULL DEFAULT FALSE,
+        error             TEXT NOT NULL DEFAULT '',
+        created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_copy_variants_company ON copy_variants(company_name)",
+
     # outcomes -> campaign_hooks link, so reply/meeting rates can eventually
     # be sliced by angle. Nullable — most outcomes still won't trace back to
     # a specific hook until the frontend threads hook_id through outreach.
@@ -2853,6 +2878,47 @@ def get_recent_campaign_hooks(limit: int = 50) -> list:
             SELECT * FROM campaign_hooks ORDER BY created_at DESC LIMIT %s
         """, (limit,))
         return [dict(r) for r in cur.fetchall()]
+
+
+def save_copy_variants(company_name: str, contact_name: str, contact_title: str,
+                       variants: list) -> None:
+    """Persist a full framework bake-off for one contact — winners and losers.
+    Replaces any prior set for this (company, contact) so re-runs stay clean."""
+    import json as _json
+    winner_idx = max(range(len(variants)), key=lambda i: variants[i].get("total_score", 0)) if variants else -1
+    with db_cursor() as cur:
+        cur.execute("DELETE FROM copy_variants WHERE company_name=%s AND contact_name=%s",
+                    (company_name, contact_name))
+        for i, v in enumerate(variants):
+            cur.execute("""
+                INSERT INTO copy_variants
+                    (company_name, contact_name, contact_title, framework, subject, body,
+                     word_count, fk_grade, mechanical_score, judge_score, total_score,
+                     gates, judge, is_winner, error)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            """, (company_name, contact_name, contact_title, v.get("framework", ""),
+                  v.get("subject", ""), v.get("body", ""), int(v.get("word_count", 0)),
+                  float(v.get("fk_grade", 0)), int(v.get("mechanical_score", 0)),
+                  int(v.get("judge", {}).get("judge_score", 0)), int(v.get("total_score", 0)),
+                  _json.dumps(v.get("gates", {})), _json.dumps(v.get("judge", {})),
+                  i == winner_idx, v.get("error", "")))
+
+
+def get_copy_variants() -> list:
+    """All variant sets, grouped by contact, best-first within each group.
+    Shape: [{company, contact, title, variants:[...]}] ordered by winner score."""
+    with db_cursor(commit=False) as cur:
+        cur.execute("SELECT * FROM copy_variants ORDER BY company_name, contact_name, total_score DESC")
+        rows = [dict(r) for r in cur.fetchall()]
+    groups: dict = {}
+    for r in rows:
+        key = (r["company_name"], r["contact_name"])
+        g = groups.setdefault(key, {"company": r["company_name"], "contact": r["contact_name"],
+                                    "title": r["contact_title"], "variants": []})
+        g["variants"].append(r)
+    out = list(groups.values())
+    out.sort(key=lambda g: max((v["total_score"] for v in g["variants"]), default=0), reverse=True)
+    return out
 
 
 # ── ATS board registry (auto-discovery) ───────────────────────────────────────

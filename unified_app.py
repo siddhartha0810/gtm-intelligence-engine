@@ -1360,7 +1360,17 @@ def _account_page_payload(campaign_name: str, icp_yaml: str, rules_yaml: str) ->
         "hooks": hooks,
         "prospects": prospects,
         "contacts_by_company": contacts_by_company,
+        # Framework bake-off (copy_lab) — only populated for accounts a variant
+        # run has been done for; empty list is the expected default otherwise.
+        "copy_variants": _safe_copy_variants(),
     }
+
+
+def _safe_copy_variants() -> list:
+    try:
+        return oracle_db.get_copy_variants()
+    except Exception:
+        return []
 
 
 @app.get("/api/decision-intelligence/quadsci")

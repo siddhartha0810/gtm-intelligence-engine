@@ -84,6 +84,17 @@ interface Contact {
   source: string; is_target: number
   email_validation_status?: string; email_source?: string
 }
+interface CopyVariant {
+  id: number; framework: string; subject: string; body: string
+  word_count: number; fk_grade: number
+  mechanical_score: number; judge_score: number; total_score: number
+  gates: Record<string, boolean>
+  judge: { specificity?: number; credibility?: number; reply_likelihood?: number; verdict?: string }
+  is_winner: boolean; error: string
+}
+interface VariantGroup {
+  company: string; contact: string; title: string; variants: CopyVariant[]
+}
 interface QuadSciData {
   icp: ICP
   signal_rules: SignalRule[]
@@ -93,6 +104,7 @@ interface QuadSciData {
   hooks: Hook[]
   prospects?: Prospect[]
   contacts_by_company?: Record<string, Contact[]>
+  copy_variants?: VariantGroup[]
 }
 
 type Tab = 'overview' | 'workflow' | 'rules' | 'prospects' | 'signals' | 'contacts' | 'emails' | 'sequences'
@@ -247,6 +259,78 @@ function StagedRow({ hook, prospect, contact }: {
             : `Held: ${holds.join('; ')} — the reviewer sees the reason, not just a verdict.`}
         </div>
       </div>
+    </div>
+  )
+}
+
+// The framework bake-off: one contact's PAS/OIQ/Challenger variants, ranked,
+// with the winner expanded and the losers' scores visible. Every gate + judge
+// number is live from copy_lab.
+const FRAMEWORK_LABEL: Record<string, string> = {
+  OIQ: 'Observation→Implication→Question', PAS: 'Problem→Agitate→Solve',
+  CHALLENGER: 'Insight-led reframe',
+}
+const GATE_LABEL: Record<string, string> = {
+  length_ok: '≤75 words', reading_level_ok: 'grade ≤6', interest_cta: 'interest-CTA',
+  names_evidence: 'names the event', falsifiable: 'falsifiable', no_banned_vocab: 'no filler',
+}
+function VariantGroupCard({ group }: { group: VariantGroup }) {
+  const [open, setOpen] = useState(false)
+  const ranked = [...group.variants].sort((a, b) => b.total_score - a.total_score)
+  const winner = ranked[0]
+  if (!winner) return null
+  return (
+    <div style={{ border: `1px solid ${C.border}`, borderRadius: 10, overflow: 'hidden' }}>
+      <button onClick={() => setOpen(v => !v)} style={{
+        width: '100%', textAlign: 'left', border: 'none', cursor: 'pointer', background: '#f8fafc',
+        padding: '11px 14px', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 13.5, fontWeight: 700, color: C.text }}>{group.company}</span>
+        <span style={{ fontSize: 12, color: C.textMute }}>{group.contact} · {group.title}</span>
+        <span style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center' }}>
+          <span style={pill(C.success)}>winner: {winner.framework} · {winner.total_score}/100</span>
+          <span style={{ fontSize: 11, color: C.textFaint }}>{ranked.length} frameworks tested {open ? '▾' : '▸'}</span>
+        </span>
+      </button>
+      {/* winner always shown */}
+      <div style={{ padding: '11px 14px', borderTop: `1px solid ${C.border}` }}>
+        <div style={{ fontSize: 12.5, fontWeight: 700, color: C.text }}>{winner.subject}</div>
+        <div style={{ fontSize: 12.5, color: C.textMute, lineHeight: 1.55, marginTop: 2 }}>{winner.body}</div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 8 }}>
+          {Object.entries(winner.gates || {}).map(([k, v]) =>
+            <span key={k} style={pill(v ? C.success : C.warning)}>{v ? '✓' : '✗'} {GATE_LABEL[k] || k}</span>)}
+          <span style={pill(C.violet)}>FK grade {winner.fk_grade}</span>
+          <span style={pill(C.textMute)}>{winner.word_count}w</span>
+        </div>
+      </div>
+      {/* the losers — the auditable part */}
+      {open && (
+        <div style={{ padding: '4px 14px 12px', borderTop: `1px solid ${C.border}`, background: '#fcfcfd' }}>
+          <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.06em', color: C.textFaint, margin: '10px 0 8px' }}>
+            THE VARIANTS IT BEAT (same evidence, different framework)
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {ranked.map((v, i) => (
+              <div key={v.id} style={{ border: `1px solid ${C.border}`, borderRadius: 8, padding: '9px 11px', background: v.is_winner ? '#f0fdf4' : C.card }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: C.text }}>#{i + 1} · {v.framework}</span>
+                  <span style={{ fontSize: 11, color: C.textFaint }}>{FRAMEWORK_LABEL[v.framework] || ''}</span>
+                  <span style={{ marginLeft: 'auto', fontSize: 11.5, fontWeight: 700, color: v.is_winner ? C.success : C.textMute }}>
+                    {v.total_score}/100 <span style={{ fontWeight: 400, color: C.textFaint }}>(gates {v.mechanical_score}/60 · judge {v.judge_score}/40)</span>
+                  </span>
+                </div>
+                {v.body
+                  ? <div style={{ fontSize: 12, color: C.textMute, lineHeight: 1.5 }}>&quot;{v.body}&quot;</div>
+                  : <div style={{ fontSize: 12, color: C.danger, fontStyle: 'italic' }}>generation failed: {v.error}</div>}
+                {v.judge?.verdict && (
+                  <div style={{ fontSize: 11, color: C.textFaint, marginTop: 4, fontStyle: 'italic' }}>
+                    judge: &quot;{v.judge.verdict}&quot; — specificity {v.judge.specificity}/10 · credibility {v.judge.credibility}/10 · would-reply {v.judge.reply_likelihood}/10
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -996,9 +1080,26 @@ partners — say "make your stack predictive", never "rip it out".`}</div>
       )}
 
       {/* ── Emails tab ── */}
-      {tab === 'emails' && (
+      {tab === 'emails' && (<>
+      {(data.copy_variants?.length ?? 0) > 0 && (
+      <div style={{ ...card, marginBottom: 16 }}>
+        <SectionTitle>Framework bake-off — the copy is chosen, not guessed</SectionTitle>
+        <p style={{ fontSize: 12.5, color: C.textMute, margin: '-6px 0 12px', lineHeight: 1.55 }}>
+          For each buyer, the same evidence is written three ways — <strong>PAS</strong>,
+          <strong> OIQ</strong>, and an <strong>insight-led</strong> reframe — then every variant is
+          scored: 60 points of deterministic gates (≤75 words, reading grade ≤6 by Flesch-Kincaid,
+          an <em>interest</em>-CTA not a time-ask, names the dated event, falsifiable) plus a 40-point
+          LLM judge role-played as a busy CRO. The winner ships; the losers stay on the record.
+          The gates come from published data — Gong (304K emails: interest-CTA &gt; time-ask; &lt;100
+          words), Lavender (231K: grade 3–5 reading level lifts replies ~67%).
+        </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {data.copy_variants!.map(g => <VariantGroupCard key={g.company + g.contact} group={g} />)}
+        </div>
+      </div>
+      )}
       <div style={card}>
-        <SectionTitle>Generated Emails</SectionTitle>
+        <SectionTitle>Generated Emails (single-shot baseline)</SectionTitle>
         {data.hooks.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '32px 16px' }}>
             <Users size={28} color={C.textFaint} style={{ marginBottom: 8 }} />
@@ -1026,7 +1127,7 @@ partners — say "make your stack predictive", never "rip it out".`}</div>
           </div>
         )}
       </div>
-      )}
+      </>)}
 
       {/* ── Sequences tab ── */}
       {tab === 'sequences' && (
