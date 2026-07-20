@@ -12,6 +12,24 @@ public behavioral exhaust instead of bought intent data — with every score tra
 dated, clickable source. *"See risk early. Act while there's still time."* applies to
 pipeline, too.
 
+**Research.** Read quadsci.ai directly before writing anything — the product names (Growth AI,
+Cohorts AI), the claims (90%+ accuracy, 9–18 months ahead of renewal, 15% average ARR growth,
+11 trillion telemetry events), the differentiator language ("grounded in real user behavior,"
+product-usage intelligence vs. CRM-derived guesswork), and the competitor set (Gainsight,
+ChurnZero, Clari, Hook, Reef, Magnify) all come from the site and the Series A press release
+(businesswire.com, Feb 2026, $8M led by Crosslink Capital), not from the exercise brief's
+paraphrase of it. Where the two differ — the brief's example says "12 months ahead of renewal,"
+the site says "9–18 months" — this submission follows the site.
+
+**On scope.** The brief suggests 3–5 hours; this ran well past that. Flagging it here so it
+reads as a choice, not an oversight: the four deliverables above are scoped to exactly what's
+asked, but I kept going because the exercise is graded partly on whether the loop actually holds
+together, and the fastest way to find where a "connected system" secretly isn't — a stale hard
+filter, a scoring rule with no evidence path, a prompt that drifted from what's actually
+shipping — is to run it against real data until it breaks, not to reason about it on paper.
+Several of the fixes documented below (the cluster-window bug, the misattribution bug, the
+date-gating bug) only exist because of that extra time.
+
 ---
 
 ## Stage 1 — Detect Signal Cluster
@@ -160,7 +178,70 @@ only on Day 5, in QuadSci's own language — Growth AI, 90%+ accuracy, real prod
 data — followed by a single concrete ask. No line here could be sent by another vendor, and no
 line here could be sent to another contact at Chatwork.
 
-### The prompt (full, verbatim — this is the production system prompt)
+### The prompt (full, verbatim — this is what actually generated the copy currently staged)
+
+Prompt transparency means showing the prompt that produced what's actually shipping, not an
+earlier one. The Chatwork email above came from the OIQ framework prompt in `copy_lab.py` —
+this is it, unedited:
+
+```
+You write B2B cold emails using OBSERVATION -> IMPLICATION -> QUESTION.
+Sentence 1: state the observed, dated fact from the EVIDENCE. Neutral, no drama.
+Sentence 2: what that usually means for someone in their seat (the implication).
+Sentence 3: one question that asks for interest.
+Lead with the fact. Do not assert a pain you cannot see.
+
+HARD RULES (these are scored mechanically after you write — violating them loses):
+- Body MUST open with the contact's first name as direct address, e.g. "Yasuyuki, ..." —
+  not buried later, not "Hi Yasuyuki," as a greeting. This is enforced mechanically after
+  generation if you skip it, but the sentence reads better when you write it this way
+  yourself rather than having it grafted on.
+- Body <= 75 words. Shorter wins ties.
+- Reading level: US grade 6 or below. Short words, short sentences. No jargon
+  ("leverage", "utilize", "predictive revenue intelligence" -> say it plainly).
+- MUST name the specific event from the EVIDENCE, in plain words, ideally with
+  its date or number. The company name alone is NOT specificity.
+- CTA must ask for INTEREST, never for time. Good: "Want me to send what we
+  found?" / "Worth a look?" Bad: "15 minutes?" / "book a call" / "quick chat".
+- Never invent a fact, number, date or quote that is not in the EVIDENCE.
+- Never use: leverage, synergy, quick question, I wanted to reach out, love
+  what you're building, hope this finds you, just checking in, circling back.
+- Subject: under 7 words, no "?" and no "!".
+Return ONLY JSON: {"subject": "...", "body": "..."}
+```
+
+PAS and CHALLENGER share that identical HARD RULES block (word cap, reading level, interest-CTA,
+grounding, banned vocab, name-opening) — they differ only in the three-sentence structure they're
+told to follow: PAS gets *"Sentence 1: name the problem... Sentence 2: the cost of leaving it
+alone... Sentence 3: one line on the fix"*; CHALLENGER gets *"Sentence 1: a specific, non-obvious
+insight about how companies like theirs actually lose revenue... Sentence 2: tie it to the
+observed event... Sentence 3: one question."* Same evidence, same buyer, same hard rules — three
+different opening moves, scored the same way.
+
+The user prompt is deliberately spare — the evidence does the work, not prompt cleverness:
+
+```
+WRITE TO: {first} {last}, {title} at {company}
+
+EVIDENCE (everything you may claim must come from here):
+{evidence_text}
+
+WHAT WE SELL (use plain words, not this marketing phrasing):
+{product_context}
+```
+
+`{evidence_text}` is the **verbatim scoring evidence** — the fired rules' text and dates from
+Stage 2, not a summary. `{product_context}` is written in quadsci.ai's own language (Growth AI /
+Cohorts AI, 90%+ accuracy 9–18 months ahead of renewal, "grounded in real user behavior,"
+telemetry vs. CRM-derived guesswork, and — because Gainsight/Clari/Pendo are *integration
+partners* on the site — "make your stack predictive," never "rip it out").
+
+**Where this came from.** The single-shot `hook_generator.py` prompt below was the original
+production system — every bug in the iteration history right below happened on this prompt, and
+it's the one still generating touches 2–5 of the sequence (the follow-ups, not the opener). It's
+shown in full because the iteration history references its exact rules (the one-sentence cap, the
+six tension angles) — but it is **not** what wrote the Day-1 email above anymore; that's the OIQ
+prompt shown first, which is why this submission shows both rather than only the newer one.
 
 ```
 You are a senior GTM engineer writing hyper-personalised cold email HOOKS.
@@ -194,12 +275,6 @@ HOOK RULES (non-negotiable):
   "love what you're building", "hope this finds you", "just checking in"
 - Subject line: under 8 words, no question mark, no exclamation mark
 ```
-
-The user prompt injects: contact name/title/company + the **verbatim scoring evidence** (the
-fired rules' text and dates from Stage 2) + the product context written in quadsci.ai's own
-language (Growth AI / Cohorts AI, 90%+ accuracy 9–18 months ahead of renewal, "grounded in
-real user behavior," telemetry vs. CRM-derived guesswork, and — because Gainsight/Clari/Pendo
-are *integration partners* on the site — "make your stack predictive," never "rip it out").
 
 ### Iteration history (what broke, what changed — all real, all in git)
 
@@ -321,6 +396,15 @@ afternoon) where each staged row shows **the copy and the full evidence trace th
 it** — fired signals, dates, links, score, tier, email-validation status. The reviewer judges
 the *claim*, not just the prose. Approve → the 5-touch sequence (email → LinkedIn → email
 naming Growth AI → LinkedIn → breakup) exports to a free-tier sender or Apollo sequence.
+
+Two things live in the actual product, not just in this document: a **system-health panel**
+at the top of the workflow view computes the real funnel on every page load — candidates
+scored → hard-filtered → held at no-cluster → qualifying → bake-off run → sequenced →
+auto-send-eligible, each a live count against the current database, not a number typed into
+this doc — and every staged row has a **"Full trace" toggle** that expands the entire chain
+for that one contact: the fired rule, its citation, the score it produced, the grounding
+match, the bake-off gates, and the judge's verdict, in order. A reviewer — or an interviewer —
+can pick any row, not a pre-selected one, and audit it end to end without leaving the page.
 
 ### Auto-send vs. human review
 
