@@ -124,6 +124,61 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
   return <h2 style={{ fontSize: 15, fontWeight: 700, color: C.text, margin: '0 0 12px' }}>{children}</h2>
 }
 
+// Live funnel math — the honest denominator behind every "X qualified" claim
+// made below. Answers, before the co-founder has to ask: of everything the
+// engine looked at, how much was correctly filtered out vs. correctly held
+// for lack of a live cluster vs. actually cleared the bar — and of what
+// cleared the bar, how much got the FULL bake-off + sequence treatment (not
+// a curated top-N demo set) and how much is auto-send eligible right now.
+function FunnelHealth({ total, disqualified, noCluster, qualifying, bakeoffCoverage, sequenced, autoSendCount, staleSequenced }: {
+  total: number; disqualified: number; noCluster: number; qualifying: number
+  bakeoffCoverage: number; sequenced: number; autoSendCount: number; staleSequenced: number
+}) {
+  const steps: { label: string; n: number; of: number; note: string; color: string }[] = [
+    { label: 'Candidate companies scored', n: total, of: total, note: 'every account the engine has evaluated', color: C.textMute },
+    { label: 'Hard-filtered (not B2B SaaS / below floor)', n: disqualified, of: total, note: 'disqualified before scoring, code-enforced', color: C.danger },
+    { label: 'No live cluster — correctly held at TIER 4', n: noCluster, of: total, note: '<2 distinct signal types within 90 days — monitor only, no copy', color: C.warning },
+    { label: 'Qualifying (TIER 1–3, copy-eligible)', n: qualifying, of: total, note: 'passed hard filters + has a scoreable evidence trace', color: C.primary },
+    { label: 'Ran the full framework bake-off', n: bakeoffCoverage, of: qualifying, note: 'PAS vs OIQ vs Challenger, scored and staged', color: C.violet },
+    { label: 'Sequenced (5-touch cadence staged)', n: sequenced, of: qualifying, note: 'ready for the review queue', color: C.success },
+    { label: 'Auto-send eligible right now', n: autoSendCount, of: sequenced, note: 'everything else routes to human review, by design', color: C.success },
+  ]
+  return (
+    <div style={{ border: `1px solid ${C.border}`, borderRadius: 12, padding: '14px 16px', marginBottom: 16, background: '#fafbfc' }}>
+      <div style={{ fontSize: 12.5, fontWeight: 700, color: C.text, marginBottom: 2 }}>System health — the real funnel, live</div>
+      <div style={{ fontSize: 11.5, color: C.textMute, marginBottom: 10, lineHeight: 1.5 }}>
+        Not a demo set. {bakeoffCoverage === qualifying && qualifying > 0
+          ? <>Every one of the {qualifying} accounts that cleared the bar got the full bake-off + sequence treatment — 100% coverage of the qualifying set, not a curated top-N.</>
+          : <>{bakeoffCoverage} of {qualifying} qualifying accounts have run the full bake-off so far.</>}
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {steps.map(s => {
+          const pct = s.of > 0 ? Math.round((s.n / s.of) * 100) : 0
+          return (
+            <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ width: 230, flexShrink: 0, fontSize: 11.5, color: C.text }}>{s.label}</div>
+              <div style={{ flex: 1, height: 6, background: '#e2e8f0', borderRadius: 999, overflow: 'hidden' }}>
+                <div style={{ width: `${pct}%`, height: '100%', background: s.color, borderRadius: 999, transition: 'width 200ms ease-out' }} />
+              </div>
+              <div style={{ width: 100, flexShrink: 0, fontSize: 11.5, fontWeight: 700, color: C.text, textAlign: 'right' }}>
+                {s.n} / {s.of} <span style={{ fontWeight: 500, color: C.textFaint }}>({pct}%)</span>
+              </div>
+              <div style={{ width: 260, flexShrink: 0, fontSize: 10.5, color: C.textFaint, lineHeight: 1.4 }}>{s.note}</div>
+            </div>
+          )
+        })}
+      </div>
+      {staleSequenced > 0 && (
+        <div style={{ fontSize: 10.5, color: C.textFaint, marginTop: 8, lineHeight: 1.4 }}>
+          {staleSequenced} additional sequence{staleSequenced === 1 ? '' : 's'} exist from before the current
+          hard-filter/rescore pass, for accounts that would no longer qualify — kept on record in the Sequences
+          tab, excluded from this funnel and the review queue below rather than silently counted as coverage.
+        </div>
+      )}
+    </div>
+  )
+}
+
 function StageBlock({ n, title, deliverables, what, live, details, handoff, isFeedback }: {
   n: number; title: string; deliverables: string[]; what: React.ReactNode; live: React.ReactNode
   details?: React.ReactNode; handoff: React.ReactNode; isFeedback?: boolean
@@ -180,13 +235,10 @@ function MiniTable({ head, rows }: { head: string[]; rows: (string | number)[][]
     </div>
   )
 }
-// The reviewer's unit of work, derived entirely from live payload data:
-// the staged hook, its account's scoring trace, and the buyer's email status.
-// The route verdict is COMPUTED from the same rules Stage 4 documents, so the
-// panel can never drift from the policy table beside it.
-function StagedRow({ hook, prospect, contact }: {
-  hook: Hook; prospect?: Prospect; contact?: Contact
-}) {
+// Shared by StagedRow and the funnel/coverage panel so the auto-send verdict
+// can never drift between "one row's detail" and "the aggregate count" — both
+// call this, neither hardcodes the policy a second time.
+function computeRoute(hook: Hook, prospect?: Prospect, contact?: Contact) {
   const fired = (prospect?.trace || []).filter(t => t.state === 'fired')
   const cited = fired.filter(t => t.source_url)
   const clusterFired = fired.some(t => t.condition === 'buying_window_timing')
@@ -198,14 +250,26 @@ function StagedRow({ hook, prospect, contact }: {
   const title = (hook.contact_title || '').toLowerCase()
   const isCLevel = /\bc[eforst]o\b|chief |founder|president/.test(title)
 
-  // Same conditions as the auto-send table below this panel
   const holds: string[] = []
   if (tierNum > 2) holds.push('tier below TIER 2')
   if (cited.length < 2) holds.push(`${cited.length} independent citation${cited.length === 1 ? '' : 's'} (needs 2)`)
   if (patternInferred) holds.push('email is pattern-inferred, not validated')
   if (isCLevel) holds.push('C-level recipient — always reviewed')
   if (!clusterFired) holds.push('no live cluster (single signal type)')
-  const autoSendEligible = holds.length === 0
+
+  return { fired, cited, clusterFired, tierNum, patternInferred, isCLevel, holds, autoSendEligible: holds.length === 0 }
+}
+
+// The reviewer's unit of work, derived entirely from live payload data:
+// the staged hook, its account's scoring trace, and the buyer's email status.
+// The route verdict is COMPUTED from the same rules Stage 4 documents, so the
+// panel can never drift from the policy table beside it.
+function StagedRow({ hook, prospect, contact, variantGroup }: {
+  hook: Hook; prospect?: Prospect; contact?: Contact; variantGroup?: VariantGroup
+}) {
+  const [traceOpen, setTraceOpen] = useState(false)
+  const { fired, cited, clusterFired, patternInferred, holds, autoSendEligible } = computeRoute(hook, prospect, contact)
+  const winner = variantGroup ? [...variantGroup.variants].sort((a, b) => b.total_score - a.total_score)[0] : undefined
 
   const gate = (ok: boolean, label: string) => (
     <span key={label} style={pill(ok ? C.success : C.warning)}>{label}</span>
@@ -258,6 +322,67 @@ function StagedRow({ hook, prospect, contact }: {
             ? 'All gate conditions met — eligible for auto-send once its signal type graduates (~50 reviewed sends).'
             : `Held: ${holds.join('; ')} — the reviewer sees the reason, not just a verdict.`}
         </div>
+        <button onClick={() => setTraceOpen(o => !o)} style={{
+          alignSelf: 'flex-start', background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+          fontSize: 11, fontWeight: 700, color: C.primary, display: 'flex', alignItems: 'center', gap: 4,
+        }}>
+          {traceOpen ? '▾' : '▸'} Full trace — signal → citation → score → grounding → gate → judge
+        </button>
+        {traceOpen && (
+          <div style={{ background: '#f8fafc', border: `1px solid ${C.border}`, borderRadius: 8, padding: 10, display: 'flex', flexDirection: 'column', gap: 9 }}>
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: C.textMute, marginBottom: 4 }}>1 · SIGNAL → CITATION</div>
+              {fired.length === 0 ? <div style={{ fontSize: 11.5, color: C.textFaint }}>No fired rules on file.</div> : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                  {fired.map(t => (
+                    <div key={t.id} style={{ fontSize: 11.5, color: C.text }}>
+                      <span style={{ fontWeight: 600 }}>{t.id}</span> +{t.points}pt — {t.why || t.condition}
+                      {t.source_url && <> · <a href={t.source_url} target="_blank" rel="noreferrer" style={{ color: C.primary }}>source</a></>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: C.textMute, marginBottom: 4 }}>2 · SCORE</div>
+              <div style={{ fontSize: 11.5, color: C.text }}>
+                {prospect ? <>{prospect.total_score.toFixed(1)} pts / {prospect.evaluable_weight.toFixed(1)} evaluable → <strong>{prospect.tier}</strong></> : 'no prospect record'}
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: C.textMute, marginBottom: 4 }}>3 · GROUNDING</div>
+              <div style={{ fontSize: 11.5, color: C.text }}>
+                {hook.grounded_on ? <>Copy quotes distinctive evidence term <strong>&quot;{hook.grounded_on}&quot;</strong> — not a hallucinated specific.</> : 'No grounding term recorded for this hook.'}
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: C.textMute, marginBottom: 4 }}>4 · FRAMEWORK BAKE-OFF GATES</div>
+              {winner ? (
+                <>
+                  <div style={{ fontSize: 11.5, color: C.text, marginBottom: 4 }}>
+                    <strong>{FRAMEWORK_LABEL[winner.framework] || winner.framework}</strong> won {winner.total_score}/100
+                    ({winner.mechanical_score}/60 mechanical + {winner.judge_score}/40 judge) over
+                    {' '}{variantGroup!.variants.length - 1} other framework{variantGroup!.variants.length - 1 === 1 ? '' : 's'}.
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                    {Object.entries(winner.gates).map(([k, v]) => gate(v, GATE_LABEL[k] || k))}
+                  </div>
+                </>
+              ) : (
+                <div style={{ fontSize: 11.5, color: C.textFaint }}>This contact predates the bake-off — single-shot generation only, no framework comparison on file.</div>
+              )}
+            </div>
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: C.textMute, marginBottom: 4 }}>5 · LLM JUDGE (role-played as a busy CRO)</div>
+              {winner?.judge?.verdict ? (
+                <div style={{ fontSize: 11.5, color: C.text, fontStyle: 'italic' }}>
+                  &quot;{winner.judge.verdict}&quot; — specificity {winner.judge.specificity}/10,
+                  {' '}credibility {winner.judge.credibility}/10, reply likelihood {winner.judge.reply_likelihood}/10
+                </div>
+              ) : <div style={{ fontSize: 11.5, color: C.textFaint }}>No judge verdict on file for this contact.</div>}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -547,27 +672,51 @@ export default function QuadSci() {
   const contactsByCompany = data.contacts_by_company || {}
   const contactCompanyIds = Object.keys(contactsByCompany)
 
-  // Live staged rows for the Stage-4 review-queue panel: the highest-scoring
-  // sequenced hooks, joined to their account's scoring trace and the buyer's
-  // real email status. Nothing here is hardcoded — if the board rescores, the
-  // route verdicts change with it.
+  // Live staged rows for the Stage-4 review-queue panel: EVERY sequenced hook,
+  // joined to its account's scoring trace, the buyer's real email status, and
+  // Funnel & coverage — the honest denominator behind every number shown
+  // below. Computed live from the same payload, so it can't drift from what
+  // the tabs actually contain. Named distinctly from the `disqualified`
+  // Prospect[] used by the hard-filter panel further down — this is a count.
+  const disqualifiedCount = allProspects.filter(p => p.tier?.includes('DISQUALIFIED')).length
+  const noCluster = allProspects.filter(p => p.tier?.includes('TIER 4')).length
+  const qualifying = allProspects.filter(p =>
+    p.tier && !p.tier.includes('DISQUALIFIED') && !p.tier.includes('TIER 4'))
+  const qualifyingNames = new Set(qualifying.map(p => p.company_name))
+  const bakeoffCompanies = new Set((data.copy_variants || []).map(g => g.company))
+  const qualifyingWithBakeoff = qualifying.filter(p => bakeoffCompanies.has(p.company_name)).length
+
+  // Live staged rows for the Stage-4 review-queue panel: EVERY sequenced hook
+  // for a CURRENTLY qualifying account, joined to its scoring trace, the
+  // buyer's real email status, and (when one ran) its bake-off group. Scoped
+  // to qualifying — some historical sequences predate the hard-filter/rescore
+  // pass and belong to companies that would no longer qualify (kept on record
+  // in the Sequences tab, but a stale sequence for a disqualified company has
+  // no business in a review queue). Every qualifying account is shown, not a
+  // curated top-N — the reviewer can click into any of them and get the same
+  // depth. Nothing here is hardcoded — if the board rescores, the route
+  // verdicts change with it.
   // NB: plain computation, not useMemo — this runs after the loading/error
   // early-returns above, so a hook here would break React's rules-of-hooks
   // (conditional hook call → "rendered more hooks than previous render").
+  const staleSequencedCount = sequencedHooks.filter(h => !qualifyingNames.has(h.company_name)).length
   const stagedRows = (() => {
     const byCompany = new Map(allProspects.map(p => [p.company_name, p]))
+    const variantsByKey = new Map((data.copy_variants || []).map(g => [`${g.company}::${g.contact}`.toLowerCase(), g]))
     return sequencedHooks
+      .filter(hook => qualifyingNames.has(hook.company_name))
       .map(hook => {
         const prospect = byCompany.get(hook.company_name)
         const contacts = prospect ? (contactsByCompany[String(prospect.company_id)] || []) : []
         const contact = contacts.find(c =>
           (c.full_name || `${c.first_name} ${c.last_name}`).trim().toLowerCase()
             === (hook.contact_name || '').trim().toLowerCase()) || contacts[0]
-        return { hook, prospect, contact }
+        const variantGroup = variantsByKey.get(`${hook.company_name}::${hook.contact_name}`.toLowerCase())
+        return { hook, prospect, contact, variantGroup }
       })
       .sort((a, b) => (b.prospect?.total_score || 0) - (a.prospect?.total_score || 0))
-      .slice(0, 2)
   })()
+  const autoSendCount = stagedRows.filter(r => computeRoute(r.hook, r.prospect, r.contact).autoSendEligible).length
 
   const counts: Partial<Record<Tab, number>> = {
     rules: data.signal_rules.length,
@@ -691,6 +840,12 @@ export default function QuadSci() {
           away — the same dated, cited signal records that score an account also write its email and sit
           next to it in the review queue.
         </p>
+
+        <FunnelHealth
+          total={allProspects.length} disqualified={disqualifiedCount} noCluster={noCluster}
+          qualifying={qualifying.length} bakeoffCoverage={qualifyingWithBakeoff}
+          sequenced={stagedRows.length} autoSendCount={autoSendCount} staleSequenced={staleSequencedCount}
+        />
 
         <StageBlock n={1} title="Detect Signal Cluster"
           deliverables={['5 signals + sources', 'cluster definition', 'USP-tied signal']}
@@ -852,10 +1007,13 @@ partners — say "make your stack predictive", never "rip it out".`}</div>
               ))}
             </div>
           </>}
-          live={<>{data.hooks.length} grounded emails on this board. Flagship: &quot;Yasuyuki, Pendo
-            records what happened but can&apos;t predict what&apos;s coming with your customers.&quot; —
-            the churn-watch evidence as the first line. The audit of ~100 hooks regenerated 1 truncated
-            body and held 10 as ungrounded template copy.</>}
+          live={<>{data.hooks.length} grounded emails on this board. Flagship — the bake-off winner for
+            Chatwork, OIQ framework, 85/100: &quot;Yasuyuki, Chatwork removed Pendo from their tech
+            stack. This often signals a shift in customer analytics priorities. Worth a look?&quot; The
+            audit of ~100 single-shot hooks regenerated 1 truncated body and held 10 as ungrounded
+            template copy; a second pass on the bake-off winners caught a subtler bug — the winning
+            copy wasn&apos;t opening with the contact&apos;s name, so every winner was mechanically
+            fixed and re-scored.</>}
           handoff={<>One staged row per approved contact: hook + 5-touch sequence + every gate result +
             the inherited evidence trace. Copy never travels without the evidence that justified it.</>} />
 
@@ -867,12 +1025,12 @@ partners — say "make your stack predictive", never "rip it out".`}</div>
             free-tier sender or Apollo sequence.</>}
           details={<>
             <div style={{ fontSize: 12, fontWeight: 700, color: C.text, margin: '0 0 6px' }}>
-              What one staged row actually looks like (the reviewer&apos;s unit of work)
+              Every staged row on the board — not a curated sample (the reviewer&apos;s unit of work)
             </div>
             {stagedRows.length === 0
               ? <div style={{ fontSize: 12, color: C.textFaint, marginBottom: 12 }}>No staged rows yet — approve a sequence to populate the queue.</div>
               : stagedRows.map(r => (
-                  <StagedRow key={r.hook.id} hook={r.hook} prospect={r.prospect} contact={r.contact} />
+                  <StagedRow key={r.hook.id} hook={r.hook} prospect={r.prospect} contact={r.contact} variantGroup={r.variantGroup} />
                 ))}
             <div style={{ fontSize: 12, fontWeight: 700, color: C.text, margin: '0 0 6px' }}>Auto-send vs. human review (nothing auto-sends at cold start)</div>
             <MiniTable head={['Condition', 'Route']} rows={[
