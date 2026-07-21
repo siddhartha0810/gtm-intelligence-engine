@@ -16,7 +16,7 @@ import sys
 from pathlib import Path
 
 BASE_DIR = Path(__file__).parent
-ORACLE_DIR = BASE_DIR / "oracle_intent_engine"
+ORACLE_DIR = BASE_DIR / "intent_engine"
 if str(ORACLE_DIR) not in sys.path:
     sys.path.insert(0, str(ORACLE_DIR))
 
@@ -30,7 +30,7 @@ DEMO_COMPANIES = [
         "size": "1000-5000",
         "location": "Columbus, OH",
         "signals": [
-            dict(oracle_product="JD Edwards", phase="hiring", source="indeed",
+            dict(detected_product="JD Edwards", phase="hiring", source="indeed",
                  signal_type="job_posting", job_title="JDE CNC Administrator",
                  evidence="Meridian Manufacturing Co is hiring a JD Edwards EnterpriseOne CNC Administrator to support production ERP.",
                  url="https://indeed.com/demo/meridian-jde-cnc", confidence=0.9),
@@ -48,7 +48,7 @@ DEMO_COMPANIES = [
         "size": "500-1000",
         "location": "Charleston, SC",
         "signals": [
-            dict(oracle_product="JD Edwards", phase="upgrading", source="news",
+            dict(detected_product="JD Edwards", phase="upgrading", source="news",
                  signal_type="press_release", job_title="",
                  evidence="Coastal Home Builders announces JD Edwards EnterpriseOne cloud migration to modernize job costing.",
                  url="https://news.example.com/demo/coastal-jde-migration", confidence=0.75),
@@ -66,7 +66,7 @@ DEMO_COMPANIES = [
         "size": "1000-5000",
         "location": "Memphis, TN",
         "signals": [
-            dict(oracle_product="Oracle Cloud ERP", phase="evaluating", source="procurement",
+            dict(detected_product="Oracle Cloud ERP", phase="evaluating", source="procurement",
                  signal_type="rfp", job_title="",
                  evidence="Bluepeak Logistics issued an RFP for Oracle Fusion ERP Cloud implementation partners.",
                  url="https://procurement.example.com/demo/bluepeak-rfp", confidence=0.85),
@@ -84,7 +84,7 @@ DEMO_COMPANIES = [
         "size": "5000-10000",
         "location": "Minneapolis, MN",
         "signals": [
-            dict(oracle_product="Oracle SCM Cloud", phase="implementing", source="news",
+            dict(detected_product="Oracle SCM Cloud", phase="implementing", source="news",
                  signal_type="press_release", job_title="",
                  evidence="Summit Foods Group goes live on Oracle Supply Chain Cloud across three distribution centers.",
                  url="https://news.example.com/demo/summit-scm-golive", confidence=0.8),
@@ -102,7 +102,7 @@ DEMO_COMPANIES = [
         "size": "1000-5000",
         "location": "Houston, TX",
         "signals": [
-            dict(oracle_product="JD Edwards", phase="supporting", source="indeed",
+            dict(detected_product="JD Edwards", phase="supporting", source="indeed",
                  signal_type="job_posting", job_title="JDE EnterpriseOne Support Analyst",
                  evidence="Ironclad Energy Partners seeks a JD Edwards Support Analyst to manage existing production ERP environment.",
                  url="https://indeed.com/demo/ironclad-jde-support", confidence=0.7),

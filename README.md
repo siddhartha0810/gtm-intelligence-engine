@@ -1,9 +1,11 @@
-# Oracle Intelligence Platform
+# Intent Intelligence Platform
 
-> AI-powered B2B sales intelligence tool for Oracle/JDE go-to-market teams.
-> Automatically identifies companies that are buying, implementing, or upgrading Oracle products,
-> enriches them with verified decision-maker contacts, and surfaces them in a React dashboard
-> ready for outreach or HubSpot CRM push.
+> AI-powered B2B sales intelligence tool for go-to-market teams.
+> Automatically identifies companies that are buying, implementing, or upgrading products matched
+> against a configurable taxonomy (Oracle/JDE is the default, most mature vertical — see
+> `icp_profiles/*.yaml` for independent campaign ICPs like QuadSci and Endex), enriches them with
+> verified decision-maker contacts, and surfaces them in a React dashboard ready for outreach or
+> HubSpot CRM push.
 
 [![Python](https://img.shields.io/badge/Python-3.13+-blue)](https://python.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-green)](https://fastapi.tiangolo.com)
@@ -116,7 +118,7 @@ DATA TOOL/
 ├── scan_worker.py              ← Background thread for Oracle Intent Engine
 ├── enrichment_worker.py        ← Background thread for Lead Enrichment Engine
 │
-├── oracle_intent_engine/
+├── intent_engine/
 │   └── src/
 │       ├── config.py               ← All env vars and constants
 │       ├── database.py             ← PostgreSQL: companies, signals, contacts, users
@@ -352,7 +354,7 @@ Salesforce fields like `FirstName`, `LinkedIn_URL__c`, `HasOptedOutOfEmail` all 
 
 ## Environment Setup
 
-### Oracle Intent Engine — `oracle_intent_engine/.env`
+### Oracle Intent Engine — `intent_engine/.env`
 ```env
 # ─── Database (must be on-site or VPN to reach 10.0.0.149) ───────────────────
 DB_HOST=
@@ -457,7 +459,7 @@ npm run dev          # Vite dev server on http://localhost:5173
 
 ```bash
 # Oracle Intent Engine — trigger a scan directly
-cd oracle_intent_engine
+cd intent_engine
 python -m src.pipeline
 
 # Lead Enrichment Engine — enrich a specific file
@@ -526,7 +528,7 @@ All signals pass through a staffing filter. If the company posting a job is a st
 ## Notes
 
 ### Adding a new signal source
-1. Create `oracle_intent_engine/src/signals/my_signal.py`
+1. Create `intent_engine/src/signals/my_signal.py`
 2. Inherit from `BaseSignal` (see `base_signal.py` for the interface)
 3. Implement `fetch(query, location, max_pages) → list[dict]`
 4. Add to `signals/__init__.py`
@@ -542,7 +544,7 @@ async def my_endpoint(current_user: dict = Depends(oracle_auth.require_analyst))
 ```
 
 ### Database changes
-Write an `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` migration. All DDL is in `oracle_intent_engine/src/database.py` → `_CREATE_STATEMENTS`. Never modify production tables without a migration script.
+Write an `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` migration. All DDL is in `intent_engine/src/database.py` → `_CREATE_STATEMENTS`. Never modify production tables without a migration script.
 
 ### Frontend pages
 - All pages: `frontend/src/pages/` — functional components, TypeScript strict mode
@@ -556,7 +558,7 @@ Write an `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` migration. All DDL is in `or
 - Use `SELECT *` in production queries — list columns explicitly
 - Call Apollo/ZeroBounce in a loop without confirming volume first
 - Write to the `contacts_master` table (it's a read-only Salesforce export)
-- Cross-import between `oracle_intent_engine` and `lead_enrichment_engine`
+- Cross-import between `intent_engine` and `lead_enrichment_engine`
 
 ---
 

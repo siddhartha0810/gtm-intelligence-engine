@@ -6,7 +6,7 @@ const authH = () => ({ 'Authorization': `Bearer ${localStorage.getItem('token') 
 interface Signal {
   id: number
   company_name: string
-  oracle_product: string
+  detected_product: string
   phase: string
   source: string
   signal_type: string
@@ -139,9 +139,9 @@ export default function IntentData() {
                 <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 999, fontWeight: 500, flexShrink: 0, ...strengthStyle(sig.confidence) }}>
                   {strengthLabel(sig.confidence)}
                 </span>
-                {sig.oracle_product && (
+                {sig.detected_product && (
                   <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 999, background: 'rgba(99,102,241,0.12)', color: '#a5b4fc', flexShrink: 0 }}>
-                    {sig.oracle_product}
+                    {sig.detected_product}
                   </span>
                 )}
               </div>

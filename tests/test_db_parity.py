@@ -18,7 +18,7 @@ Parsed with ast rather than imported, so the tests run without a database.
 import ast
 from pathlib import Path
 
-SRC = Path(__file__).parent.parent / "oracle_intent_engine" / "src"
+SRC = Path(__file__).parent.parent / "intent_engine" / "src"
 
 # Public functions that intentionally exist in only one backend. Every entry
 # needs a reason — an empty set is the goal state.

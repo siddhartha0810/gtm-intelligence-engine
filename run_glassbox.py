@@ -11,7 +11,7 @@ For a given campaign (account), this:
      evidence source — reuses the same file the campaign's own keywords/news
      queries were built from, so nothing drifts).
   2. Gathers candidate companies already surfaced by this campaign's scan
-     (oracle_signals joined on scan_run_id = campaign.last_run_id).
+     (intent_signals joined on scan_run_id = campaign.last_run_id).
   3. Optionally runs a generalized SEC EDGAR search (sec_filing_signal.py's
      `queries` override) using the ICP's category_terms/competitor_products —
      skip with --no-sec for private-company-heavy ICPs where it won't help.
@@ -52,17 +52,17 @@ import yaml
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).parent
-ORACLE_DIR = BASE_DIR / "oracle_intent_engine"
+ORACLE_DIR = BASE_DIR / "intent_engine"
 if str(ORACLE_DIR) not in sys.path:
     sys.path.insert(0, str(ORACLE_DIR))
 
 # config.py's own load_dotenv() only searches upward from CWD — when this
-# script runs from the repo root (BASE_DIR), oracle_intent_engine/.env is a
+# script runs from the repo root (BASE_DIR), intent_engine/.env is a
 # SUBdirectory, never found by that upward search. DB access silently "works"
 # anyway because its defaults happen to match the local Postgres setup, which
 # masked this for a while. APOLLO_API_KEY has no such fallback: on this
 # machine it's only set in lead_enrichment_engine/.env, not
-# oracle_intent_engine/.env — the running unified_app.py process only "has"
+# intent_engine/.env — the running unified_app.py process only "has"
 # it because it imports from both engines at startup and dotenv mutates the
 # whole process's os.environ, not a per-module namespace. Load both here so
 # a standalone run of this script matches what the real app sees.
@@ -132,9 +132,9 @@ def _terms_for_signal_type(signal_rules: dict, rule_type: str) -> list[str]:
 
 
 def get_candidate_companies(campaign: dict, icp: dict) -> list:
-    """Scoped by keyword provenance (oracle_signals.oracle_product — the
+    """Scoped by keyword provenance (intent_signals.detected_product — the
     exact matched campaign keyword, set by phase_classifier.detect_campaign_product()),
-    not by campaign.last_run_id. scan_runs/oracle_signals have no campaign_id
+    not by campaign.last_run_id. scan_runs/intent_signals have no campaign_id
     column at all, so filtering by last_run_id alone means a second scan
     silently REPLACES the candidate pool instead of widening it — every
     company found by an earlier scan would drop out the moment a newer scan
@@ -157,8 +157,8 @@ def get_candidate_companies(campaign: dict, icp: dict) -> list:
     with db.db_cursor(commit=False) as cur:
         cur.execute("""
             SELECT DISTINCT c.id, c.name, c.domain, c.industry
-            FROM oracle_signals s JOIN companies c ON c.id = s.company_id
-            WHERE s.oracle_product = ANY(%s) AND s.source = ANY(%s)
+            FROM intent_signals s JOIN companies c ON c.id = s.company_id
+            WHERE s.detected_product = ANY(%s) AND s.source = ANY(%s)
         """, (keywords, sources))
         rows = [dict(r) for r in cur.fetchall()]
 

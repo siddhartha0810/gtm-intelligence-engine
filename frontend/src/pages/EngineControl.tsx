@@ -123,7 +123,7 @@ const DEFAULT_VERTICAL_QUERIES = [
 const DEFAULT_VERTICAL_INDUSTRY_FILTER = '96,4,80,22,10,74,57' // LinkedIn industry codes: Manufacturing, Automotive, Mechanical/Industrial Eng, Construction, Civil Eng, Oil & Energy, Food & Beverages
 
 // ── Pipeline stages ────────────────────────────────────────────────────────────
-// Mirrors STAGE_DEFS in oracle_intent_engine/src/pipeline.py — the ids must match
+// Mirrors STAGE_DEFS in intent_engine/src/pipeline.py — the ids must match
 // exactly, since they key the "stages" object returned by /scan/status.
 const PIPELINE_STAGES: { id: string; label: string }[] = [
   { id: 'fetch',          label: 'Fetch signals from sources' },
@@ -138,7 +138,7 @@ const PIPELINE_STAGES: { id: string; label: string }[] = [
 ]
 type StageStatus = 'pending' | 'running' | 'done' | 'error'
 
-// Mirrors ENRICH_STAGE_DEFS in oracle_intent_engine/src/apollo_enrichment.py.
+// Mirrors ENRICH_STAGE_DEFS in intent_engine/src/apollo_enrichment.py.
 // Unlike the Signal Engine's stages, this loop runs per-company (all 5 stages
 // for company 1, then all 5 for company 2, ...) rather than stage-by-stage
 // across every company at once — so "current_stage" is a live pointer to
@@ -288,7 +288,7 @@ function PreflightModal({
             )}
             {apolloNeeded > 0 && !preflight.apollo_configured && (
               <div style={{ padding:'10px 14px', background:'rgba(239,68,68,0.08)', border:'1px solid rgba(239,68,68,0.2)', borderRadius:8, fontSize:12, color:'#f87171' }}>
-                ✗ Apollo API key not configured — {apolloNeeded} companies cannot be enriched. Add <code style={{ background:'rgba(239,68,68,0.15)', padding:'1px 4px', borderRadius:3 }}>APOLLO_API_KEY</code> to oracle_intent_engine/.env
+                ✗ Apollo API key not configured — {apolloNeeded} companies cannot be enriched. Add <code style={{ background:'rgba(239,68,68,0.15)', padding:'1px 4px', borderRadius:3 }}>APOLLO_API_KEY</code> to intent_engine/.env
               </div>
             )}
           </div>
@@ -352,7 +352,7 @@ function PreflightModal({
                 const on = provider === p.id
                 return (
                   <button key={p.id} onClick={() => setProvider(p.id)} disabled={!p.ok}
-                    title={p.ok ? `Use ${p.label} for contact discovery` : `Add ${p.envHint} to oracle_intent_engine/.env`}
+                    title={p.ok ? `Use ${p.label} for contact discovery` : `Add ${p.envHint} to intent_engine/.env`}
                     style={{ padding:'12px 14px', borderRadius:10, textAlign:'left', cursor: p.ok ? 'pointer' : 'not-allowed',
                       border:`1px solid ${on ? 'rgba(99,102,241,0.45)' : '#e2e8f0'}`,
                       background: on ? 'rgba(99,102,241,0.08)' : p.ok ? '#f8fafc' : '#f1f5f9',
@@ -1979,7 +1979,7 @@ export default function EngineControl() {
               onClick={() => fetchPreflight()}
               disabled={preflightLoading}
               style={{ display:'flex', alignItems:'center', gap:8, padding:'9px 20px', borderRadius:8, border:'none', background: apolloOk ? '#6366f1' : 'rgba(55,65,81,0.4)', color: apolloOk ? 'white' : '#6b7280', fontSize:13, fontWeight:500, cursor: apolloOk ? 'pointer' : 'not-allowed', opacity: preflightLoading ? 0.7 : 1 }}
-              title={!apolloOk ? 'Add APOLLO_API_KEY to oracle_intent_engine/.env' : 'Open pre-flight check'}>
+              title={!apolloOk ? 'Add APOLLO_API_KEY to intent_engine/.env' : 'Open pre-flight check'}>
               {preflightLoading
                 ? <><span style={{ animation:'spin 1s linear infinite', display:'inline-block' }}>⟳</span> Loading...</>
                 : <><Zap size={13} /> {pending > 0 ? `Enrich ${pending} companies` : 'Run Enrichment'}</>
@@ -1999,7 +1999,7 @@ export default function EngineControl() {
 
           {!apolloOk && (
             <div style={{ fontSize:11, color:'#f87171', padding:'8px 12px', background:'rgba(239,68,68,0.08)', border:'1px solid rgba(239,68,68,0.2)', borderRadius:8 }}>
-              Apollo key not configured — add <code style={{ background:'rgba(239,68,68,0.15)', padding:'1px 4px', borderRadius:3 }}>APOLLO_API_KEY</code> to oracle_intent_engine/.env
+              Apollo key not configured — add <code style={{ background:'rgba(239,68,68,0.15)', padding:'1px 4px', borderRadius:3 }}>APOLLO_API_KEY</code> to intent_engine/.env
             </div>
           )}
         </div>

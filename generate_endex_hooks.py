@@ -18,7 +18,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).parent
-ORACLE_DIR = BASE_DIR / "oracle_intent_engine"
+ORACLE_DIR = BASE_DIR / "intent_engine"
 sys.path.insert(0, str(ORACLE_DIR))
 load_dotenv(ORACLE_DIR / ".env")
 load_dotenv(BASE_DIR / "lead_enrichment_engine" / ".env")

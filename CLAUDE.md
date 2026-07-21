@@ -1,10 +1,12 @@
-# DATA TOOL — Oracle Intelligence Platform
+# DATA TOOL — Intent Intelligence Platform
 
 ## What this actually does (GTM context first)
 
-This is a full-stack **intent-driven outreach platform** built to solve one specific GTM problem: by the time a company appears on a standard Oracle ERP intent list, they've already shortlisted 3–4 consultants and issued an RFP. The window to influence is 60–90 days before that.
+This is a full-stack **intent-driven outreach platform** built to solve one specific GTM problem: by the time a company appears on a standard vendor intent list, they've already shortlisted 3–4 consultants and issued an RFP. The window to influence is 60–90 days before that.
 
-**The platform detects that window** by watching 15+ real-time sources for companies that are quietly hiring Oracle talent, scoping an implementation, or appearing in procurement activity — before they go public. It then enriches those companies with decision-maker contacts, validates emails, predicts formats where data is missing, scores every lead for priority, and routes contacts into sequences.
+**The platform detects that window** by watching 15+ real-time sources for companies that are quietly hiring for a product implementation, scoping a rollout, or appearing in procurement activity — before they go public. It then enriches those companies with decision-maker contacts, validates emails, predicts formats where data is missing, scores every lead for priority, and routes contacts into sequences.
+
+The platform is **taxonomy-driven, not hardcoded to one vendor**: the active product list, phase keywords, and scoring rules load at runtime from a `product_taxonomy` DB table (or a campaign's own `icp_profiles/*.yaml`). Oracle/JD Edwards is the default, most-mature taxonomy — it has the deepest signal coverage (dedicated Oracle-website/community/event scrapers) — but campaigns are not limited to it. `icp_profiles/quadsci.yaml` and `icp_profiles/endex.yaml` are live examples of fully independent, non-Oracle ICP definitions running in production today. See [.claude/rules/signals.md](.claude/rules/signals.md) for how the taxonomy layer works.
 
 ### End-to-end GTM pipeline
 
@@ -90,7 +92,7 @@ npm run dev
 ```bash
 .venv/bin/python -c "import psycopg2; c = psycopg2.connect('host=127.0.0.1 port=5432 dbname=oracle_intent user=postgres password=postgres'); print('DB OK'); c.close()"
 ```
-This machine runs Postgres locally (`oracle_intent_engine/.env` has `DB_HOST=127.0.0.1`), not against the office DB at `10.0.0.149`. If you're pointed at the office DB instead, you need to be on the office network or VPN.
+This machine runs Postgres locally (`intent_engine/.env` has `DB_HOST=127.0.0.1`), not against the office DB at `10.0.0.149`. If you're pointed at the office DB instead, you need to be on the office network or VPN.
 
 ---
 
@@ -110,7 +112,7 @@ This machine runs Postgres locally (`oracle_intent_engine/.env` has `DB_HOST=127
 ### Rule auto-loading
 | File being edited | Rule loaded automatically |
 |-------------------|--------------------------|
-| Any `*.py` in `oracle_intent_engine/src/signals/` | `rules/signals.md` + `rules/backend.md` |
+| Any `*.py` in `intent_engine/src/signals/` | `rules/signals.md` + `rules/backend.md` |
 | Any `*.py` in either engine | `rules/backend.md` |
 | Any `*.ts` or `*.tsx` in `frontend/` | `rules/frontend.md` |
 | `database.py`, `pg_*.py`, SQL anywhere | `rules/database.md` |
@@ -125,9 +127,9 @@ If the hook finds issues, Claude fixes them immediately — task is not "done" u
 ---
 
 ## What this is
-A full-stack Oracle intent intelligence platform for B2B lead generation. It detects companies actively hiring, implementing, or buying Oracle products (JD Edwards, Oracle Cloud ERP, NetSuite, HCM, SCM, EPM, OCI, etc.) and enriches those companies with decision-maker contact data.
+A full-stack, taxonomy-driven intent intelligence platform for B2B lead generation. It detects companies actively hiring, implementing, or buying products matched against a configurable product taxonomy, and enriches those companies with decision-maker contact data. The default taxonomy is Oracle products (JD Edwards, Oracle Cloud ERP, NetSuite, HCM, SCM, EPM, OCI, etc.) — the platform's original and most mature vertical — but campaigns can run against entirely different ICPs via `icp_profiles/*.yaml` (see `quadsci.yaml`, `endex.yaml` for live examples).
 
-**Business purpose:** Find Oracle prospects before competitors do, by detecting hiring signals, news, procurement activity, and Oracle community presence across 15+ data sources.
+**Business purpose:** Find qualified prospects before competitors do, by detecting hiring signals, news, procurement activity, and vendor-community presence across 15+ data sources.
 
 ---
 
@@ -135,7 +137,7 @@ A full-stack Oracle intent intelligence platform for B2B lead generation. It det
 
 ```
 DATA TOOL/
-├── oracle_intent_engine/       ← Flask app (port 5001) — signal detection engine
+├── intent_engine/       ← Flask app (port 5001) — signal detection engine
 │   ├── app.py                  ← Main Flask app, ALL API routes
 │   ├── src/
 │   │   ├── database.py         ← All PostgreSQL queries (companies, signals, contacts, runs)
@@ -225,7 +227,7 @@ DATA TOOL/
 | Oracle Intent Backend | Python 3.13, Flask, Flask-CORS, port 5001 |
 | Lead Enrichment Backend | Python 3.13, FastAPI + uvicorn, port 8000 |
 | Primary Database | **PostgreSQL on 10.0.0.149:5432**, database: `oracle_intent`, user: `postgres` |
-| Local cache | SQLite (oracle_intent_engine/oracle_intent.db, auto-created) |
+| Local cache | SQLite (intent_engine/oracle_intent.db, auto-created) |
 | Email enrichment | Apollo.io (primary), Apify (fallback), ZeroBounce (validation), ZoomInfo (optional) |
 | Intent signals | Indeed, LinkedIn, Google Jobs, Adzuna, ZipRecruiter, SerpAPI/NewsAPI/Bing News, Oracle community/events/website, procurement, SEC filings, partner case studies |
 | LLM extraction | Anthropic Claude or Ollama/llama3.2 (local) via ScrapeGraphAI |
@@ -241,7 +243,7 @@ DATA TOOL/
 # Terminal 1 — Oracle Intent Engine (Flask)
 cd "C:\Users\sidhartha\OneDrive\Desktop\DATA TOOL"
 venv\Scripts\activate
-cd oracle_intent_engine
+cd intent_engine
 python app.py
 # → http://localhost:5001  (legacy Flask UI)
 # → APIs consumed by React frontend
@@ -270,7 +272,7 @@ venv\Scripts\pip show flask
 
 ## Environment Variables
 
-### oracle_intent_engine/.env
+### intent_engine/.env
 | Variable | Required | Notes |
 |----------|----------|-------|
 | DB_HOST | ✅ | `10.0.0.149` |
@@ -278,7 +280,7 @@ venv\Scripts\pip show flask
 | DB_NAME | ✅ | `oracle_intent` |
 | DB_USER | ✅ | `postgres` |
 | DB_PASSWORD | ✅ | the postgres password |
-| JWT_SECRET | ✅ | random string for JWT signing (auth.py) — falls back to a persisted random key at `oracle_intent_engine/.jwt_fallback_key` if unset, but set this explicitly in production |
+| JWT_SECRET | ✅ | random string for JWT signing (auth.py) — falls back to a persisted random key at `intent_engine/.jwt_fallback_key` if unset, but set this explicitly in production |
 | APOLLO_API_KEY | ✅ | from app.apollo.io → Settings → API |
 | ZEROBOUNCE_API_KEY | ✅ | from app.zerobounce.net |
 | HUNTER_API_KEY | ✅ | from hunter.io/api |
@@ -362,7 +364,7 @@ venv\Scripts\pip show flask
 2. **NEVER delete from master_leads** — this is the permanent lead database, irreplaceable data
 3. **NEVER drop or truncate any table** — always ask the user before any destructive DB operation
 4. **Venv is shared** at `C:\Users\sidhartha\OneDrive\Desktop\DATA TOOL\venv` — both engines use it
-5. **Cross-engine imports are FORBIDDEN** — oracle_intent_engine and lead_enrichment_engine are independent services
+5. **Cross-engine imports are FORBIDDEN** — intent_engine and lead_enrichment_engine are independent services
 6. **All new signals must inherit BaseSignal** — no standalone scrapers
 7. **All config via src/config.py** — never hardcode API keys, hostnames, or paths in logic files
 8. **Frontend auth header** — every fetch call needs `Authorization: Bearer <token>` (use authH() pattern)
@@ -386,7 +388,7 @@ venv\Scripts\pip show flask
 
 ---
 
-## API Routes Reference (oracle_intent_engine/app.py)
+## API Routes Reference (intent_engine/app.py)
 
 | Method | Route | Purpose |
 |--------|-------|---------|

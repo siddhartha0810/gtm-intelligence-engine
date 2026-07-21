@@ -21,11 +21,11 @@ COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY unified_app.py scan_worker.py enrichment_worker.py seed_demo_data.py ./
-COPY oracle_intent_engine/ ./oracle_intent_engine/
+COPY intent_engine/ ./intent_engine/
 COPY lead_enrichment_engine/ ./lead_enrichment_engine/
 COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
 
-RUN mkdir -p oracle_intent_engine/output lead_enrichment_engine/input lead_enrichment_engine/output
+RUN mkdir -p intent_engine/output lead_enrichment_engine/input lead_enrichment_engine/output
 
 EXPOSE 8000
 CMD ["uvicorn", "unified_app:app", "--host", "0.0.0.0", "--port", "8000"]

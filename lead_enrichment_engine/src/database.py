@@ -14,7 +14,7 @@ HOW IT FITS IN THE SYSTEM:
   domain_resolver.py (domain_knowledge read/write).
 
   IMPORTANT: This module does NOT own the DDL for these tables.
-  The DDL lives in oracle_intent_engine/src/database.py._DDL which runs
+  The DDL lives in intent_engine/src/database.py._DDL which runs
   at startup when unified_app.py calls oracle_db.init_db().  Both engines
   share the same Inoapps-Data-DB PostgreSQL database.
 
@@ -207,9 +207,9 @@ class PipelineDB:
 
     # ── Apollo credit log ───────────────────────────────────────────────────
     # Writes to the shared apollo_credit_log table (DDL owned by
-    # oracle_intent_engine/src/database.py, same Postgres database) so the
+    # intent_engine/src/database.py, same Postgres database) so the
     # dashboard can show per-step burn. Uses this engine's own connection
-    # pool rather than importing oracle_intent_engine — the two engines
+    # pool rather than importing intent_engine — the two engines
     # share a database, not code.
 
     def log_apollo_credits(

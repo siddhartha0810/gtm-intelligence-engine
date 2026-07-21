@@ -39,7 +39,7 @@ KEY CLASSES/FUNCTIONS:
   GET  /api/auth/me         — returns current user from JWT
 
 DEPENDENCIES:
-  - oracle_intent_engine/src/  (imported directly via sys.path)
+  - intent_engine/src/  (imported directly via sys.path)
   - lead_enrichment_engine/    (invoked as subprocess, never imported)
   - PostgreSQL on 10.0.0.149:5432 (Inoapps-Data-DB)
   - .env files in each engine folder (loaded at startup via python-dotenv)
@@ -72,7 +72,7 @@ from typing import Dict, List, Optional
 
 # path setup
 BASE_DIR    = Path(__file__).parent
-ORACLE_DIR  = BASE_DIR / "oracle_intent_engine"
+ORACLE_DIR  = BASE_DIR / "intent_engine"
 ENRICH_DIR  = BASE_DIR / "lead_enrichment_engine"
 
 # Scan/enrich status+log+PID files are written by scan_worker.py /
@@ -107,7 +107,7 @@ from slowapi.errors import RateLimitExceeded
 # Dotenv MUST load before oracle engine imports so JWT_SECRET and DB vars
 #    are in the environment when auth.py / database.py read them at import time.
 from dotenv import load_dotenv
-load_dotenv(BASE_DIR / "oracle_intent_engine"   / ".env")           # oracle DB vars + JWT_SECRET first
+load_dotenv(BASE_DIR / "intent_engine"   / ".env")           # oracle DB vars + JWT_SECRET first
 load_dotenv(BASE_DIR / "lead_enrichment_engine" / ".env", override=False)  # enrichment vars
 
 # oracle engine imports (after path setup)
@@ -121,7 +121,7 @@ from src.phase_classifier import PHASE_LABELS, PHASE_COLORS, reload_products_cac
 from src import auth as oracle_auth
 from src.audit import log_audit, get_audit_logs
 from src import tech_profiles as tp_mod
-import oracle_intent_engine.src.hubspot_push as hs_push
+import intent_engine.src.hubspot_push as hs_push
 from src import events as events_mod
 from src import manufacturer as mfr_mod
 from src import list_import as import_mod
@@ -133,7 +133,7 @@ import job_queue
 # file, which in turn takes priority over the LAN default — so a containerized
 # `postgres` service host works without needing a committed .env file.
 _oracle_env: Dict[str, str] = {}
-_dotenv_path = BASE_DIR / "oracle_intent_engine" / ".env"
+_dotenv_path = BASE_DIR / "intent_engine" / ".env"
 if _dotenv_path.exists():
     for _line in _dotenv_path.read_text().splitlines():
         _line = _line.strip()
@@ -209,7 +209,7 @@ async def lifespan(app: FastAPI):
     # ARE health monitor — start background loop (bduffy089 pattern)
     try:
         import threading as _threading
-        from oracle_intent_engine.src.health_monitor import run_health_check_loop
+        from intent_engine.src.health_monitor import run_health_check_loop
         _hm_thread = _threading.Thread(
             target=run_health_check_loop,
             kwargs={"interval_minutes": 15},
@@ -843,7 +843,7 @@ def _invalidate_companies_cache() -> None:
 @app.get("/api/companies/filter-options")
 async def api_companies_filter_options(current_user: dict = Depends(oracle_auth.require_user)):
     """Returns distinct industries and locations for column filter dropdowns."""
-    from oracle_intent_engine.src.industry_normalizer import normalize as _norm_industry
+    from intent_engine.src.industry_normalizer import normalize as _norm_industry
     try:
         with oracle_db.db_cursor(commit=False) as cur:
             cur.execute("""
@@ -924,7 +924,7 @@ async def api_companies(
                 params.append(product)
 
             if industry:
-                from oracle_intent_engine.src.industry_normalizer import normalize as _norm_i, _CANONICAL
+                from intent_engine.src.industry_normalizer import normalize as _norm_i, _CANONICAL
                 selected_canonical = {v.strip() for v in industry.split(',') if v.strip()}
                 # Expand each canonical name back to all raw variants (for DB match)
                 raw_variants: list[str] = []
@@ -1144,9 +1144,9 @@ async def api_decision_intelligence_live(current_user: dict = Depends(oracle_aut
     try:
         with oracle_db.db_cursor(commit=False) as cur:
             cur.execute("""
-                SELECT c.id AS company_id, c.name, c.domain, s.oracle_product, s.phase,
+                SELECT c.id AS company_id, c.name, c.domain, s.detected_product, s.phase,
                        s.job_title, s.source, s.confidence, s.url, s.detected_at
-                FROM oracle_signals s JOIN companies c ON c.id = s.company_id
+                FROM intent_signals s JOIN companies c ON c.id = s.company_id
                 WHERE s.source IN ('linkedin', 'indeed', 'adzuna', 'ats')
                 ORDER BY s.confidence DESC, s.detected_at DESC
                 LIMIT 30
@@ -1154,21 +1154,21 @@ async def api_decision_intelligence_live(current_user: dict = Depends(oracle_aut
             signals = [dict(r) for r in cur.fetchall()]
 
             cur.execute("""
-                SELECT source, COUNT(*) AS n FROM oracle_signals
+                SELECT source, COUNT(*) AS n FROM intent_signals
                 WHERE source IN ('linkedin', 'indeed', 'adzuna', 'ats')
                 GROUP BY source ORDER BY n DESC
             """)
             by_source = {r["source"]: r["n"] for r in cur.fetchall()}
 
             cur.execute("""
-                SELECT phase, COUNT(*) AS n FROM oracle_signals
+                SELECT phase, COUNT(*) AS n FROM intent_signals
                 WHERE source IN ('linkedin', 'indeed', 'adzuna', 'ats')
                 GROUP BY phase ORDER BY n DESC
             """)
             by_phase = {r["phase"]: r["n"] for r in cur.fetchall()}
 
             cur.execute("""
-                SELECT COUNT(DISTINCT company_id) AS n FROM oracle_signals
+                SELECT COUNT(DISTINCT company_id) AS n FROM intent_signals
                 WHERE source IN ('linkedin', 'indeed', 'adzuna', 'ats')
             """)
             total_companies = cur.fetchone()["n"]
@@ -1215,7 +1215,7 @@ def _account_page_payload(campaign_name: str, icp_yaml: str, rules_yaml: str) ->
     """Build an account page payload: curated ICP/signal-rules reference
     content (icp_profiles/<account>*.yaml) plus real signals/hooks/prospects/
     contacts — correctly scoped to this campaign's own scan_run_id, unlike
-    /api/decision-intelligence/live above which queries oracle_signals
+    /api/decision-intelligence/live above which queries intent_signals
     globally. Empty signals/hooks before a scan has been run is an expected
     state, not an error."""
     from pathlib import Path as _Path
@@ -1254,9 +1254,9 @@ def _account_page_payload(campaign_name: str, icp_yaml: str, rules_yaml: str) ->
     if last_run_id:
         with oracle_db.db_cursor(commit=False) as cur:
             cur.execute("""
-                SELECT c.id AS company_id, c.name, c.domain, s.oracle_product, s.phase,
+                SELECT c.id AS company_id, c.name, c.domain, s.detected_product, s.phase,
                        s.job_title, s.source, s.confidence, s.url, s.detected_at
-                FROM oracle_signals s JOIN companies c ON c.id = s.company_id
+                FROM intent_signals s JOIN companies c ON c.id = s.company_id
                 WHERE s.scan_run_id = %s
                 ORDER BY s.confidence DESC, s.detected_at DESC
                 LIMIT 30
@@ -1264,19 +1264,19 @@ def _account_page_payload(campaign_name: str, icp_yaml: str, rules_yaml: str) ->
             signals = [dict(r) for r in cur.fetchall()]
 
             cur.execute("""
-                SELECT source, COUNT(*) AS n FROM oracle_signals
+                SELECT source, COUNT(*) AS n FROM intent_signals
                 WHERE scan_run_id = %s GROUP BY source ORDER BY n DESC
             """, (last_run_id,))
             by_source = {r["source"]: r["n"] for r in cur.fetchall()}
 
             cur.execute("""
-                SELECT phase, COUNT(*) AS n FROM oracle_signals
+                SELECT phase, COUNT(*) AS n FROM intent_signals
                 WHERE scan_run_id = %s GROUP BY phase ORDER BY n DESC
             """, (last_run_id,))
             by_phase = {r["phase"]: r["n"] for r in cur.fetchall()}
 
             cur.execute("""
-                SELECT COUNT(DISTINCT company_id) AS n FROM oracle_signals WHERE scan_run_id = %s
+                SELECT COUNT(DISTINCT company_id) AS n FROM intent_signals WHERE scan_run_id = %s
             """, (last_run_id,))
             total_companies = cur.fetchone()["n"]
 
@@ -1295,7 +1295,7 @@ def _account_page_payload(campaign_name: str, icp_yaml: str, rules_yaml: str) ->
         # landed in the cap).
         with oracle_db.db_cursor(commit=False) as cur:
             cur.execute("""
-                SELECT DISTINCT c.name FROM oracle_signals s JOIN companies c ON c.id = s.company_id
+                SELECT DISTINCT c.name FROM intent_signals s JOIN companies c ON c.id = s.company_id
                 WHERE s.scan_run_id = %s
             """, (last_run_id,))
             company_names = {r["name"] for r in cur.fetchall()}
@@ -1819,9 +1819,9 @@ async def api_enrich_contacts(company_id: int, request: Request,
     max_per_company = int(data.get("max_per_company", 10))
 
     if provider == "zoominfo" and not (ZOOMINFO_USERNAME and ZOOMINFO_PASSWORD):
-        return JSONResponse({"error": "ZoomInfo not configured. Add ZOOMINFO_USERNAME and ZOOMINFO_PASSWORD to oracle_intent_engine/.env"}, status_code=400)
+        return JSONResponse({"error": "ZoomInfo not configured. Add ZOOMINFO_USERNAME and ZOOMINFO_PASSWORD to intent_engine/.env"}, status_code=400)
     if provider == "apollo" and not APOLLO_API_KEY:
-        return JSONResponse({"error": "Apollo API key not configured. Add APOLLO_API_KEY to oracle_intent_engine/.env"}, status_code=400)
+        return JSONResponse({"error": "Apollo API key not configured. Add APOLLO_API_KEY to intent_engine/.env"}, status_code=400)
 
     try:
         company = oracle_db.get_company_by_id(company_id)
@@ -1900,7 +1900,7 @@ async def api_bulk_enrich_progress(current_user: dict = Depends(oracle_auth.requ
 @app.post("/admin/normalize-industries")
 async def normalize_industries(current_user: dict = Depends(oracle_auth.require_admin)):
     """Normalize all raw industry strings in the companies table to canonical English names."""
-    from oracle_intent_engine.src.industry_normalizer import normalize as _norm
+    from intent_engine.src.industry_normalizer import normalize as _norm
     updated = 0
     with oracle_db.db_cursor() as cur:
         cur.execute("SELECT id, industry FROM companies WHERE industry IS NOT NULL AND industry <> ''")
@@ -1983,7 +1983,7 @@ def _companies_to_export_format(db_rows) -> list:
             "industry":      row.get("industry", ""),
             "size":          row.get("size", ""),
             "website":       row.get("website", ""),
-            "oracle_product": products[0] if products else "Oracle (General)",
+            "detected_product": products[0] if products else "Oracle (General)",
             "all_products":  [p for p in products if p],
             "phase":         phases[0] if phases else "hiring",
             "all_phases":    [p for p in phases if p],
@@ -2187,7 +2187,7 @@ async def config_test(service: str, request: Request,
 @app.post("/config/save/{service}")
 async def config_save(service: str, request: Request,
                       current_user: dict = Depends(oracle_auth.require_admin)):
-    """Persist an API key to oracle_intent_engine/.env and reload it in memory."""
+    """Persist an API key to intent_engine/.env and reload it in memory."""
     global APOLLO_API_KEY, ZEROBOUNCE_API_KEY, APIFY_TOKEN, ZOOMINFO_USERNAME, ZOOMINFO_PASSWORD
 
     data     = await request.json()
@@ -2598,13 +2598,13 @@ def _fetch_dashboard_stats() -> dict:
                 SELECT
                     (SELECT COUNT(*) FROM companies)                                            AS companies_tracked,
                     (SELECT COUNT(*) FROM company_contacts)                                     AS contacts_enriched,
-                    (SELECT COUNT(*) FROM oracle_signals)                                       AS total_signals,
+                    (SELECT COUNT(*) FROM intent_signals)                                       AS total_signals,
                     (SELECT COUNT(DISTINCT CASE WHEN phase='implementing' THEN company_id END)
-                     FROM oracle_signals)                                                       AS implementing,
+                     FROM intent_signals)                                                       AS implementing,
                     (SELECT COUNT(DISTINCT CASE WHEN phase='evaluating'   THEN company_id END)
-                     FROM oracle_signals)                                                       AS evaluating,
+                     FROM intent_signals)                                                       AS evaluating,
                     (SELECT COUNT(DISTINCT CASE WHEN phase='researching'  THEN company_id END)
-                     FROM oracle_signals)                                                       AS researching,
+                     FROM intent_signals)                                                       AS researching,
                     (SELECT COUNT(*) FROM company_contacts
                      WHERE status = 'pushed_to_hubspot')                                        AS pushed_to_hubspot,
                     (SELECT COUNT(*) FROM company_contacts
@@ -2656,15 +2656,15 @@ def _fetch_last_run_stats() -> Optional[dict]:
 
             cur.execute("""
                 SELECT
-                    (SELECT COUNT(*) FROM oracle_signals
+                    (SELECT COUNT(*) FROM intent_signals
                      WHERE scan_run_id = %s)                                   AS new_signals,
-                    (SELECT COUNT(DISTINCT company_id) FROM oracle_signals
+                    (SELECT COUNT(DISTINCT company_id) FROM intent_signals
                      WHERE scan_run_id = %s)                                   AS companies_matched,
                     (SELECT COUNT(*) FROM companies
                      WHERE first_scan_run_id = %s)                             AS new_companies,
                     (SELECT COUNT(*) FROM company_contacts
                      WHERE company_id IN (
-                         SELECT DISTINCT company_id FROM oracle_signals WHERE scan_run_id = %s
+                         SELECT DISTINCT company_id FROM intent_signals WHERE scan_run_id = %s
                      ))                                                        AS contacts_available
             """, (run_id, run_id, run_id, run_id))
             agg = cur.fetchone() or {}
@@ -2784,11 +2784,11 @@ async def api_signals(limit: int = 200, current_user: dict = Depends(oracle_auth
     try:
         with oracle_db.db_cursor(commit=False) as cur:
             cur.execute("""
-                SELECT s.id, s.oracle_product, s.phase, s.source, s.signal_type,
+                SELECT s.id, s.detected_product, s.phase, s.source, s.signal_type,
                        s.job_title, s.evidence, s.url, s.confidence,
                        s.detected_at::text AS detected_at,
                        c.name AS company_name
-                FROM oracle_signals s
+                FROM intent_signals s
                 JOIN companies c ON s.company_id = c.id
                 ORDER BY s.detected_at DESC, s.confidence DESC
                 LIMIT %s
@@ -3098,9 +3098,9 @@ async def enrich_start(request: Request, current_user: dict = Depends(oracle_aut
 
     if provider == "zoominfo":
         if not (ZOOMINFO_USERNAME and ZOOMINFO_PASSWORD):
-            return JSONResponse({"error": "ZoomInfo not configured. Add ZOOMINFO_USERNAME and ZOOMINFO_PASSWORD to oracle_intent_engine/.env"}, status_code=400)
+            return JSONResponse({"error": "ZoomInfo not configured. Add ZOOMINFO_USERNAME and ZOOMINFO_PASSWORD to intent_engine/.env"}, status_code=400)
     elif not APOLLO_API_KEY:
-        return JSONResponse({"error": "Apollo API key not configured. Add APOLLO_API_KEY to oracle_intent_engine/.env"}, status_code=400)
+        return JSONResponse({"error": "Apollo API key not configured. Add APOLLO_API_KEY to intent_engine/.env"}, status_code=400)
 
     started = _start_enrich_subprocess(
         limit=limit,
@@ -3286,7 +3286,7 @@ async def api_create_profile(request: Request,
     profile = tp_mod.create_profile(**{k: v for k, v in data.items()
                                         if k in ("name","description","keywords","target_websites",
                                                   "competitor_domains","partner_domains",
-                                                  "manufacturer_domain","oracle_products")})
+                                                  "manufacturer_domain","taxonomy_products")})
     log_audit(current_user, "create", "technology_profile", str(profile["id"]), new_value=data)
     return profile
 
@@ -3807,7 +3807,7 @@ async def signal_health(
     Shows hours-since-last-result per source and P0/P1/P2 tier alerts.
     Use with Grafana or the frontend dashboard to catch silent scraper failures.
     """
-    from oracle_intent_engine.src.health_monitor import get_health_status
+    from intent_engine.src.health_monitor import get_health_status
     return get_health_status()
 
 
@@ -3816,7 +3816,7 @@ async def trigger_health_check(
     current_user: dict = Depends(oracle_auth.require_admin),
 ):
     """Manually trigger a health check + Slack alert (admin only)."""
-    from oracle_intent_engine.src.health_monitor import check_signal_health
+    from intent_engine.src.health_monitor import check_signal_health
     return check_signal_health(notify=True)
 
 
@@ -3841,7 +3841,7 @@ async def metrics_summary(
                     COUNT(CASE WHEN phase = 'evaluating' THEN 1 END)   AS evaluating,
                     COUNT(CASE WHEN phase = 'hiring' THEN 1 END)       AS hiring,
                     MAX(detected_at)                            AS last_signal_at
-                FROM oracle_signals
+                FROM intent_signals
             """)
             signal_stats = cur.fetchone() or {}
 
@@ -3897,7 +3897,7 @@ async def enrich_linkedin_urls(
     limit = min(int(body.get("limit", 25)), 100)  # cap at 100 per call
 
     try:
-        from oracle_intent_engine.src.maigret_enricher import fill_missing_linkedin_urls
+        from intent_engine.src.maigret_enricher import fill_missing_linkedin_urls
         result = await fill_missing_linkedin_urls(limit=limit)
         log_audit(current_user, "maigret_linkedin_enrich", "master_leads",
                   "batch", new_value=result)
@@ -4448,7 +4448,7 @@ async def get_product_intelligence(
     product_filter: str = None,
     current_user: dict = Depends(oracle_auth.require_analyst),
 ):
-    """Company-product matrix built from oracle_signals aggregation."""
+    """Company-product matrix built from intent_signals aggregation."""
     with oracle_db.db_cursor(commit=False) as cur:
         # Base filter: companies that have at least one oracle product detected
         # or have manually populated cloud/onprem fields
@@ -4546,7 +4546,7 @@ async def get_product_intelligence(
 async def refresh_product_intelligence(
     current_user: dict = Depends(oracle_auth.require_analyst),
 ):
-    """Aggregate oracle_signals → populate product intel columns on companies."""
+    """Aggregate intent_signals → populate product intel columns on companies."""
     try:
         result = oracle_db.aggregate_product_intel()
         return {"ok": True, **result}
@@ -4659,7 +4659,7 @@ async def campaign_icp_companies(
     use the defaults.
     """
     try:
-        from oracle_intent_engine.src.icp_hunter import fetch_icp_companies
+        from intent_engine.src.icp_hunter import fetch_icp_companies
         tag_set = {t.strip() for t in tags.split(",") if t.strip()} or None
         companies = fetch_icp_companies(tags=tag_set, min_team=min_team, max_team=max_team, limit=limit)
         return {"companies": companies, "count": len(companies)}
@@ -4676,7 +4676,7 @@ async def campaign_research_company(
     """Scrape a company website and return a clean product description."""
     try:
         body = await request.json()
-        from oracle_intent_engine.src.company_researcher import research_company
+        from intent_engine.src.company_researcher import research_company
         result = research_company(
             website=body.get("website", ""),
             name=body.get("name", ""),
@@ -4696,7 +4696,7 @@ async def campaign_apollo_preflight(
     """Pre-flight cost/credit check before Step 2 spends Apollo credits.
     Informational only — never blocks the caller from proceeding."""
     try:
-        from oracle_intent_engine.src.apollo_enrichment import (
+        from intent_engine.src.apollo_enrichment import (
             get_apollo_credit_status, APOLLO_CREDITS_PER_HIT, APOLLO_WATERFALL_CREDIT_EST,
         )
         status = get_apollo_credit_status(oracle_cfg.APOLLO_API_KEY)
@@ -4722,7 +4722,7 @@ async def campaign_validate_emails(
         contacts: list = body.get("contacts", [])
         emails = sorted({c.get("email", "").lower() for c in contacts if c.get("email")})
 
-        from oracle_intent_engine.src.apollo_enrichment import validate_emails, zerobounce_credits
+        from intent_engine.src.apollo_enrichment import validate_emails, zerobounce_credits
         if not oracle_cfg.ZEROBOUNCE_API_KEY or not emails:
             return {"results": {}, "credits_remaining": None}
 
@@ -4825,17 +4825,17 @@ async def campaign_generate_hooks(
         # hook_generator routes through llm_gateway (GLM/Ollama/Anthropic
         # waterfall per LLM_PROVIDER_ORDER) — gate on the gateway, not on any
         # one provider's key.
-        from oracle_intent_engine.src import llm_gateway
+        from intent_engine.src import llm_gateway
         if not llm_gateway.is_available():
             return JSONResponse(
                 {"error": "No LLM provider configured — set GLM_API_KEY, run Ollama, "
-                          "or set ANTHROPIC_API_KEY in oracle_intent_engine/.env"},
+                          "or set ANTHROPIC_API_KEY in intent_engine/.env"},
                 status_code=503,
             )
         anthropic_key = os.getenv("ANTHROPIC_API_KEY", "").strip()  # legacy param only
 
-        from oracle_intent_engine.src.company_researcher import research_company
-        from oracle_intent_engine.src.hook_generator import (
+        from intent_engine.src.company_researcher import research_company
+        from intent_engine.src.hook_generator import (
             generate_hook, _DEFAULT_PRODUCT_CONTEXT, _DEFAULT_ICP_RESEARCH,
         )
 
@@ -4891,7 +4891,7 @@ async def campaign_llm_status(current_user: dict = Depends(oracle_auth.require_u
     """Whether hook/cadence generation can actually run, and through which
     providers — surfaces a dead LLM waterfall upfront in the UI instead of
     failing at generate time."""
-    from oracle_intent_engine.src import llm_gateway
+    from intent_engine.src import llm_gateway
     providers = llm_gateway.active_providers()
     return {"available": bool(providers), "providers": providers}
 
@@ -5005,12 +5005,12 @@ async def build_cadence(
             return JSONResponse({"error": "No hooks provided"}, status_code=400)
         product_context = body.get("product_context", "")
 
-        from oracle_intent_engine.src.cadence_builder import batch_build_sequences
-        from oracle_intent_engine.src import llm_gateway
+        from intent_engine.src.cadence_builder import batch_build_sequences
+        from intent_engine.src import llm_gateway
         if not llm_gateway.is_available():
             return JSONResponse(
                 {"error": "No LLM provider configured — set GLM_API_KEY, run Ollama, "
-                          "or set ANTHROPIC_API_KEY in oracle_intent_engine/.env"},
+                          "or set ANTHROPIC_API_KEY in intent_engine/.env"},
                 status_code=503,
             )
         api_key = os.getenv("ANTHROPIC_API_KEY", "").strip()  # legacy param only
@@ -5056,7 +5056,7 @@ async def export_cadence(
         body      = await request.json()
         sequences = body.get("sequences", [])
 
-        from oracle_intent_engine.src.cadence_builder import sequences_to_csv_rows
+        from intent_engine.src.cadence_builder import sequences_to_csv_rows
         rows = sequences_to_csv_rows(sequences)
 
         output = io.StringIO()

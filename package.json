@@ -1,7 +1,7 @@
 {
   "name": "data-tool",
   "version": "1.0.0",
-  "description": "> AI-powered B2B intelligence platform for Oracle/JDE go-to-market teams. Identifies companies actively using or evaluating Oracle products, enriches them with validated contacts, and pushes qualified leads directly into HubSpot CRM.",
+  "description": "> AI-powered B2B intent intelligence platform for go-to-market teams. Identifies companies actively using or evaluating products from a configurable taxonomy (Oracle/JDE is the default profile), enriches them with validated contacts, and pushes qualified leads directly into HubSpot CRM.",
   "main": "generate_explainer.js",
   "directories": {
     "test": "tests"

@@ -422,7 +422,7 @@ export default function CampaignBuilder() {
             No LLM provider reachable — steps 1–2 (find companies and contacts) work, but hook and
             cadence generation will fail. Set <code style={{ fontSize: 12 }}>GLM_API_KEY</code>, start
             Ollama locally, or set <code style={{ fontSize: 12 }}>ANTHROPIC_API_KEY</code> in
-            oracle_intent_engine/.env and restart.
+            intent_engine/.env and restart.
           </span>
         </div>
       )}

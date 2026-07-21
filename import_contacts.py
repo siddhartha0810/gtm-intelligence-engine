@@ -30,7 +30,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 BASE = Path(__file__).parent
-ORACLE = BASE / "oracle_intent_engine"
+ORACLE = BASE / "intent_engine"
 if str(ORACLE) not in sys.path:
     sys.path.insert(0, str(ORACLE))
 
@@ -238,7 +238,7 @@ def main() -> None:
         """)
     with db.db_cursor() as cur:
         cur.execute("DELETE FROM companies WHERE contact_count = 0 AND "
-                    "id NOT IN (SELECT DISTINCT company_id FROM oracle_signals WHERE company_id IS NOT NULL)")
+                    "id NOT IN (SELECT DISTINCT company_id FROM intent_signals WHERE company_id IS NOT NULL)")
 
     with db.db_cursor(commit=False) as cur:
         cur.execute("SELECT COUNT(*) AS n FROM company_contacts WHERE source = %s", (SOURCE_TAG,))

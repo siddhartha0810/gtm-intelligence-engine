@@ -13,7 +13,7 @@ drifts from what the Endex page displays.
 
 SOURCE COVERAGE — same caveat as seed_quadsci_campaign.py: only job-board
 sources (linkedin/indeed/adzuna/ats) and `news` accept arbitrary keywords via
-query_builder.py. The rest of oracle_intent_engine/src/signals/ have Oracle
+query_builder.py. The rest of intent_engine/src/signals/ have Oracle
 product terms hardcoded into their scraping/regex logic and would silently
 search for Oracle mentions regardless of campaign keywords.
 
@@ -45,11 +45,11 @@ import yaml
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).parent
-ORACLE_DIR = BASE_DIR / "oracle_intent_engine"
+ORACLE_DIR = BASE_DIR / "intent_engine"
 
 # config.py's own load_dotenv() only searches upward from CWD — when this
 # script runs from the repo root (BASE_DIR, the common case), that walk never
-# finds oracle_intent_engine/.env (a subdirectory, not an ancestor), so
+# finds intent_engine/.env (a subdirectory, not an ancestor), so
 # DB_* silently falls back to config.py's hardcoded defaults instead of the
 # real oracle_intent DB (same bug documented in run_glassbox.py). Load it
 # explicitly before src.config/src.database get imported.

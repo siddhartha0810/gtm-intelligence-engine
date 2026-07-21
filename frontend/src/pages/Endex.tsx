@@ -51,7 +51,7 @@ interface SignalRule {
   confidence: number
 }
 interface Signal {
-  company_id: number; name: string; domain: string; oracle_product: string
+  company_id: number; name: string; domain: string; detected_product: string
   phase: string; job_title: string; source: string; confidence: number; url: string
   detected_at: string
 }

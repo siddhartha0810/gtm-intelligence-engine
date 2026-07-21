@@ -13,7 +13,7 @@ interface TechProfile {
   description: string
   keywords: string[]
   target_websites: string[]
-  oracle_products: string[]
+  taxonomy_products: string[]
   manufacturer_domain: string
   is_active: boolean
 }
@@ -36,7 +36,7 @@ function SlideOver({ profile, onClose, onSave }: { profile: Partial<TechProfile>
     description: profile?.description ?? '',
     keywords: (profile?.keywords ?? []).join(', '),
     target_websites: (profile?.target_websites ?? []).join(', '),
-    oracle_products: (profile?.oracle_products ?? []).join(', '),
+    taxonomy_products: (profile?.taxonomy_products ?? []).join(', '),
     manufacturer_domain: profile?.manufacturer_domain ?? '',
   })
   const [saving, setSaving] = useState(false)
@@ -51,7 +51,7 @@ function SlideOver({ profile, onClose, onSave }: { profile: Partial<TechProfile>
       description: form.description.trim(),
       keywords: form.keywords.split(',').map(s => s.trim()).filter(Boolean),
       target_websites: form.target_websites.split(',').map(s => s.trim()).filter(Boolean),
-      oracle_products: form.oracle_products.split(',').map(s => s.trim()).filter(Boolean),
+      taxonomy_products: form.taxonomy_products.split(',').map(s => s.trim()).filter(Boolean),
       manufacturer_domain: form.manufacturer_domain.trim(),
     }
     try {
@@ -80,7 +80,7 @@ function SlideOver({ profile, onClose, onSave }: { profile: Partial<TechProfile>
           <div><label style={lbl}>Description</label><textarea style={{ ...inp, minHeight: 80, resize: 'vertical' }} value={form.description} onChange={e => set('description', e.target.value)} placeholder="Brief description..." /></div>
           <div><label style={lbl}>Keywords (comma-separated)</label><textarea style={{ ...inp, minHeight: 72, resize: 'vertical' }} value={form.keywords} onChange={e => set('keywords', e.target.value)} placeholder="oracle, erp, cloud..." /></div>
           <div><label style={lbl}>Target Websites (comma-separated)</label><textarea style={{ ...inp, minHeight: 64, resize: 'vertical' }} value={form.target_websites} onChange={e => set('target_websites', e.target.value)} placeholder="oracle.com, netsuite.com..." /></div>
-          <div><label style={lbl}>Oracle Products (comma-separated)</label><textarea style={{ ...inp, minHeight: 64, resize: 'vertical' }} value={form.oracle_products} onChange={e => set('oracle_products', e.target.value)} placeholder="Oracle EBS, NetSuite..." /></div>
+          <div><label style={lbl}>Oracle Products (comma-separated)</label><textarea style={{ ...inp, minHeight: 64, resize: 'vertical' }} value={form.taxonomy_products} onChange={e => set('taxonomy_products', e.target.value)} placeholder="Oracle EBS, NetSuite..." /></div>
           <div><label style={lbl}>Manufacturer Domain</label><input style={inp} value={form.manufacturer_domain} onChange={e => set('manufacturer_domain', e.target.value)} placeholder="oracle.com" /></div>
         </div>
         <div style={{ padding: '16px 24px', borderTop: '1px solid #e2e8f0', display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
@@ -285,7 +285,7 @@ export default function TechnologyProfiles() {
                     <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.description || '—'}</div>
                   </td>
                   <td style={tdStyle}><span style={{ fontSize: 12, padding: '3px 10px', borderRadius: 999, background: 'rgba(59,130,246,0.1)', color: '#60a5fa' }}>{(p.keywords || []).length}</span></td>
-                  <td style={tdStyle}><span style={{ fontSize: 12, padding: '3px 10px', borderRadius: 999, background: 'rgba(99,102,241,0.1)', color: '#a5b4fc' }}>{(p.oracle_products || []).length}</span></td>
+                  <td style={tdStyle}><span style={{ fontSize: 12, padding: '3px 10px', borderRadius: 999, background: 'rgba(99,102,241,0.1)', color: '#a5b4fc' }}>{(p.taxonomy_products || []).length}</span></td>
                   <td style={tdStyle}>
                     <button onClick={() => toggleActive(p)} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, color: p.is_active ? '#10b981' : '#475569' }}>
                       {p.is_active ? <CheckCircle2 size={16} /> : <XCircle size={16} />}

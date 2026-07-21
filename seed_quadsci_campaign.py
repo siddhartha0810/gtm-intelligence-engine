@@ -10,7 +10,7 @@ Reads icp_profiles/quadsci.yaml and icp_profiles/quadsci_signal_rules.yaml as
 the single source of truth for keywords/exclusions, so the seeded campaign
 never drifts from what the QuadSci page displays.
 
-SOURCE COVERAGE — only a subset of oracle_intent_engine/src/signals/ is
+SOURCE COVERAGE — only a subset of intent_engine/src/signals/ is
 generic/keyword-driven; the rest (sec_filing, g2_reviews, oracle_website,
 oracle_community, oracle_event, erp_today, procurement, home_builders,
 si_casestudy, partner_casestudy, company_pages, agentic_harvester) have
@@ -53,7 +53,7 @@ from pathlib import Path
 import yaml
 
 BASE_DIR = Path(__file__).parent
-ORACLE_DIR = BASE_DIR / "oracle_intent_engine"
+ORACLE_DIR = BASE_DIR / "intent_engine"
 if str(ORACLE_DIR) not in sys.path:
     sys.path.insert(0, str(ORACLE_DIR))
 

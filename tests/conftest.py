@@ -13,7 +13,7 @@ from fastapi.testclient import TestClient
 
 # ── Path setup (mirrors unified_app.py) ──────────────────────────────────────
 BASE_DIR   = Path(__file__).parent.parent
-ORACLE_DIR = BASE_DIR / "oracle_intent_engine"
+ORACLE_DIR = BASE_DIR / "intent_engine"
 
 if str(ORACLE_DIR) not in sys.path:
     sys.path.insert(0, str(ORACLE_DIR))

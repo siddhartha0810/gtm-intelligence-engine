@@ -30,7 +30,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 BASE = Path(__file__).parent
-ORACLE = BASE / "oracle_intent_engine"
+ORACLE = BASE / "intent_engine"
 if str(ORACLE) not in sys.path:
     sys.path.insert(0, str(ORACLE))
 
