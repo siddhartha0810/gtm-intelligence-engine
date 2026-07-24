@@ -162,12 +162,21 @@ def _generate_inrule_hook(
     evidence_summary: str,
     top_signal_label: str,
     tier: str,
+    all_sources: str = "",
+    hook_hint: str = "",
     dry_run: bool = False,
+    fetch_live: bool = True,
 ) -> dict:
     """
     Generate a grounded cold email hook for an InRule prospect.
-    Uses the existing hook_generator.py (Claude Haiku, PAS framework).
-    Falls back to a template-based hook if the LLM is unavailable.
+
+    Uses the three-layer inrule_personalizer.py before calling hook_generator:
+      1. Signal Router     — maps signal source → forced angle + framing
+      2. Persona Injector  — maps contact title → ICP research string
+      3. Research Fetcher  — fetches one live public snippet per company
+
+    After generation, runs the QA scorer. If the hook scores below MIN_SCORE,
+    retries once with the alternate angle before falling back to the template.
     """
     if dry_run:
         return {
@@ -175,10 +184,13 @@ def _generate_inrule_hook(
             "body": f"[DRY RUN] Hook for {contact_name} at {company_name} — {tier}",
             "angle": "Time",
             "word_count": 0,
+            "qa_score": 0,
+            "qa_pass": True,
         }
 
     try:
         from src.hook_generator import generate_hook
+        from inrule_personalizer import build_personalized_context, score_hook
 
         first_name = contact_name.split()[0] if contact_name else "there"
         contact = {
@@ -186,20 +198,74 @@ def _generate_inrule_hook(
             "title": contact_title,
             "company": company_name,
         }
-        company_research = {
-            "name": company_name,
-            "research": {
-                "summary": (
-                    f"Signal evidence: {evidence_summary[:300]}. "
-                    f"Top signal: {top_signal_label[:200]}."
-                )
-            },
-        }
-        hook = generate_hook(contact, company_research, INRULE_PRODUCT_CONTEXT)
+
+        # ── Three-layer personalization ──────────────────────────────────────
+        company_research, icp_research, force_angle = build_personalized_context(
+            company_name=company_name,
+            evidence_summary=evidence_summary,
+            top_signal_label=top_signal_label,
+            all_sources=all_sources,
+            contact_title=contact_title,
+            hook_hint=hook_hint,
+            fetch_live=fetch_live,
+        )
+
+        # ── Generate hook ────────────────────────────────────────────────────
+        hook = generate_hook(
+            contact,
+            company_research,
+            INRULE_PRODUCT_CONTEXT,
+            icp_research=icp_research,
+            force_angle=force_angle,
+        )
+
+        # ── QA Score ─────────────────────────────────────────────────────────
+        qa = score_hook(
+            body=hook.get("body", ""),
+            subject=hook.get("subject", ""),
+            contact_title=contact_title,
+            evidence_summary=evidence_summary,
+        )
+        hook["qa_score"] = qa["score"]
+        hook["qa_pass"] = qa["pass"]
+        hook["qa_flags"] = qa["flags"]
+
+        # ── Retry once if QA fails ───────────────────────────────────────────
+        if not qa["pass"] and hook.get("ok"):
+            # Rotate to a different angle on retry
+            _retry_angles = ["Risk", "Time", "Effort", "Cost", "Identity"]
+            retry_angle = next(
+                (a for a in _retry_angles if a != force_angle), "Risk"
+            )
+            retry_hook = generate_hook(
+                contact,
+                company_research,
+                INRULE_PRODUCT_CONTEXT,
+                icp_research=icp_research,
+                force_angle=retry_angle,
+            )
+            retry_qa = score_hook(
+                body=retry_hook.get("body", ""),
+                subject=retry_hook.get("subject", ""),
+                contact_title=contact_title,
+                evidence_summary=evidence_summary,
+            )
+            retry_hook["qa_score"] = retry_qa["score"]
+            retry_hook["qa_pass"] = retry_qa["pass"]
+            retry_hook["qa_flags"] = retry_qa["flags"]
+            retry_hook["retried"] = True
+            # Use retry if it scored higher, even if still below threshold
+            if retry_qa["score"] >= qa["score"]:
+                hook = retry_hook
+
         return hook
 
     except Exception as e:
         # Fallback: template-based hook based on tier and top signal
+        import logging
+        logging.getLogger(__name__).warning(
+            f"[HookGen] Personalizer failed for {company_name}: {e} — using template"
+        )
         return _template_hook(contact_name, company_name, top_signal_label, tier)
 
 
@@ -425,6 +491,9 @@ async def _run(args):
 
         print(f"[{i+1}/{len(filtered)}] {company} — {tier}")
 
+        all_sources = row.get("All_Sources", "")
+        hook_hint = row.get("Hook_Hint", "")
+
         # Generate hook
         hook = None
         if not args.no_hooks and contact_name:
@@ -435,10 +504,14 @@ async def _run(args):
                 evidence_summary=evidence_summary,
                 top_signal_label=top_signal,
                 tier=tier,
+                all_sources=all_sources,
+                hook_hint=hook_hint,
                 dry_run=args.dry_run,
+                fetch_live=not args.dry_run,
             )
             hooks_generated += 1
-            print(f"  Hook ({hook.get('angle', '?')}): {hook.get('subject', '')}")
+            qa_badge = "✅" if hook.get("qa_pass") else f"⚠️  QA:{hook.get('qa_score', '?')}"
+            print(f"  Hook ({hook.get('angle', '?')}) {qa_badge}: {hook.get('subject', '')}")
             print(f"  Body: {hook.get('body', '')[:120]}...")
 
         if args.hooks_only:
