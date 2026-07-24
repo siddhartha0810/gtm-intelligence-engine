@@ -150,13 +150,24 @@ def fetch_edgar_signals(icp: dict, signal_rules: dict) -> list[dict]:
     print(f"[inrule_agent] EDGAR: searching {len(unique_terms)} terms...")
     hits = SECFilingSignal().fetch(queries=unique_terms, max_pages=1)
 
-    # Filter to InRule's target SIC codes
-    target_sics = set(signal_rules.get("target_sic_codes", []))
+    # Filter to InRule's target SIC codes using the sic_codes field now
+    # carried in each signal's extra dict (patched in sec_filing_signal.py).
+    # Falls back to accepting all hits if no SIC list is configured.
+    target_sics = set(
+        list(icp.get("target_sic_codes", []))
+        + list(signal_rules.get("target_sic_codes", []))
+    )
     if target_sics:
-        # Note: SECFilingSignal doesn't filter by SIC internally — we do it
-        # post-fetch. The signal dict doesn't carry SIC, so we accept all hits
-        # here and rely on the evidence builder's industry_fit rule to filter.
-        pass
+        before = len(hits)
+        hits = [
+            h for h in hits
+            if not h.get("sic_codes")  # no SIC data — keep (don't drop unknowns)
+            or any(s in target_sics for s in h.get("sic_codes", []))
+        ]
+        dropped = before - len(hits)
+        if dropped:
+            print(f"[inrule_agent] EDGAR: SIC filter removed {dropped} out-of-ICP filings "
+                  f"({before} → {len(hits)})")
 
     print(f"[inrule_agent] EDGAR: {len(hits)} filing signals from {len(unique_terms)} terms")
     return hits
@@ -388,9 +399,18 @@ def build_inrule_evidence(
             evidence["displacement"] = {"fired": False}
 
     # --- R3: industry_fit ---
-    # Fired if company industry matches InRule's target verticals
-    # We infer industry from signal source context (OCC = banking, etc.)
+    # Fired if company industry matches InRule's target verticals.
+    # Priority order:
+    #   1. OCC signal — automatic banking fit (authoritative source)
+    #   2. EDGAR SIC code match — actual SEC-registered industry code (most reliable)
+    #   3. Keyword match in signal text — fallback for non-EDGAR sources
+    target_sics = set(
+        list(icp.get("target_sic_codes", []))
+        + list(signal_rules.get("target_sic_codes", []))
+    )
     occ_signals = [s for s in signals if s.get("source") == "occ_enforcement"]
+    edgar_signals_r3 = [s for s in signals if s.get("signal_type") == "sec_filing"]
+
     if occ_signals:
         # OCC only covers national banks — automatic industry fit
         evidence["industry_fit"] = {
@@ -399,8 +419,33 @@ def build_inrule_evidence(
             "source_url": occ_signals[0].get("url", ""),
             "date": occ_signals[0].get("posted_date", ""),
         }
+    elif target_sics and edgar_signals_r3:
+        # Check actual SIC codes carried in EDGAR signals (most reliable — SEC-registered)
+        sic_match = next(
+            (
+                (s, sic)
+                for s in edgar_signals_r3
+                for sic in s.get("sic_codes", [])
+                if sic in target_sics
+            ),
+            None,
+        )
+        if sic_match:
+            matched_sig, matched_sic = sic_match
+            evidence["industry_fit"] = {
+                "fired": True,
+                "why": (
+                    f"SEC-registered SIC code {matched_sic} matches InRule target industry — "
+                    f"authoritative industry classification from EDGAR filing."
+                ),
+                "source_url": matched_sig.get("url", ""),
+                "date": matched_sig.get("posted_date", ""),
+            }
+        else:
+            # EDGAR signals present but none matched target SICs — out-of-ICP
+            evidence["industry_fit"] = {"fired": False}
     else:
-        # Try to infer from signal text
+        # No OCC, no EDGAR SIC data — fall back to keyword match in signal text
         ind_hit = next(
             (t for t in target_industries if t.lower() in signal_text),
             None,
@@ -413,7 +458,7 @@ def build_inrule_evidence(
             )
             evidence["industry_fit"] = {
                 "fired": True,
-                "why": f'Industry signal: "{ind_hit}" — core InRule target vertical.',
+                "why": f'Industry keyword "{ind_hit}" found in signal — inferred InRule target vertical (keyword fallback, no SIC data).',
                 "source_url": src.get("url", ""),
                 "date": src.get("posted_date", ""),
             }
@@ -654,49 +699,36 @@ def enrich_top_accounts(
 
 def _apollo_people_search(company_name: str, personas: list[str]) -> list[dict]:
     """
-    Search Apollo for decision-maker contacts at a company.
+    Thin wrapper around the shared apollo_enrichment._apollo_search.
+    Delegates entirely to the shared client so auth, retry handling, and
+    endpoint URL stay in one place and don't drift.
     Returns a list of contact dicts with name, title, email, linkedin_url.
     """
-    import requests as _req
+    from src.apollo_enrichment import _apollo_search, _apollo_call  # noqa: F401
 
-    url = "https://api.apollo.io/v1/mixed_people/search"
-    # Build title filters from buyer personas
-    title_filters = personas[:10]  # Apollo limits title filters
-
-    payload = {
-        "q_organization_name": company_name,
-        "person_titles": title_filters,
-        "page": 1,
-        "per_page": 5,
-    }
-    headers = {
-        "X-Api-Key": cfg.APOLLO_API_KEY,
-        "Content-Type": "application/json",
-    }
-
-    resp = _req.post(url, json=payload, headers=headers, timeout=20)
-    if resp.status_code != 200:
-        logger.warning(f"Apollo: HTTP {resp.status_code} for '{company_name}'")
+    if not cfg.APOLLO_API_KEY:
         return []
 
-    data = resp.json()
-    people = data.get("people") or []
-    contacts = []
-    for p in people:
-        email = (
-            p.get("email")
-            or (p.get("contact", {}) or {}).get("email")
-            or ""
-        )
-        contacts.append({
-            "name": f"{p.get('first_name', '')} {p.get('last_name', '')}".strip(),
-            "title": p.get("title", ""),
-            "email": email,
-            "linkedin_url": p.get("linkedin_url", ""),
+    # _apollo_search returns (contacts_list, pass_used)
+    # contacts_list items are already parsed dicts from apollo_enrichment
+    raw_contacts, _ = _apollo_search(
+        company_name=company_name,
+        api_key=cfg.APOLLO_API_KEY,
+        max_per=5,
+        role_filters=personas[:10] if personas else None,
+    )
+
+    # Normalise to the shape the rest of this file expects
+    results = []
+    for c in raw_contacts:
+        results.append({
+            "name": f"{c.get('first_name', '')} {c.get('last_name', '')}".strip(),
+            "title": c.get("title", ""),
+            "email": c.get("email", ""),
+            "linkedin_url": c.get("linkedin_url", ""),
             "company": company_name,
         })
-
-    return contacts
+    return results
 
 
 # ---------------------------------------------------------------------------
@@ -907,6 +939,13 @@ def main():
         sys.exit(0)
 
     print(f"\n[inrule_agent] Total signals fetched: {len(all_signals)}")
+
+    # Staffing / SI-firm filter — must run before merge, same as every other campaign
+    from src.staffing_filter import filter_signals as _filter_staffing
+    all_signals, staffing_removed = _filter_staffing(all_signals)
+    if staffing_removed:
+        print(f"[inrule_agent] Staffing filter: removed {staffing_removed} signals "
+              f"from SI/staffing firms ({len(all_signals)} remain)")
 
     # Stage 2 — Merge by company
     print("\n[inrule_agent] --- Stage 2: Merging signals by company ---")

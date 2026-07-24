@@ -169,6 +169,8 @@ class SECFilingSignal(BaseSignal):
                     seen.add(dedup_key)
 
                     period = src.get("period_of_report", "")
+                    # Extract SIC codes — used downstream for ICP industry filtering
+                    sic_codes = [str(s) for s in (src.get("sics") or [])]
                     desc = (
                         f"SEC {form_type} filing mentions: \"{query}\". "
                         f"Filed {filed_at}"
@@ -182,7 +184,10 @@ class SECFilingSignal(BaseSignal):
                         description=truncate(desc, 400),
                         url=file_url,
                         posted_date=filed_at,
-                        extra={"signal_type": "sec_filing"},
+                        extra={
+                            "signal_type": "sec_filing",
+                            "sic_codes": sic_codes,
+                        },
                     ))
 
                 logger.info(f"EDGAR '{query[:40]}' {form} p{page+1} → {len(hits)} filings")

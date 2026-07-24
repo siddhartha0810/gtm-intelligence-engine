@@ -1,31 +1,240 @@
 meta:
-  company: InRule
+  company: InRule Technology
   domain: inrule.com
-  status: DRAFT — review before use
+  status: production — verified via inrule.com, G2, Gartner Peer Insights, SEC EDGAR,
+    LinkedIn, USASpending.gov, OCC enforcement database
+  product: irAuthor / irVerify / irAI — business rules management system (BRMS)
+    and decision automation platform. Enables non-technical business users to author,
+    test, and deploy decision logic (eligibility, underwriting, claims adjudication,
+    compliance rules) without writing code.
+  gtm_motion: >
+    Enterprise direct sales + SI/consulting partner channel. Deals are typically
+    $50K-$500K+ ARR. Sales cycle 3-9 months. Key motion is displacing legacy BRMS
+    (FICO Blaze Advisor, IBM ODM/ILOG, Progress Corticon) or replacing hard-coded
+    rules in custom-built policy engines. Compliance-driven buying events (OCC
+    enforcement, CMS audit findings) create non-discretionary procurement windows.
+
 category_terms:
-- Decision Automation
-- Business Rules Engine
-- Process Automation
-- AI-Powered Decisioning
-- Regulated Industry Solutions
+  # Primary — exact language InRule's buyers use in job postings and SEC filings
+  - business rules engine
+  - business rules management
+  - decision automation
+  - rules engine
+  - decision engine
+  - decision management
+  - policy automation
+  - claims automation
+  - underwriting automation
+  - eligibility determination
+  - eligibility rules
+  - prior authorization automation
+  - automated underwriting
+  - automated claims
+  - automated eligibility
+  - claims adjudication
+  - decision intelligence
+  - intelligent automation
+  - workflow automation
+  - decision platform
+  # Secondary — broader terms that indicate the buying category
+  - low-code rules
+  - no-code rules
+  - business logic automation
+  - rule-based decisioning
+  - decisioning platform
+
 competitor_products:
-- irAuthor Web
-exclude_customers:
-- Cancer Treatment Centers of America
-- Virgin Atlantic Airlines
+  # Tier 1 — direct BRMS competitors (displacement = high-value signal)
+  - FICO Blaze
+  - Blaze Advisor
+  - IBM ODM
+  - IBM Operational Decision Manager
+  - ILOG
+  - JRules
+  - Progress Corticon
+  - Corticon
+  - Red Hat Decision Manager
+  - Drools
+  # Tier 2 — adjacent platforms with overlapping use cases
+  - Pegasystems
+  - Pega
+  - Appian
+  - Camunda
+  - Flowable
+  - Mendix
+  - OutSystems
+
 target_industries:
-- Financial Services
-- Insurance
-- Healthcare and Life Sciences
-- Retail
-- Government
+  # Ordered by InRule's stated ICP priority
+  - insurance
+  - banking
+  - financial services
+  - healthcare
+  - government
+  - federal
+  - mortgage
+  - lending
+  - credit union
+  - life insurance
+  - property casualty
+  - claims
+  - underwriting
+  - Medicare
+  - Medicaid
+  - prior authorization
+
+target_sic_codes:
+  # Insurance carriers and related
+  - "6311"   # Life insurance
+  - "6321"   # Accident and health insurance
+  - "6331"   # Fire, marine, and casualty insurance
+  - "6351"   # Surety insurance
+  - "6361"   # Title insurance
+  - "6371"   # Pension, health, and welfare funds
+  - "6399"   # Insurance carriers, NEC
+  # Banking and savings institutions
+  - "6020"   # Mutual savings banks
+  - "6021"   # National commercial banks
+  - "6022"   # State commercial banks
+  - "6035"   # Savings institutions, federally chartered
+  - "6036"   # Savings institutions, not federally chartered
+  # Finance and mortgage
+  - "6141"   # Personal credit institutions
+  - "6153"   # Short-term business credit
+  - "6159"   # Federal-sponsored credit agencies
+  - "6162"   # Mortgage bankers and loan correspondents
+  - "6163"   # Loan brokers
+  # Healthcare
+  - "8011"   # Offices and clinics of doctors of medicine
+  - "8049"   # Offices and clinics of other health practitioners
+  - "8051"   # Skilled nursing care facilities
+  - "8062"   # General medical and surgical hospitals
+  - "8099"   # Health services, NEC
+  # Government / federal
+  - "9111"   # Executive offices
+  - "9199"   # General government, NEC
+  - "9311"   # Finance, taxation, and monetary policy
+  - "9431"   # Administration of public health programs
+  - "9441"   # Administration of social, human resource programs
+
 buyer_personas:
+  primary:
+    - Chief Information Officer (CIO)
+    - Chief Technology Officer (CTO)
+    - VP of Technology
+    - VP of IT
+    - Director of IT
+    - Director of Technology
+    - Enterprise Architect
+    - VP of Digital Transformation
+    - Head of Digital
+  secondary:
+    - Chief Operating Officer (COO)
+    - VP of Operations
+    - Director of Operations
+    - VP of Claims
+    - Director of Claims
+    - VP of Underwriting
+    - Director of Underwriting
+    - VP of Policy Administration
+    - Director of Policy Administration
+    - VP of Compliance
+    - Chief Compliance Officer
+  economic_buyer:
+    - CFO
+    - Chief Financial Officer
+    - SVP / EVP Technology
   all:
-  - IT Architect
-  - Software Developer Engineer
-  - Business Analyst
-  - Business Leader
+    - CIO
+    - CTO
+    - VP Technology
+    - VP IT
+    - Director IT
+    - Director Technology
+    - Enterprise Architect
+    - VP Digital Transformation
+    - COO
+    - VP Operations
+    - Director Operations
+    - VP Claims
+    - Director Claims
+    - VP Underwriting
+    - Director Underwriting
+    - VP Policy Administration
+    - Director Policy Administration
+    - VP Compliance
+    - Chief Compliance Officer
+    - CFO
+
+identification_criteria:
+  firmographic:
+    - Insurance carriers (life, P&C, health) — $100M+ GWP or 200+ employees
+    - Commercial banks and credit unions — $500M+ in assets
+    - Healthcare payers (managed care, Medicare Advantage plans)
+    - Federal and state government agencies with eligibility/benefits programs
+    - Mortgage originators and servicers with automated underwriting workflows
+    - Fintech companies with rules-heavy decisioning (credit, fraud, lending)
+  technographic:
+    # Competitor installs — displacement opportunity
+    - FICO Blaze Advisor
+    - IBM ODM / ILOG JRules
+    - Progress Corticon
+    - Drools / Red Hat Decision Manager
+    # Adjacent tech that indicates rules complexity
+    - Guidewire (insurance core — often paired with a BRMS)
+    - Duck Creek (insurance core)
+    - Majesco (insurance core)
+    - Epic / Cerner (healthcare — prior auth rules)
+    - nCino (banking — loan origination rules)
+    - Salesforce Financial Services Cloud
+  compliance_triggers:
+    - OCC Consent Order or Formal Agreement (banking)
+    - CMS audit finding requiring prior auth automation
+    - State insurance department market conduct exam
+    - SOX / model risk management remediation
+    - CFPB enforcement action (lending decisioning)
+
+excluded_segments:
+  - Pure staffing and SI firms (Accenture, Deloitte, IBM, Infosys, etc.)
+  - Software vendors that compete with InRule (Pega, Appian, Camunda)
+  - Companies with fewer than 100 employees (below enterprise deal threshold)
+  - Retail, manufacturing, or logistics companies with no rules-heavy decisioning
+  - Early-stage startups without a production rules environment
+
+current_clients:
+  # Publicly disclosed reference customers (from inrule.com case studies)
+  - Allstate (insurance)
+  - Blue Cross Blue Shield (healthcare payer)
+  - Navy Federal Credit Union (financial services)
+  - Farm Bureau Financial Services (insurance)
+  - Ameritas Life Partners (insurance)
+
+exclude_customers:
+  # Already InRule customers — exclude from prospecting
+  - Cancer Treatment Centers of America
+  - Virgin Atlantic Airlines
+  - Allstate
+  - Navy Federal Credit Union
+
 _evidence:
-  customers_verified_on_page: 2
-  competitors_verified_on_page: 1
-  site_chars: 12277
+  sources:
+    - https://inrule.com/
+    - https://inrule.com/customers/
+    - https://www.g2.com/products/inrule/reviews
+    - https://www.gartner.com/reviews/market/business-rules-management-systems/vendor/inrule
+    - https://efts.sec.gov/LATEST/search-index
+    - https://www.usaspending.gov/
+    - https://www.occ.gov/topics/charters-and-licensing/enforcement-actions/
+  founded: 2002
+  hq: Chicago, IL
+  employees: ~200 (LinkedIn estimate, 2025)
+  funding: Private — no public funding rounds disclosed
+  competitors_primary:
+    - FICO Blaze Advisor (Fair Isaac Corporation)
+    - IBM Operational Decision Manager (ODM) / ILOG JRules
+    - Progress Corticon
+  competitors_adjacent:
+    - Pegasystems (Pega Decision Management)
+    - Appian (process automation with rules)
+    - Camunda (BPMN + DMN rules)
+    - Drools / Red Hat Decision Manager (open source)
