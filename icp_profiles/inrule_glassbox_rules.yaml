@@ -1,0 +1,106 @@
+# Glassbox scoring rule config for the InRule prospecting agent.
+# Follows the same 7-condition schema as endex_glassbox_rules.yaml.
+# Engine: glassbox_scorer.py (company-agnostic).
+# Orchestrator: run_inrule_agent.py
+#
+# evidence_source values:
+#   sec_or_signals       — SEC EDGAR full-text search first, fall back to
+#                          already-collected intent_signals evidence text
+#   signals              — intent_signals evidence text only
+#   sec_or_firmographic  — SEC SIC code, else companies.industry field match
+#   usaspending          — USASpending.gov federal contract awards
+#   occ_enforcement      — OCC/FDIC enforcement action database
+#   linkedin_jobs        — LinkedIn job postings (competitor displacement)
+#   always               — no external evidence needed, always evaluable
+#
+# category_terms / competitor_products / target_industries are read from
+# icp_profiles/inrule.yaml at run time.
+
+meta:
+  company: InRule
+  version: "1.0"
+  note: >
+    InRule's ICP is concentrated in regulated industries (insurance, banking,
+    healthcare, government) where technology decisions are triggered by
+    mandatory compliance events, not just discretionary budgets. The highest-
+    signal sources are therefore public regulatory filings (SEC, OCC, FDIC)
+    and federal procurement records (USASpending) — not just job boards.
+    Competitor displacement (FICO Blaze, Corticon, IBM ODM, Drools) is a
+    strong secondary signal: if a company is hiring for a competitor tool,
+    they have budget and a defined category — the question is only which vendor.
+
+rules:
+  - id: R1
+    name: Category buying-language in evidence
+    condition: category_language
+    weight: 10
+    evidence_source: sec_or_signals
+    rationale_template: >
+      Uses category language ("{term}") in a public filing or job posting —
+      actively describing the capability InRule provides. This is a first-party
+      disclosure of the buying intent, not a proxy signal.
+
+  - id: R2
+    name: Competitor product named (displacement window)
+    condition: displacement
+    weight: 12
+    evidence_source: sec_or_signals
+    rationale_template: >
+      Names a competitor product ("{term}") — category budget already exists.
+      This is a displacement opportunity: the company is not being educated on
+      the category, they are already spending on it. InRule's pitch is a
+      replacement, not a greenfield sale.
+
+  - id: R3
+    name: Regulated industry / technographic fit
+    condition: industry_fit
+    weight: 6
+    evidence_source: sec_or_firmographic
+    rationale_template: >
+      Industry/technographic match: {term} — a core InRule target vertical
+      (insurance, banking, healthcare, or government) where decision automation
+      is a compliance requirement, not a discretionary investment.
+
+  - id: R4
+    name: Regulatory enforcement action or compliance trigger
+    condition: compliance_trigger
+    weight: 14
+    decay_days: 730
+    evidence_source: occ_enforcement
+    rationale_template: >
+      Regulatory enforcement action or consent order ("{term}") — a mandatory,
+      time-bound remediation event. Regulators require documented, auditable
+      decision logic: exactly what InRule's irAuthor provides. This is the
+      highest-confidence buying signal in the regulated industry ICP.
+
+  - id: R5
+    name: Federal contract expiring for competitor product
+    condition: competitor_contract_expiring
+    weight: 10
+    decay_days: 365
+    evidence_source: usaspending
+    rationale_template: >
+      Active federal contract for a competitor product ("{term}") expiring
+      within 12 months — the agency is entering a procurement window and will
+      issue a new RFP. InRule should be in the evaluation set before the RFP
+      drops.
+
+  - id: R6
+    name: Live buying-window timing
+    condition: buying_window_timing
+    weight: 8
+    evidence_source: always
+    rationale_template: >
+      {n} trigger events in the last 270 days (most recent {days} days ago) —
+      signals cluster in time, indicating an active buying motion rather than
+      a historical data artifact.
+
+  - id: R7
+    name: Decision-maker identified
+    condition: decision_maker_found
+    weight: 4
+    evidence_source: always
+    rationale_template: >
+      A persona-matched decision-maker was found via Apollo ({contact}) — the
+      account is actionable today. Buyer personas: IT Architect, Software
+      Developer Engineer, Business Analyst, Business Leader.

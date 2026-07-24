@@ -1,0 +1,157 @@
+# Signal keyword rules for the InRule prospecting agent.
+# These keyword lists drive evidence detection in run_inrule_agent.py.
+# Each list maps to one evidence condition in inrule_glassbox_rules.yaml.
+
+meta:
+  company: InRule
+  version: "1.0"
+
+# R1 — category_language
+# Phrases that appear in SEC filings, job postings, or news when a company
+# is actively describing the capability InRule provides.
+category_terms:
+  - "business rules engine"
+  - "business rules management"
+  - "decision automation"
+  - "decision management"
+  - "rules-based decisioning"
+  - "automated decisioning"
+  - "eligibility determination"
+  - "claims automation"
+  - "underwriting automation"
+  - "policy automation"
+  - "AI-powered decisioning"
+  - "intelligent automation"
+  - "decision intelligence"
+  - "low-code rules"
+  - "no-code rules"
+  - "process automation"
+  - "workflow automation"
+  - "automated underwriting"
+  - "automated claims"
+  - "automated eligibility"
+  - "rules engine"
+  - "decision engine"
+  - "decision platform"
+
+# R2 — displacement
+# Competitor product names that appear in job postings, filings, or news.
+# If a company is hiring for or disclosing use of these tools, they have
+# budget and a defined category — InRule's pitch is a replacement.
+competitor_products:
+  - "FICO Blaze"
+  - "Blaze Advisor"
+  - "Corticon"
+  - "IBM ODM"
+  - "IBM Operational Decision Manager"
+  - "IBM Decision Center"
+  - "Drools"
+  - "Red Hat Decision Manager"
+  - "Pega rules"
+  - "Pega decisioning"
+  - "Pegasystems"
+  - "OpenRules"
+  - "Progress Corticon"
+  - "ILOG"
+  - "JRules"
+
+# R3 — industry_fit
+# Industry labels that map to InRule's regulated industry ICP.
+# These are matched against companies.industry (firmographics) or SEC SIC codes.
+target_industries:
+  - "insurance"
+  - "banking"
+  - "financial services"
+  - "healthcare"
+  - "health services"
+  - "life sciences"
+  - "government"
+  - "public sector"
+  - "federal"
+  - "state agency"
+  - "retail banking"
+  - "commercial banking"
+  - "property and casualty"
+  - "life insurance"
+  - "health insurance"
+  - "managed care"
+  - "mortgage"
+  - "lending"
+
+# R4 — compliance_trigger
+# OCC/FDIC enforcement action types that trigger mandatory technology remediation.
+# These are matched against the action type field in enforcement records.
+compliance_trigger_types:
+  - "Consent Order"
+  - "Formal Agreement"
+  - "Cease and Desist"
+  - "Memorandum of Understanding"
+  - "Safety and Soundness"
+  - "BSA/AML"
+  - "Fair Lending"
+  - "CRA"
+  - "Model Risk"
+  - "Operational Risk"
+
+# R5 — competitor_contract_expiring
+# Keywords used to search USASpending for competitor product contracts.
+# If a contract for these products expires within 12 months, it's a
+# procurement window signal.
+competitor_contract_keywords:
+  - "FICO Blaze"
+  - "Corticon"
+  - "IBM ODM"
+  - "Drools"
+  - "business rules engine"
+  - "decision management"
+  - "eligibility rules"
+  - "claims adjudication"
+  - "underwriting rules"
+
+# SIC codes for InRule's regulated industry ICP (used to filter SEC filings)
+target_sic_codes:
+  - "6020"   # State commercial banks
+  - "6021"   # National commercial banks
+  - "6022"   # State commercial banks — Federal Reserve members
+  - "6035"   # Savings institutions, federally chartered
+  - "6036"   # Savings institutions, not federally chartered
+  - "6141"   # Personal credit institutions
+  - "6153"   # Short-term business credit institutions
+  - "6159"   # Federal-sponsored credit agencies
+  - "6311"   # Life insurance
+  - "6321"   # Accident and health insurance
+  - "6331"   # Fire, marine & casualty insurance
+  - "6351"   # Surety insurance
+  - "6361"   # Title insurance
+  - "6371"   # Pension, health and welfare funds
+  - "6411"   # Insurance agents, brokers and service
+  - "8011"   # Offices and clinics of doctors of medicine
+  - "8049"   # Offices and clinics of other health practitioners
+  - "8051"   # Skilled nursing care facilities
+  - "8062"   # General medical and surgical hospitals
+  - "8099"   # Health services, not elsewhere classified
+
+# Apollo buyer personas for R7 — decision_maker_found
+# These title fragments are used to filter Apollo people search results.
+buyer_personas:
+  - "IT Architect"
+  - "Enterprise Architect"
+  - "Solution Architect"
+  - "Software Engineer"
+  - "Software Developer"
+  - "Business Analyst"
+  - "Business Systems Analyst"
+  - "VP Technology"
+  - "VP Engineering"
+  - "CTO"
+  - "Chief Technology Officer"
+  - "Director of Engineering"
+  - "Director of Technology"
+  - "Head of Engineering"
+  - "Head of Technology"
+  - "VP Digital"
+  - "Chief Digital Officer"
+  - "Chief Information Officer"
+  - "CIO"
+  - "VP Operations"
+  - "COO"
